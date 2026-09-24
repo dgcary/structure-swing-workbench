@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 from app.domain.enums import ActionType, AuditLevel, EntryMode, OrderSide
 
@@ -25,6 +25,13 @@ _LEVEL_SEVERITY = {
 }
 
 
+class OverrideStatus(str, Enum):
+    NOT_APPLICABLE = "not_applicable"
+    REQUIRES_CONFIRMATION = "requires_confirmation"
+    APPROVED_WITH_OVERRIDE = "approved_with_override"
+    BLOCKED_HARD_FAIL = "blocked_hard_fail"
+
+
 @dataclass(frozen=True, slots=True)
 class AuditFinding:
     rule: str
@@ -39,9 +46,25 @@ class AuditReport:
 
 
 @dataclass(frozen=True, slots=True)
+class OverrideContext:
+    audit_result_id: str
+    plan_version_id: str | None = None
+    action_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.audit_result_id.strip():
+            raise ValueError("覆盖决定必须关联原始审计结果")
+        if (self.plan_version_id is None) == (self.action_id is None):
+            raise ValueError("覆盖决定必须且只能关联计划版本或交易动作之一")
+
+
+@dataclass(frozen=True, slots=True)
 class OverrideDecision:
     allowed: bool
+    status: OverrideStatus
+    original_level: AuditLevel
     resulting_level: AuditLevel
+    context: OverrideContext
     reason: str | None = None
 
 
@@ -199,13 +222,43 @@ def estimated_price_with_slippage(
 
 
 def apply_override(
-    level: AuditLevel, *, user_confirmed: bool, reason: str | None
+    level: AuditLevel,
+    *,
+    context: OverrideContext,
+    user_confirmed: bool,
+    reason: str | None,
 ) -> OverrideDecision:
     if level is AuditLevel.HARD_FAIL:
-        return OverrideDecision(False, AuditLevel.HARD_FAIL, None)
+        return OverrideDecision(
+            False,
+            OverrideStatus.BLOCKED_HARD_FAIL,
+            level,
+            AuditLevel.HARD_FAIL,
+            context,
+        )
     if level is not AuditLevel.OVERRIDABLE_FAIL:
-        return OverrideDecision(True, level, None)
+        return OverrideDecision(
+            True,
+            OverrideStatus.NOT_APPLICABLE,
+            level,
+            level,
+            context,
+        )
+
     clean_reason = reason.strip() if reason else ""
     if not user_confirmed or not clean_reason:
-        return OverrideDecision(False, AuditLevel.OVERRIDABLE_FAIL, None)
-    return OverrideDecision(True, AuditLevel.OVERRIDABLE_FAIL, clean_reason)
+        return OverrideDecision(
+            False,
+            OverrideStatus.REQUIRES_CONFIRMATION,
+            level,
+            AuditLevel.OVERRIDABLE_FAIL,
+            context,
+        )
+    return OverrideDecision(
+        True,
+        OverrideStatus.APPROVED_WITH_OVERRIDE,
+        level,
+        AuditLevel.OVERRIDABLE_FAIL,
+        context,
+        clean_reason,
+    )

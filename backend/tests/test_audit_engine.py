@@ -5,6 +5,8 @@ import pytest
 from app.audit.engine import (
     DEFAULT_ONE_WAY_SLIPPAGE,
     AuditFinding,
+    OverrideContext,
+    OverrideStatus,
     aggregate,
     apply_override,
     audit_confirmation_add,
@@ -169,20 +171,68 @@ def test_default_slippage_and_real_fill_precedence() -> None:
 
 
 def test_override_requires_confirmation_and_reason_and_never_overrides_hard_fail() -> None:
+    plan_context = OverrideContext(
+        audit_result_id="audit-plan-1",
+        plan_version_id="plan-version-1",
+    )
+    action_context = OverrideContext(
+        audit_result_id="audit-action-1",
+        action_id="action-1",
+    )
+
+    missing_confirmation = apply_override(
+        AuditLevel.OVERRIDABLE_FAIL,
+        context=plan_context,
+        user_confirmed=False,
+        reason="接受偏差",
+    )
+    assert not missing_confirmation.allowed
+    assert missing_confirmation.status is OverrideStatus.REQUIRES_CONFIRMATION
+    assert missing_confirmation.original_level is AuditLevel.OVERRIDABLE_FAIL
+    assert missing_confirmation.context == plan_context
+
     assert not apply_override(
-        AuditLevel.OVERRIDABLE_FAIL, user_confirmed=False, reason="接受偏差"
+        AuditLevel.OVERRIDABLE_FAIL,
+        context=plan_context,
+        user_confirmed=True,
+        reason="   ",
     ).allowed
-    assert not apply_override(
-        AuditLevel.OVERRIDABLE_FAIL, user_confirmed=True, reason="   "
-    ).allowed
+
     allowed = apply_override(
-        AuditLevel.OVERRIDABLE_FAIL, user_confirmed=True, reason="接受本次成交偏差"
+        AuditLevel.OVERRIDABLE_FAIL,
+        context=action_context,
+        user_confirmed=True,
+        reason="接受本次成交偏差",
     )
     assert allowed.allowed
+    assert allowed.status is OverrideStatus.APPROVED_WITH_OVERRIDE
+    assert allowed.original_level is AuditLevel.OVERRIDABLE_FAIL
+    assert allowed.resulting_level is AuditLevel.OVERRIDABLE_FAIL
+    assert allowed.context == action_context
     assert allowed.reason == "接受本次成交偏差"
-    assert not apply_override(
-        AuditLevel.HARD_FAIL, user_confirmed=True, reason="仍要继续"
-    ).allowed
+
+    hard_fail = apply_override(
+        AuditLevel.HARD_FAIL,
+        context=plan_context,
+        user_confirmed=True,
+        reason="仍要继续",
+    )
+    assert not hard_fail.allowed
+    assert hard_fail.status is OverrideStatus.BLOCKED_HARD_FAIL
+    assert hard_fail.original_level is AuditLevel.HARD_FAIL
+
+
+def test_override_context_requires_exactly_one_subject() -> None:
+    with pytest.raises(ValueError, match="原始审计结果"):
+        OverrideContext(audit_result_id=" ", plan_version_id="plan-version-1")
+    with pytest.raises(ValueError, match="必须且只能关联"):
+        OverrideContext(audit_result_id="audit-1")
+    with pytest.raises(ValueError, match="必须且只能关联"):
+        OverrideContext(
+            audit_result_id="audit-1",
+            plan_version_id="plan-version-1",
+            action_id="action-1",
+        )
 
 
 def test_structure_invalidation_new_cycle_flag() -> None:

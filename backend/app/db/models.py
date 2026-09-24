@@ -10,7 +10,6 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Index,
     Integer,
@@ -19,6 +18,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,7 +38,6 @@ from app.domain.enums import (
     StructureStage,
     TargetType,
 )
-
 
 PRICE = Numeric(18, 4)
 QUANTITY = Numeric(20, 4)
@@ -195,7 +196,7 @@ class ExecutionFill(IdMixin, TimestampMixin, Base):
     side: Mapped[OrderSide] = mapped_column(enum_type(OrderSide, "fill_side"), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(QUANTITY, nullable=False)
     price: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
-    fee: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal("0"))
+    fee: Mapped[Decimal] = mapped_column(MONEY, nullable=False, default=Decimal(0))
     executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
     external_execution_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

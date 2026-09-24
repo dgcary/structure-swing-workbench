@@ -10,7 +10,6 @@ from app.db.base import utc_now
 from app.db.models import TradePlan, TradePlanVersion
 from app.domain.enums import PlanStatus, PlanVersionState
 
-
 VERSIONED_FIELDS = (
     "setup_type",
     "structure_stage",

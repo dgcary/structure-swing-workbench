@@ -16,29 +16,29 @@ from app.domain.enums import AuditLevel, PlanStatus, PositionBucketType
 def test_account_position_and_core_t_buckets_are_separate(session: Session) -> None:
     snapshot = AccountSnapshot(
         captured_at=datetime(2026, 9, 24, 15, 0, tzinfo=UTC),
-        total_equity=Decimal("200000"),
-        available_cash=Decimal("100000"),
+        total_equity=Decimal(200000),
+        available_cash=Decimal(100000),
         source="manual",
     )
     position = PositionSnapshot(
         instrument_code="600000",
         instrument_name="浦发银行",
-        total_quantity=Decimal("10000"),
-        market_value=Decimal("120000"),
+        total_quantity=Decimal(10000),
+        market_value=Decimal(120000),
         broker_cost_price=Decimal("11.50"),
     )
     position.buckets.extend(
         [
             PositionBucketSnapshot(
                 bucket_type=PositionBucketType.CORE,
-                quantity=Decimal("7000"),
+                quantity=Decimal(7000),
                 strategy_cost_price=Decimal("11.20"),
             ),
             PositionBucketSnapshot(
                 bucket_type=PositionBucketType.T,
-                quantity=Decimal("3000"),
+                quantity=Decimal(3000),
                 strategy_cost_price=Decimal("11.90"),
-                realized_t_pnl=Decimal("350"),
+                realized_t_pnl=Decimal(350),
             ),
         ]
     )

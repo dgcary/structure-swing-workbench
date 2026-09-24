@@ -17,16 +17,16 @@ def _base_version_data() -> dict[str, object]:
         "key_support_price": Decimal("10.00"),
         "structure_invalidation_price": Decimal("9.80"),
         "structure_invalidation_condition": "用户确认收盘有效跌破结构低点",
-        "planned_total_position_pct": Decimal("50"),
+        "planned_total_position_pct": Decimal(50),
         "initial_entry_price_low": Decimal("10.10"),
         "initial_entry_price_high": Decimal("10.30"),
-        "initial_entry_pct": Decimal("40"),
+        "initial_entry_pct": Decimal(40),
         "confirmation_add_enabled": True,
         "confirmation_trigger_price": Decimal("10.80"),
-        "confirmation_add_pct": Decimal("30"),
-        "t_reserve_pct": Decimal("30"),
+        "confirmation_add_pct": Decimal(30),
+        "t_reserve_pct": Decimal(30),
         "first_target_price": Decimal("12.00"),
-        "first_target_reduce_pct": Decimal("50"),
+        "first_target_reduce_pct": Decimal(50),
     }
 
 

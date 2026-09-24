@@ -33,20 +33,20 @@ def test_action_can_own_multiple_real_fills_without_mutating_plan(session: Sessi
         side=OrderSide.BUY,
         planned_price_low=Decimal("10.00"),
         planned_price_high=Decimal("10.20"),
-        planned_quantity=Decimal("1000"),
+        planned_quantity=Decimal(1000),
     )
     action.fills.extend(
         [
             ExecutionFill(
                 side=OrderSide.BUY,
-                quantity=Decimal("400"),
+                quantity=Decimal(400),
                 price=Decimal("10.08"),
                 fee=Decimal("1.20"),
                 executed_at=datetime(2026, 9, 24, 9, 35, tzinfo=UTC),
             ),
             ExecutionFill(
                 side=OrderSide.BUY,
-                quantity=Decimal("600"),
+                quantity=Decimal(600),
                 price=Decimal("10.12"),
                 fee=Decimal("1.80"),
                 executed_at=datetime(2026, 9, 24, 9, 36, tzinfo=UTC),
@@ -57,7 +57,7 @@ def test_action_can_own_multiple_real_fills_without_mutating_plan(session: Sessi
     session.flush()
 
     assert len(action.fills) == 2
-    assert sum(fill.quantity for fill in action.fills) == Decimal("1000")
+    assert sum(fill.quantity for fill in action.fills) == Decimal(1000)
     assert version.initial_entry_price_low == original_low
     assert version.initial_entry_price_high == original_high
 

@@ -117,8 +117,14 @@ def audit_confirmation_add(
     return _finding("confirmation_add", AuditLevel.PASS, "确认加仓满足触发与价格范围")
 
 
-def audit_target_one(*, reduce_pct: Decimal, reached: bool, completed: bool) -> tuple[AuditFinding, ...]:
-    ratio_level = AuditLevel.PASS if Decimal("40") <= reduce_pct <= Decimal("60") else AuditLevel.WARNING
+def audit_target_one(
+    *, reduce_pct: Decimal, reached: bool, completed: bool
+) -> tuple[AuditFinding, ...]:
+    ratio_level = (
+        AuditLevel.PASS
+        if Decimal("40") <= reduce_pct <= Decimal("60")
+        else AuditLevel.WARNING
+    )
     findings = [
         _finding("target_one_reduce_pct", ratio_level, "第一目标减仓比例范围检查")
     ]
@@ -134,7 +140,6 @@ _RISK_INCREASING_ACTIONS = {
     ActionType.CONFIRMATION_ADD,
     ActionType.ORDINARY_ADD,
     ActionType.REVERSE_T_BUY,
-    ActionType.POSITIVE_T_SELL,
 }
 
 
@@ -183,7 +188,9 @@ def estimated_price_with_slippage(
     return planned_price * multiplier
 
 
-def apply_override(level: AuditLevel, *, user_confirmed: bool, reason: str | None) -> OverrideDecision:
+def apply_override(
+    level: AuditLevel, *, user_confirmed: bool, reason: str | None
+) -> OverrideDecision:
     if level is AuditLevel.HARD_FAIL:
         return OverrideDecision(False, AuditLevel.HARD_FAIL, None)
     if level is not AuditLevel.OVERRIDABLE_FAIL:

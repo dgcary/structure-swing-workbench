@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import AuditResult, ExecutionFill, ManualOverride, TradeAction
@@ -106,7 +107,7 @@ def test_trade_action_cannot_store_a_mismatched_redundant_plan_id(session: Sessi
     assert action.plan_version.plan_id != plan_a.id
 
 
-def test_audit_and_override_point_to_exact_version_and_action(session: Session) -> None:
+def test_action_audit_derives_exact_plan_version_and_override(session: Session) -> None:
     _plan, version = _create_plan(session)
     action = TradeAction(
         plan_version_id=version.id,
@@ -117,17 +118,61 @@ def test_audit_and_override_point_to_exact_version_and_action(session: Session) 
     session.flush()
 
     audit = AuditResult(
-        plan_version_id=version.id,
         action_id=action.id,
         level=AuditLevel.OVERRIDABLE_FAIL,
-        summary="模型关系测试，不包含M2规则判断",
+        summary="动作审计通过动作唯一绑定计划版本",
         details={"source": "unit-test"},
     )
     audit.overrides.append(ManualOverride(reason="用户确认继续，仅用于模型关系测试"))
     session.add(audit)
     session.flush()
 
-    assert audit.plan_version_id == version.id
-    assert audit.action_id == action.id
+    assert audit.plan_version_id is None
+    assert audit.action.plan_version_id == version.id
     assert audit.overrides[0].audit_result_id == audit.id
     assert audit.overrides[0].reason.startswith("用户确认")
+
+
+def test_plan_version_audit_can_target_version_directly(session: Session) -> None:
+    _plan, version = _create_plan(session)
+    audit = AuditResult(
+        plan_version_id=version.id,
+        level=AuditLevel.PASS,
+        summary="计划版本审计",
+    )
+    session.add(audit)
+    session.flush()
+
+    assert audit.plan_version_id == version.id
+    assert audit.action_id is None
+
+
+def test_audit_cannot_pair_version_a_with_action_from_version_b(session: Session) -> None:
+    _plan_a, version_a = _create_plan(
+        session,
+        instrument_code="000001",
+        instrument_name="平安银行",
+    )
+    _plan_b, version_b = _create_plan(
+        session,
+        instrument_code="000002",
+        instrument_name="万科A",
+    )
+    action_b = TradeAction(
+        plan_version_id=version_b.id,
+        action_type=ActionType.INITIAL_ENTRY,
+        side=OrderSide.BUY,
+    )
+    session.add(action_b)
+    session.flush()
+
+    mismatched = AuditResult(
+        plan_version_id=version_a.id,
+        action_id=action_b.id,
+        level=AuditLevel.PASS,
+        summary="该跨版本组合必须被数据库拒绝",
+    )
+    session.add(mismatched)
+
+    with pytest.raises(IntegrityError):
+        session.flush()

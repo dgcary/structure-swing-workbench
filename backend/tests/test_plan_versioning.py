@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import TradePlan, TradePlanVersion
+from app.db.models import TradePlanVersion
 from app.domain.enums import EntryMode, PlanStatus, PlanVersionState, SetupType, StructureStage
 from app.services.trade_plans import TradePlanService
 

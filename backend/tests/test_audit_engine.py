@@ -183,3 +183,12 @@ def test_override_requires_confirmation_and_reason_and_never_overrides_hard_fail
     assert not apply_override(
         AuditLevel.HARD_FAIL, user_confirmed=True, reason="仍要继续"
     ).allowed
+
+
+def test_structure_invalidation_new_cycle_flag() -> None:
+    result = audit_structure_invalidation(
+        invalidated=True,
+        action_type=ActionType.POSITIVE_T_SELL,
+        starts_new_t_cycle=True,
+    )
+    assert result.level is AuditLevel.HARD_FAIL

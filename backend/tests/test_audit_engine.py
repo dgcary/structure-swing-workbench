@@ -55,13 +55,13 @@ def test_position_split_boundaries(initial, confirmation, reserve, expected) -> 
 def test_single_price_entry_cannot_chase_up() -> None:
     assert audit_initial_entry(
         mode=EntryMode.SINGLE_PRICE,
-        execution_price=Decimal("10"),
-        planned_price_low=Decimal("10"),
+        execution_price=Decimal(10),
+        planned_price_low=Decimal(10),
     ).level is AuditLevel.PASS
     assert audit_initial_entry(
         mode=EntryMode.SINGLE_PRICE,
         execution_price=Decimal("10.0001"),
-        planned_price_low=Decimal("10"),
+        planned_price_low=Decimal(10),
     ).level is AuditLevel.HARD_FAIL
 
 
@@ -69,12 +69,12 @@ def test_range_entry_lower_two_percent_boundary() -> None:
     common = {"mode": EntryMode.PRICE_RANGE, "planned_price_low": Decimal(10), "planned_price_high": Decimal(11)}
     assert audit_initial_entry(execution_price=Decimal("9.8"), **common).level is AuditLevel.PASS
     assert audit_initial_entry(execution_price=Decimal("9.7999"), **common).level is AuditLevel.HARD_FAIL
-    assert audit_initial_entry(execution_price=Decimal("11"), **common).level is AuditLevel.PASS
+    assert audit_initial_entry(execution_price=Decimal(11), **common).level is AuditLevel.PASS
     assert audit_initial_entry(execution_price=Decimal("11.0001"), **common).level is AuditLevel.HARD_FAIL
 
 
 def test_confirmation_add_requires_confirmation_trigger_and_three_percent_cap() -> None:
-    trigger = Decimal("10")
+    trigger = Decimal(10)
     assert audit_confirmation_add(
         reversal_confirmed=False, execution_price=trigger, trigger_price=trigger
     ).level is AuditLevel.HARD_FAIL
@@ -98,7 +98,7 @@ def test_target_one_reduce_pct_boundaries(pct: str, level: AuditLevel) -> None:
 
 
 def test_target_one_reached_but_not_completed_warns() -> None:
-    findings = audit_target_one(reduce_pct=Decimal("50"), reached=True, completed=False)
+    findings = audit_target_one(reduce_pct=Decimal(50), reached=True, completed=False)
     assert findings[1].level is AuditLevel.WARNING
 
 
@@ -124,8 +124,8 @@ def test_execution_price_outside_boundary_grades(price: str, level: AuditLevel) 
     finding = audit_execution_price(
         side=OrderSide.BUY,
         execution_price=Decimal(price),
-        allowed_low=Decimal("10"),
-        allowed_high=Decimal("11"),
+        allowed_low=Decimal(10),
+        allowed_high=Decimal(11),
         reference_price=Decimal("10.5"),
     )
     assert finding.level is level
@@ -135,15 +135,15 @@ def test_execution_inside_boundary_uses_adverse_deviation() -> None:
     assert audit_execution_price(
         side=OrderSide.BUY,
         execution_price=Decimal("10.5525"),
-        allowed_low=Decimal("10"),
-        allowed_high=Decimal("11"),
+        allowed_low=Decimal(10),
+        allowed_high=Decimal(11),
         reference_price=Decimal("10.5"),
     ).level is AuditLevel.PASS
     assert audit_execution_price(
         side=OrderSide.BUY,
         execution_price=Decimal("10.5526"),
-        allowed_low=Decimal("10"),
-        allowed_high=Decimal("11"),
+        allowed_low=Decimal(10),
+        allowed_high=Decimal(11),
         reference_price=Decimal("10.5"),
     ).level is AuditLevel.WARNING
 
@@ -158,13 +158,13 @@ def test_aggregate_uses_highest_severity_without_warning_escalation() -> None:
 def test_default_slippage_and_real_fill_precedence() -> None:
     assert DEFAULT_ONE_WAY_SLIPPAGE == Decimal("0.002")
     assert estimated_price_with_slippage(
-        side=OrderSide.BUY, planned_price=Decimal("10")
+        side=OrderSide.BUY, planned_price=Decimal(10)
     ) == Decimal("10.020")
     assert estimated_price_with_slippage(
-        side=OrderSide.SELL, planned_price=Decimal("10")
+        side=OrderSide.SELL, planned_price=Decimal(10)
     ) == Decimal("9.980")
     assert estimated_price_with_slippage(
-        side=OrderSide.BUY, planned_price=Decimal("10"), actual_price=Decimal("10.01")
+        side=OrderSide.BUY, planned_price=Decimal(10), actual_price=Decimal("10.01")
     ) == Decimal("10.01")
 
 

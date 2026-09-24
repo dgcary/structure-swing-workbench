@@ -19,9 +19,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy import (
-    Enum as SAEnum,
-)
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdMixin, TimestampMixin
@@ -276,11 +274,14 @@ class AuditResult(IdMixin, TimestampMixin, Base):
     __tablename__ = "audit_results"
     __table_args__ = (
         CheckConstraint(
-            "plan_version_id IS NOT NULL OR action_id IS NOT NULL",
-            name="ck_audit_result_has_subject",
+            "(plan_version_id IS NOT NULL AND action_id IS NULL) OR "
+            "(plan_version_id IS NULL AND action_id IS NOT NULL)",
+            name="ck_audit_result_exactly_one_subject",
         ),
     )
 
+    # An audit has exactly one persisted subject. Action audits derive their exact plan version
+    # through TradeAction.plan_version_id, which makes cross-version pairings unrepresentable.
     plan_version_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("trade_plan_versions.id", ondelete="RESTRICT"), nullable=True
     )

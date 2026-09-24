@@ -23,9 +23,18 @@ dev = [
   "ruff>=0.8,<1",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["alembic*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["build"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]

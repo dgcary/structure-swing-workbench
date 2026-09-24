@@ -66,11 +66,7 @@ def test_single_price_entry_cannot_chase_up() -> None:
 
 
 def test_range_entry_lower_two_percent_boundary() -> None:
-    common = dict(
-        mode=EntryMode.PRICE_RANGE,
-        planned_price_low=Decimal("10"),
-        planned_price_high=Decimal("11"),
-    )
+    common = {"mode": EntryMode.PRICE_RANGE, "planned_price_low": Decimal(10), "planned_price_high": Decimal(11)}
     assert audit_initial_entry(execution_price=Decimal("9.8"), **common).level is AuditLevel.PASS
     assert audit_initial_entry(execution_price=Decimal("9.7999"), **common).level is AuditLevel.HARD_FAIL
     assert audit_initial_entry(execution_price=Decimal("11"), **common).level is AuditLevel.PASS

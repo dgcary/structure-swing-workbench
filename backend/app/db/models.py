@@ -29,6 +29,7 @@ from app.domain.enums import (
     ActionStatus,
     ActionType,
     AuditLevel,
+    EntryMode,
     LabeledEnum,
     OrderSide,
     PlanStatus,
@@ -70,9 +71,10 @@ class TradePlan(IdMixin, TimestampMixin, Base):
     instrument_code: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     instrument_name: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[PlanStatus] = mapped_column(
-        enum_type(PlanStatus, "plan_status"), nullable=False, default=PlanStatus.ACTIVE
+        enum_type(PlanStatus, "plan_status"), nullable=False, default=PlanStatus.DRAFT
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     versions: Mapped[list[TradePlanVersion]] = relationship(
@@ -80,7 +82,6 @@ class TradePlan(IdMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="TradePlanVersion.version_number",
     )
-    actions: Mapped[list[TradeAction]] = relationship(back_populates="plan")
 
 
 class TradePlanVersion(IdMixin, TimestampMixin, Base):
@@ -106,7 +107,7 @@ class TradePlanVersion(IdMixin, TimestampMixin, Base):
     state: Mapped[PlanVersionState] = mapped_column(
         enum_type(PlanVersionState, "plan_version_state"),
         nullable=False,
-        default=PlanVersionState.PENDING_AUDIT,
+        default=PlanVersionState.DRAFT,
     )
     is_effective: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     version_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -127,6 +128,10 @@ class TradePlanVersion(IdMixin, TimestampMixin, Base):
     structure_invalidation_price: Mapped[Decimal | None] = mapped_column(PRICE, nullable=True)
     structure_invalidation_condition: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    entry_mode: Mapped[EntryMode | None] = mapped_column(
+        enum_type(EntryMode, "entry_mode"), nullable=True
+    )
+    planned_total_position_amount: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     planned_total_position_pct: Mapped[Decimal | None] = mapped_column(PERCENT, nullable=True)
     initial_entry_price_low: Mapped[Decimal | None] = mapped_column(PRICE, nullable=True)
     initial_entry_price_high: Mapped[Decimal | None] = mapped_column(PRICE, nullable=True)
@@ -142,8 +147,8 @@ class TradePlanVersion(IdMixin, TimestampMixin, Base):
     )
     first_target_reduce_pct: Mapped[Decimal | None] = mapped_column(PERCENT, nullable=True)
     remaining_exit_condition: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remaining_exit_condition_triggered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
-    user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     plan: Mapped[TradePlan] = relationship(back_populates="versions")
     based_on_version: Mapped[TradePlanVersion | None] = relationship(
@@ -156,9 +161,6 @@ class TradePlanVersion(IdMixin, TimestampMixin, Base):
 class TradeAction(IdMixin, TimestampMixin, Base):
     __tablename__ = "trade_actions"
 
-    plan_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("trade_plans.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
     plan_version_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("trade_plan_versions.id", ondelete="RESTRICT"),
@@ -179,7 +181,6 @@ class TradeAction(IdMixin, TimestampMixin, Base):
     t_cycle_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    plan: Mapped[TradePlan] = relationship(back_populates="actions")
     plan_version: Mapped[TradePlanVersion] = relationship(back_populates="actions")
     fills: Mapped[list[ExecutionFill]] = relationship(
         back_populates="action", cascade="all, delete-orphan", order_by="ExecutionFill.executed_at"

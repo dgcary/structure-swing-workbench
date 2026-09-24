@@ -23,7 +23,13 @@ class StructureStage(LabeledEnum):
     LATE = "late"
 
 
+class EntryMode(LabeledEnum):
+    SINGLE_PRICE = "single_price"
+    PRICE_RANGE = "price_range"
+
+
 class PlanStatus(LabeledEnum):
+    DRAFT = "draft"
     ACTIVE = "active"
     EXITING = "exiting"
     CLOSED = "closed"
@@ -31,10 +37,13 @@ class PlanStatus(LabeledEnum):
 
 
 class PlanVersionState(LabeledEnum):
+    DRAFT = "draft"
     PENDING_AUDIT = "pending_audit"
     EFFECTIVE = "effective"
+    EFFECTIVE_WITH_OVERRIDE = "effective_with_override"
     SUPERSEDED = "superseded"
     REJECTED = "rejected"
+    CLOSED = "closed"
 
 
 class ActionType(LabeledEnum):
@@ -47,7 +56,8 @@ class ActionType(LabeledEnum):
     REVERSE_T_SELL = "reverse_t_sell"
     TAKE_PROFIT = "take_profit"
     REDUCE = "reduce"
-    EXIT = "exit"
+    STOP_EXIT = "stop_exit"
+    EXIT_OTHER = "exit_other"
 
 
 class ActionStatus(LabeledEnum):
@@ -95,17 +105,25 @@ ENUM_LABELS: dict[type[LabeledEnum], dict[LabeledEnum, str]] = {
         StructureStage.MIDDLE: "中段",
         StructureStage.LATE: "后段",
     },
+    EntryMode: {
+        EntryMode.SINGLE_PRICE: "单一价格",
+        EntryMode.PRICE_RANGE: "价格区间",
+    },
     PlanStatus: {
+        PlanStatus.DRAFT: "草稿",
         PlanStatus.ACTIVE: "有效",
         PlanStatus.EXITING: "退出执行中",
         PlanStatus.CLOSED: "已关闭",
         PlanStatus.CANCELLED: "已取消",
     },
     PlanVersionState: {
+        PlanVersionState.DRAFT: "草稿",
         PlanVersionState.PENDING_AUDIT: "待审计",
-        PlanVersionState.EFFECTIVE: "当前有效版本",
-        PlanVersionState.SUPERSEDED: "历史版本",
-        PlanVersionState.REJECTED: "未通过版本",
+        PlanVersionState.EFFECTIVE: "生效",
+        PlanVersionState.EFFECTIVE_WITH_OVERRIDE: "带覆盖生效",
+        PlanVersionState.SUPERSEDED: "已被新版本替代",
+        PlanVersionState.REJECTED: "已拒绝",
+        PlanVersionState.CLOSED: "已关闭",
     },
     ActionType: {
         ActionType.INITIAL_ENTRY: "初始建仓",
@@ -117,7 +135,8 @@ ENUM_LABELS: dict[type[LabeledEnum], dict[LabeledEnum, str]] = {
         ActionType.REVERSE_T_SELL: "反T卖出",
         ActionType.TAKE_PROFIT: "止盈",
         ActionType.REDUCE: "减仓",
-        ActionType.EXIT: "退出",
+        ActionType.STOP_EXIT: "止损退出",
+        ActionType.EXIT_OTHER: "其他退出",
     },
     ActionStatus: {
         ActionStatus.PLANNED: "计划中",

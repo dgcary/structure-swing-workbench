@@ -10,7 +10,14 @@ from app.db.models import (
     PositionBucketSnapshot,
     PositionSnapshot,
 )
-from app.domain.enums import AuditLevel, PlanStatus, PositionBucketType
+from app.domain.enums import (
+    ActionType,
+    AuditLevel,
+    EntryMode,
+    PlanStatus,
+    PlanVersionState,
+    PositionBucketType,
+)
 
 
 def test_account_position_and_core_t_buckets_are_separate(session: Session) -> None:
@@ -55,7 +62,13 @@ def test_account_position_and_core_t_buckets_are_separate(session: Session) -> N
 def test_user_visible_enums_have_chinese_labels() -> None:
     assert AuditLevel.PASS.label_zh == "通过"
     assert AuditLevel.HARD_FAIL.label_zh == "硬性失败"
+    assert EntryMode.SINGLE_PRICE.label_zh == "单一价格"
+    assert EntryMode.PRICE_RANGE.label_zh == "价格区间"
+    assert PlanStatus.DRAFT.label_zh == "草稿"
     assert PlanStatus.ACTIVE.label_zh == "有效"
+    assert PlanVersionState.EFFECTIVE_WITH_OVERRIDE.label_zh == "带覆盖生效"
+    assert ActionType.STOP_EXIT.label_zh == "止损退出"
+    assert ActionType.EXIT_OTHER.label_zh == "其他退出"
     assert PositionBucketType.CORE.label_zh == "核心仓"
 
 

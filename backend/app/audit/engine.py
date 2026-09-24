@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import IntEnum
-from typing import Iterable
 
 from app.domain.enums import ActionType, AuditLevel, EntryMode, OrderSide
 
@@ -58,9 +58,9 @@ def aggregate(findings: Iterable[AuditFinding]) -> AuditReport:
 
 
 def audit_single_trade_risk(risk_pct: Decimal) -> AuditFinding:
-    if risk_pct <= Decimal("2"):
+    if risk_pct <= Decimal(2):
         return _finding("single_trade_risk", AuditLevel.PASS, "单笔账户风险不超过2%")
-    if risk_pct <= Decimal("3"):
+    if risk_pct <= Decimal(3):
         return _finding("single_trade_risk", AuditLevel.WARNING, "单笔账户风险高于2%且不超过3%")
     return _finding("single_trade_risk", AuditLevel.HARD_FAIL, "单笔账户风险高于3%")
 
@@ -69,9 +69,9 @@ def audit_position_split(
     *, initial_pct: Decimal, confirmation_pct: Decimal, t_reserve_pct: Decimal
 ) -> tuple[AuditFinding, ...]:
     specs = (
-        ("initial_position", initial_pct, Decimal("35"), Decimal("45"), "初始建仓"),
-        ("confirmation_position", confirmation_pct, Decimal("25"), Decimal("35"), "确认加仓"),
-        ("t_reserve_position", t_reserve_pct, Decimal("25"), Decimal("35"), "T仓/机动仓"),
+        ("initial_position", initial_pct, Decimal(35), Decimal(45), "初始建仓"),
+        ("confirmation_position", confirmation_pct, Decimal(25), Decimal(35), "确认加仓"),
+        ("t_reserve_position", t_reserve_pct, Decimal(25), Decimal(35), "T仓/机动仓"),
     )
     return tuple(
         _finding(
@@ -122,16 +122,20 @@ def audit_target_one(
 ) -> tuple[AuditFinding, ...]:
     ratio_level = (
         AuditLevel.PASS
-        if Decimal("40") <= reduce_pct <= Decimal("60")
+        if Decimal(40) <= reduce_pct <= Decimal(60)
         else AuditLevel.WARNING
     )
     findings = [
         _finding("target_one_reduce_pct", ratio_level, "第一目标减仓比例范围检查")
     ]
     if reached and not completed:
-        findings.append(_finding("target_one_completion", AuditLevel.WARNING, "已达到第一目标但计划减仓尚未完成"))
+        findings.append(
+            _finding("target_one_completion", AuditLevel.WARNING, "已达到第一目标但计划减仓尚未完成")
+        )
     else:
-        findings.append(_finding("target_one_completion", AuditLevel.PASS, "第一目标减仓完成状态无警告"))
+        findings.append(
+            _finding("target_one_completion", AuditLevel.PASS, "第一目标减仓完成状态无警告")
+        )
     return tuple(findings)
 
 
@@ -143,10 +147,16 @@ _RISK_INCREASING_ACTIONS = {
 }
 
 
-def audit_structure_invalidation(*, invalidated: bool, action_type: ActionType) -> AuditFinding:
-    if invalidated and action_type in _RISK_INCREASING_ACTIONS:
+def audit_structure_invalidation(
+    *, invalidated: bool, action_type: ActionType, starts_new_t_cycle: bool = False
+) -> AuditFinding:
+    if not invalidated:
+        return _finding("structure_invalidation", AuditLevel.PASS, "结构失效约束未被违反")
+    if action_type in _RISK_INCREASING_ACTIONS:
         return _finding("structure_invalidation", AuditLevel.HARD_FAIL, "结构失效后禁止扩大风险动作")
-    return _finding("structure_invalidation", AuditLevel.PASS, "结构失效约束未被违反")
+    if starts_new_t_cycle:
+        return _finding("structure_invalidation", AuditLevel.HARD_FAIL, "结构失效后禁止开启新的T循环")
+    return _finding("structure_invalidation", AuditLevel.PASS, "结构失效后仅执行持有或降低风险动作")
 
 
 def audit_execution_price(
@@ -182,9 +192,9 @@ def estimated_price_with_slippage(
 ) -> Decimal:
     if actual_price is not None:
         return actual_price
-    multiplier = Decimal("1") + DEFAULT_ONE_WAY_SLIPPAGE
+    multiplier = Decimal(1) + DEFAULT_ONE_WAY_SLIPPAGE
     if side is OrderSide.SELL:
-        multiplier = Decimal("1") - DEFAULT_ONE_WAY_SLIPPAGE
+        multiplier = Decimal(1) - DEFAULT_ONE_WAY_SLIPPAGE
     return planned_price * multiplier
 
 

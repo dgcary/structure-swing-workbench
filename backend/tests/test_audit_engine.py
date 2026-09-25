@@ -41,8 +41,8 @@ def test_single_trade_risk_boundaries(risk: str, expected: AuditLevel) -> None:
     [
         ("35", "25", "25", [AuditLevel.PASS] * 3),
         ("45", "35", "35", [AuditLevel.PASS] * 3),
-        ("34.9999", "24.9999", "24.9999", [AuditLevel.WARNING] * 3),
-        ("45.0001", "35.0001", "35.0001", [AuditLevel.WARNING] * 3),
+        ("34.9999", "24.9999", "24.9999", [AuditLevel.OVERRIDABLE_FAIL] * 3),
+        ("45.0001", "35.0001", "35.0001", [AuditLevel.OVERRIDABLE_FAIL] * 3),
     ],
 )
 def test_position_split_boundaries(initial, confirmation, reserve, expected) -> None:
@@ -93,7 +93,7 @@ def test_confirmation_add_requires_confirmation_trigger_and_three_percent_cap() 
 
 @pytest.mark.parametrize(
     ("pct", "level"),
-    [("39.9999", AuditLevel.WARNING), ("40", AuditLevel.PASS), ("60", AuditLevel.PASS), ("60.0001", AuditLevel.WARNING)],
+    [("39.9999", AuditLevel.OVERRIDABLE_FAIL), ("40", AuditLevel.PASS), ("60", AuditLevel.PASS), ("60.0001", AuditLevel.OVERRIDABLE_FAIL)],
 )
 def test_target_one_reduce_pct_boundaries(pct: str, level: AuditLevel) -> None:
     assert audit_target_one(reduce_pct=Decimal(pct), reached=False, completed=False)[0].level is level
@@ -177,6 +177,7 @@ def test_override_requires_confirmation_and_reason_and_never_overrides_hard_fail
     )
     action_context = OverrideContext(
         audit_result_id="audit-action-1",
+        plan_version_id="plan-version-1",
         action_id="action-1",
     )
 
@@ -222,16 +223,23 @@ def test_override_requires_confirmation_and_reason_and_never_overrides_hard_fail
     assert hard_fail.original_level is AuditLevel.HARD_FAIL
 
 
-def test_override_context_requires_exactly_one_subject() -> None:
+def test_override_context_requires_complete_traceability() -> None:
     with pytest.raises(ValueError, match="原始审计结果"):
         OverrideContext(audit_result_id=" ", plan_version_id="plan-version-1")
-    with pytest.raises(ValueError, match="必须且只能关联"):
+    with pytest.raises(ValueError, match="计划版本"):
         OverrideContext(audit_result_id="audit-1")
-    with pytest.raises(ValueError, match="必须且只能关联"):
+    action_context = OverrideContext(
+        audit_result_id="audit-1",
+        plan_version_id="plan-version-1",
+        action_id="action-1",
+    )
+    assert action_context.plan_version_id == "plan-version-1"
+    assert action_context.action_id == "action-1"
+    with pytest.raises(ValueError, match="交易动作标识不能为空"):
         OverrideContext(
             audit_result_id="audit-1",
             plan_version_id="plan-version-1",
-            action_id="action-1",
+            action_id=" ",
         )
 
 

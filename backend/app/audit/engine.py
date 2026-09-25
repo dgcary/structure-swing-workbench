@@ -54,8 +54,10 @@ class OverrideContext:
     def __post_init__(self) -> None:
         if not self.audit_result_id.strip():
             raise ValueError("覆盖决定必须关联原始审计结果")
-        if (self.plan_version_id is None) == (self.action_id is None):
-            raise ValueError("覆盖决定必须且只能关联计划版本或交易动作之一")
+        if self.plan_version_id is None:
+            raise ValueError("覆盖决定必须关联计划版本")
+        if self.action_id is not None and not self.action_id.strip():
+            raise ValueError("交易动作标识不能为空")
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +101,7 @@ def audit_position_split(
     return tuple(
         _finding(
             rule,
-            AuditLevel.PASS if low <= value <= high else AuditLevel.WARNING,
+            AuditLevel.PASS if low <= value <= high else AuditLevel.OVERRIDABLE_FAIL,
             f"{label}比例{'在' if low <= value <= high else '不在'}通过范围内",
         )
         for rule, value, low, high, label in specs
@@ -146,7 +148,7 @@ def audit_target_one(
     ratio_level = (
         AuditLevel.PASS
         if Decimal(40) <= reduce_pct <= Decimal(60)
-        else AuditLevel.WARNING
+        else AuditLevel.OVERRIDABLE_FAIL
     )
     findings = [
         _finding("target_one_reduce_pct", ratio_level, "第一目标减仓比例范围检查")

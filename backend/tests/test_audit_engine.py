@@ -257,15 +257,15 @@ def test_structure_invalidation_new_cycle_flag() -> None:
 def test_valid_initial_action_with_slight_fill_overrun_is_only_fill_warning() -> None:
     logical = audit_initial_entry(
         mode=EntryMode.SINGLE_PRICE,
-        action_price=Decimal("10"),
-        planned_price_low=Decimal("10"),
+        action_price=Decimal(10),
+        planned_price_low=Decimal(10),
     )
     fill = audit_execution_price(
         side=OrderSide.BUY,
         execution_price=Decimal("10.05"),
-        allowed_low=Decimal("0"),
-        allowed_high=Decimal("10"),
-        reference_price=Decimal("10"),
+        allowed_low=Decimal(0),
+        allowed_high=Decimal(10),
+        reference_price=Decimal(10),
     )
     assert logical.level is AuditLevel.PASS
     assert fill.level is AuditLevel.WARNING
@@ -276,12 +276,12 @@ def test_valid_confirmation_action_with_slight_fill_overrun_is_only_fill_warning
     logical = audit_confirmation_add(
         reversal_confirmed=True,
         action_price=Decimal("10.3"),
-        trigger_price=Decimal("10"),
+        trigger_price=Decimal(10),
     )
     fill = audit_execution_price(
         side=OrderSide.BUY,
         execution_price=Decimal("10.3515"),
-        allowed_low=Decimal("10"),
+        allowed_low=Decimal(10),
         allowed_high=Decimal("10.3"),
         reference_price=Decimal("10.3"),
     )
@@ -294,14 +294,14 @@ def test_logically_invalid_action_remains_hard_fail_even_if_fill_deviation_is_sm
     logical = audit_initial_entry(
         mode=EntryMode.SINGLE_PRICE,
         action_price=Decimal("10.0001"),
-        planned_price_low=Decimal("10"),
+        planned_price_low=Decimal(10),
     )
     fill = audit_execution_price(
         side=OrderSide.BUY,
         execution_price=Decimal("10.0001"),
-        allowed_low=Decimal("0"),
-        allowed_high=Decimal("10"),
-        reference_price=Decimal("10"),
+        allowed_low=Decimal(0),
+        allowed_high=Decimal(10),
+        reference_price=Decimal(10),
     )
     assert logical.level is AuditLevel.HARD_FAIL
     assert fill.level is AuditLevel.WARNING

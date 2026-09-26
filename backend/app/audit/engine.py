@@ -54,7 +54,7 @@ class OverrideContext:
     def __post_init__(self) -> None:
         if not self.audit_result_id.strip():
             raise ValueError("覆盖决定必须关联原始审计结果")
-        if self.plan_version_id is None:
+        if self.plan_version_id is None or not self.plan_version_id.strip():
             raise ValueError("覆盖决定必须关联计划版本")
         if self.action_id is not None and not self.action_id.strip():
             raise ValueError("交易动作标识不能为空")
@@ -111,33 +111,33 @@ def audit_position_split(
 def audit_initial_entry(
     *,
     mode: EntryMode,
-    execution_price: Decimal,
+    action_price: Decimal,
     planned_price_low: Decimal,
     planned_price_high: Decimal | None = None,
 ) -> AuditFinding:
     if mode is EntryMode.SINGLE_PRICE:
-        if execution_price <= planned_price_low:
+        if action_price <= planned_price_low:
             return _finding("initial_entry", AuditLevel.PASS, "初始建仓未向上追过计划价")
         return _finding("initial_entry", AuditLevel.HARD_FAIL, "初始建仓高于单一计划买入价")
 
     if planned_price_high is None:
         raise ValueError("价格区间模式必须提供区间上沿")
-    if execution_price > planned_price_high:
+    if action_price > planned_price_high:
         return _finding("initial_entry", AuditLevel.HARD_FAIL, "初始建仓高于计划区间上沿")
     lower_limit = planned_price_low * Decimal("0.98")
-    if execution_price < lower_limit:
+    if action_price < lower_limit:
         return _finding("initial_entry", AuditLevel.HARD_FAIL, "低于计划区间下沿超过2%，需要新计划版本")
     return _finding("initial_entry", AuditLevel.PASS, "初始建仓价格位于原计划允许边界内")
 
 
 def audit_confirmation_add(
-    *, reversal_confirmed: bool, execution_price: Decimal, trigger_price: Decimal
+    *, reversal_confirmed: bool, action_price: Decimal, trigger_price: Decimal
 ) -> AuditFinding:
     if not reversal_confirmed:
         return _finding("confirmation_add", AuditLevel.HARD_FAIL, "用户尚未确认反转成立")
-    if execution_price < trigger_price:
+    if action_price < trigger_price:
         return _finding("confirmation_add", AuditLevel.HARD_FAIL, "成交发生在确认加仓触发价之前")
-    if execution_price > trigger_price * Decimal("1.03"):
+    if action_price > trigger_price * Decimal("1.03"):
         return _finding("confirmation_add", AuditLevel.HARD_FAIL, "确认加仓成交价超过触发价3%上限")
     return _finding("confirmation_add", AuditLevel.PASS, "确认加仓满足触发与价格范围")
 

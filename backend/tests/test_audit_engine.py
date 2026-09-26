@@ -57,37 +57,37 @@ def test_position_split_boundaries(initial, confirmation, reserve, expected) -> 
 def test_single_price_entry_cannot_chase_up() -> None:
     assert audit_initial_entry(
         mode=EntryMode.SINGLE_PRICE,
-        execution_price=Decimal(10),
+        action_price=Decimal(10),
         planned_price_low=Decimal(10),
     ).level is AuditLevel.PASS
     assert audit_initial_entry(
         mode=EntryMode.SINGLE_PRICE,
-        execution_price=Decimal("10.0001"),
+        action_price=Decimal("10.0001"),
         planned_price_low=Decimal(10),
     ).level is AuditLevel.HARD_FAIL
 
 
 def test_range_entry_lower_two_percent_boundary() -> None:
     common = {"mode": EntryMode.PRICE_RANGE, "planned_price_low": Decimal(10), "planned_price_high": Decimal(11)}
-    assert audit_initial_entry(execution_price=Decimal("9.8"), **common).level is AuditLevel.PASS
-    assert audit_initial_entry(execution_price=Decimal("9.7999"), **common).level is AuditLevel.HARD_FAIL
-    assert audit_initial_entry(execution_price=Decimal(11), **common).level is AuditLevel.PASS
-    assert audit_initial_entry(execution_price=Decimal("11.0001"), **common).level is AuditLevel.HARD_FAIL
+    assert audit_initial_entry(action_price=Decimal("9.8"), **common).level is AuditLevel.PASS
+    assert audit_initial_entry(action_price=Decimal("9.7999"), **common).level is AuditLevel.HARD_FAIL
+    assert audit_initial_entry(action_price=Decimal(11), **common).level is AuditLevel.PASS
+    assert audit_initial_entry(action_price=Decimal("11.0001"), **common).level is AuditLevel.HARD_FAIL
 
 
 def test_confirmation_add_requires_confirmation_trigger_and_three_percent_cap() -> None:
     trigger = Decimal(10)
     assert audit_confirmation_add(
-        reversal_confirmed=False, execution_price=trigger, trigger_price=trigger
+        reversal_confirmed=False, action_price=trigger, trigger_price=trigger
     ).level is AuditLevel.HARD_FAIL
     assert audit_confirmation_add(
-        reversal_confirmed=True, execution_price=Decimal("9.9999"), trigger_price=trigger
+        reversal_confirmed=True, action_price=Decimal("9.9999"), trigger_price=trigger
     ).level is AuditLevel.HARD_FAIL
     assert audit_confirmation_add(
-        reversal_confirmed=True, execution_price=Decimal("10.3"), trigger_price=trigger
+        reversal_confirmed=True, action_price=Decimal("10.3"), trigger_price=trigger
     ).level is AuditLevel.PASS
     assert audit_confirmation_add(
-        reversal_confirmed=True, execution_price=Decimal("10.3001"), trigger_price=trigger
+        reversal_confirmed=True, action_price=Decimal("10.3001"), trigger_price=trigger
     ).level is AuditLevel.HARD_FAIL
 
 
@@ -228,6 +228,8 @@ def test_override_context_requires_complete_traceability() -> None:
         OverrideContext(audit_result_id=" ", plan_version_id="plan-version-1")
     with pytest.raises(ValueError, match="计划版本"):
         OverrideContext(audit_result_id="audit-1")
+    with pytest.raises(ValueError, match="计划版本"):
+        OverrideContext(audit_result_id="audit-1", plan_version_id="   ")
     action_context = OverrideContext(
         audit_result_id="audit-1",
         plan_version_id="plan-version-1",
@@ -250,3 +252,57 @@ def test_structure_invalidation_new_cycle_flag() -> None:
         starts_new_t_cycle=True,
     )
     assert result.level is AuditLevel.HARD_FAIL
+
+
+def test_valid_initial_action_with_slight_fill_overrun_is_only_fill_warning() -> None:
+    logical = audit_initial_entry(
+        mode=EntryMode.SINGLE_PRICE,
+        action_price=Decimal("10"),
+        planned_price_low=Decimal("10"),
+    )
+    fill = audit_execution_price(
+        side=OrderSide.BUY,
+        execution_price=Decimal("10.05"),
+        allowed_low=Decimal("0"),
+        allowed_high=Decimal("10"),
+        reference_price=Decimal("10"),
+    )
+    assert logical.level is AuditLevel.PASS
+    assert fill.level is AuditLevel.WARNING
+    assert aggregate((logical, fill)).level is AuditLevel.WARNING
+
+
+def test_valid_confirmation_action_with_slight_fill_overrun_is_only_fill_warning() -> None:
+    logical = audit_confirmation_add(
+        reversal_confirmed=True,
+        action_price=Decimal("10.3"),
+        trigger_price=Decimal("10"),
+    )
+    fill = audit_execution_price(
+        side=OrderSide.BUY,
+        execution_price=Decimal("10.3515"),
+        allowed_low=Decimal("10"),
+        allowed_high=Decimal("10.3"),
+        reference_price=Decimal("10.3"),
+    )
+    assert logical.level is AuditLevel.PASS
+    assert fill.level is AuditLevel.WARNING
+    assert aggregate((logical, fill)).level is AuditLevel.WARNING
+
+
+def test_logically_invalid_action_remains_hard_fail_even_if_fill_deviation_is_small() -> None:
+    logical = audit_initial_entry(
+        mode=EntryMode.SINGLE_PRICE,
+        action_price=Decimal("10.0001"),
+        planned_price_low=Decimal("10"),
+    )
+    fill = audit_execution_price(
+        side=OrderSide.BUY,
+        execution_price=Decimal("10.0001"),
+        allowed_low=Decimal("0"),
+        allowed_high=Decimal("10"),
+        reference_price=Decimal("10"),
+    )
+    assert logical.level is AuditLevel.HARD_FAIL
+    assert fill.level is AuditLevel.WARNING
+    assert aggregate((logical, fill)).level is AuditLevel.HARD_FAIL

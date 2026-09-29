@@ -168,6 +168,7 @@ _RISK_INCREASING_ACTIONS = {
     ActionType.INITIAL_ENTRY,
     ActionType.CONFIRMATION_ADD,
     ActionType.ORDINARY_ADD,
+    ActionType.POSITIVE_T_BUYBACK,
     ActionType.REVERSE_T_BUY,
 }
 

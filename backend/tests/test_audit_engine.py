@@ -109,7 +109,18 @@ def test_structure_invalidation_blocks_risk_increasing_action() -> None:
         invalidated=True, action_type=ActionType.CONFIRMATION_ADD
     ).level is AuditLevel.HARD_FAIL
     assert audit_structure_invalidation(
+        invalidated=True, action_type=ActionType.POSITIVE_T_BUYBACK
+    ).level is AuditLevel.HARD_FAIL
+    assert audit_structure_invalidation(
+        invalidated=True,
+        action_type=ActionType.POSITIVE_T_BUYBACK,
+        starts_new_t_cycle=True,
+    ).level is AuditLevel.HARD_FAIL
+    assert audit_structure_invalidation(
         invalidated=True, action_type=ActionType.STOP_EXIT
+    ).level is AuditLevel.PASS
+    assert audit_structure_invalidation(
+        invalidated=True, action_type=ActionType.REDUCE
     ).level is AuditLevel.PASS
 
 

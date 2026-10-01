@@ -76,6 +76,14 @@ class PositionState:
             raise ValueError("T循环数量必须大于0")
         if self.completed_t_cycles_today >= 2:
             raise ValueError("同一股票单日最多2个完整T闭环")
+        if direction is TDirection.POSITIVE:
+            reserved = sum(
+                item.remaining_quantity
+                for item in self.t_cycles
+                if item.direction is TDirection.POSITIVE and item.status is TCycleStatus.OPEN
+            )
+            if quantity + reserved > self.broker_quantity - self.core_quantity:
+                raise ValueError("T仓不得侵蚀核心仓")
         cycle = TCycle(direction=direction, open_quantity=quantity, open_price=price)
         self.t_cycles.append(cycle)
         return cycle
@@ -87,6 +95,20 @@ class PositionState:
         if was_open and cycle.status is TCycleStatus.CLOSED:
             self.completed_t_cycles_today += 1
         return pnl
+
+    def apply_broker_buy(self, quantity: Decimal, price: Decimal) -> None:
+        if quantity <= 0:
+            raise ValueError("成交数量必须大于0")
+        total_cost = self.broker_quantity * self.broker_cost + quantity * price
+        self.broker_quantity += quantity
+        self.broker_cost = total_cost / self.broker_quantity
+
+    def apply_broker_sell(self, quantity: Decimal) -> None:
+        if quantity <= 0 or quantity > self.broker_quantity:
+            raise ValueError("卖出数量必须大于0且不超过券商持仓")
+        self.broker_quantity -= quantity
+        if self.broker_quantity == 0:
+            self.broker_cost = Decimal(0)
 
     def convert_open_cycles_at_day_end(self) -> tuple[TCycle, ...]:
         converted: list[TCycle] = []

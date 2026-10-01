@@ -113,7 +113,36 @@ class PositionState:
     def convert_open_cycles_at_day_end(self) -> tuple[TCycle, ...]:
         converted: list[TCycle] = []
         for cycle in self.t_cycles:
-            if cycle.status is TCycleStatus.OPEN:
-                cycle.status = TCycleStatus.CONVERTED
-                converted.append(cycle)
+            if cycle.status is not TCycleStatus.OPEN:
+                continue
+            remaining = cycle.remaining_quantity
+            if remaining > 0:
+                if cycle.direction is TDirection.REVERSE:
+                    self._apply_core_buy(remaining, cycle.open_price)
+                else:
+                    self._apply_core_sell(remaining)
+            cycle.status = TCycleStatus.CONVERTED
+            converted.append(cycle)
         return tuple(converted)
+
+    def _apply_core_buy(self, quantity: Decimal, price: Decimal) -> None:
+        total_cost = self.core_quantity * self.core_cost + quantity * price
+        self.core_quantity += quantity
+        self.core_cost = total_cost / self.core_quantity
+        self.apply_broker_buy(quantity, price)
+
+    def _apply_core_sell(self, quantity: Decimal) -> None:
+        if quantity > self.core_quantity:
+            raise ValueError("日终普通减仓不得超过核心仓")
+        self.core_quantity -= quantity
+        self.apply_broker_sell(quantity)
+        if self.core_quantity == 0:
+            self.core_cost = Decimal(0)
+
+    def apply_target_reduction(self, quantity: Decimal) -> None:
+        if quantity <= 0 or quantity > self.core_quantity:
+            raise ValueError("目标减仓数量必须大于0且不超过核心仓")
+        self.core_quantity -= quantity
+        self.apply_broker_sell(quantity)
+        if self.core_quantity == 0:
+            self.core_cost = Decimal(0)

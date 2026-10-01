@@ -57,6 +57,14 @@ class PositionState:
             return Decimal(0)
         return self.core_cost - self.realized_t_pnl / self.core_quantity
 
+    @property
+    def reverse_t_temporary_exposure(self) -> Decimal:
+        return sum(
+            cycle.remaining_quantity * cycle.open_price
+            for cycle in self.t_cycles
+            if cycle.direction is TDirection.REVERSE and cycle.status is TCycleStatus.OPEN
+        )
+
     def reverse_t_exposure(self, quantity: Decimal, price: Decimal) -> Decimal:
         return quantity * price
 

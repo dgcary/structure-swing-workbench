@@ -60,3 +60,30 @@ def test_t_stop_risk_and_reverse_t_exposure_are_objective_math() -> None:
     position = state()
     assert position.t_stop_risk(Decimal("100"), Decimal("10"), Decimal("9.7")) == Decimal("30.0")
     assert position.reverse_t_exposure(Decimal("100"), Decimal("10")) == Decimal("1000")
+
+
+def test_t_fills_update_broker_position_but_keep_core_cost_separate() -> None:
+    position = state()
+    reverse = position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
+    assert position.broker_quantity == Decimal("1100")
+    position.close_t_cycle(reverse, Decimal("100"), Decimal("10.2"))
+    assert position.broker_quantity == Decimal("1000")
+    assert position.core_quantity == Decimal("700")
+    assert position.core_cost == Decimal("10")
+
+    positive = position.start_t_cycle(TDirection.POSITIVE, Decimal("100"), Decimal("11"))
+    assert position.broker_quantity == Decimal("900")
+    position.close_t_cycle(positive, Decimal("100"), Decimal("10.5"))
+    assert position.broker_quantity == Decimal("1000")
+    assert position.core_quantity == Decimal("700")
+    assert position.core_cost == Decimal("10")
+
+
+def test_day_end_conversion_reclassifies_without_duplicate_broker_fill() -> None:
+    position = state()
+    cycle = position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
+    position.close_t_cycle(cycle, Decimal("40"), Decimal("10"))
+    assert position.broker_quantity == Decimal("1060")
+    position.convert_open_cycles_at_day_end()
+    assert position.broker_quantity == Decimal("1060")
+    assert position.core_quantity == Decimal("760")

@@ -86,11 +86,19 @@ class PositionState:
                 raise ValueError("T仓不得侵蚀核心仓")
         cycle = TCycle(direction=direction, open_quantity=quantity, open_price=price)
         self.t_cycles.append(cycle)
+        if direction is TDirection.REVERSE:
+            self.apply_broker_buy(quantity, price)
+        else:
+            self.apply_broker_sell(quantity)
         return cycle
 
     def close_t_cycle(self, cycle: TCycle, quantity: Decimal, price: Decimal) -> Decimal:
         was_open = cycle.status is TCycleStatus.OPEN
         pnl = cycle.match(quantity, price)
+        if cycle.direction is TDirection.REVERSE:
+            self.apply_broker_sell(quantity)
+        else:
+            self.apply_broker_buy(quantity, price)
         self.realized_t_pnl += pnl
         if was_open and cycle.status is TCycleStatus.CLOSED:
             self.completed_t_cycles_today += 1
@@ -129,13 +137,11 @@ class PositionState:
         total_cost = self.core_quantity * self.core_cost + quantity * price
         self.core_quantity += quantity
         self.core_cost = total_cost / self.core_quantity
-        self.apply_broker_buy(quantity, price)
 
     def _apply_core_sell(self, quantity: Decimal) -> None:
         if quantity > self.core_quantity:
             raise ValueError("日终普通减仓不得超过核心仓")
         self.core_quantity -= quantity
-        self.apply_broker_sell(quantity)
         if self.core_quantity == 0:
             self.core_cost = Decimal(0)
 

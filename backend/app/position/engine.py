@@ -94,6 +94,9 @@ class PositionState:
 
     def close_t_cycle(self, cycle: TCycle, quantity: Decimal, price: Decimal) -> Decimal:
         was_open = cycle.status is TCycleStatus.OPEN
+        will_complete = quantity == cycle.remaining_quantity
+        if will_complete and self.completed_t_cycles_today >= 2:
+            raise ValueError("同一股票单日最多2个完整T闭环")
         pnl = cycle.match(quantity, price)
         if cycle.direction is TDirection.REVERSE:
             self.apply_broker_sell(quantity)

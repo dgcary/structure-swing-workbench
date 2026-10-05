@@ -162,3 +162,14 @@ def test_zero_remaining_reverse_exposure_is_decimal_zero() -> None:
     cycle = position.start_t_cycle(TDirection.REVERSE, Decimal("10"), Decimal("9.8"))
     position.close_t_cycle(cycle, Decimal("10"), Decimal("10"))
     assert position.reverse_t_temporary_exposure == Decimal("0")
+
+
+def test_reverse_t_cannot_use_core_inventory_as_old_sellable_position() -> None:
+    position = PositionState(
+        core_quantity=Decimal("700"),
+        core_cost=Decimal("10"),
+        broker_quantity=Decimal("700"),
+        broker_cost=Decimal("10"),
+    )
+    with pytest.raises(ValueError, match="不得侵蚀核心仓"):
+        position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))

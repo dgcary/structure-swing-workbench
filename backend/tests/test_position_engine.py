@@ -101,3 +101,57 @@ def test_preopened_third_cycle_cannot_bypass_daily_complete_limit() -> None:
         position.close_t_cycle(cycles[2], Decimal("10"), Decimal("10.1"))
     assert cycles[2].status is TCycleStatus.OPEN
     assert position.completed_t_cycles_today == 2
+
+
+def test_multiple_positive_t_cycles_fixed_fill_example() -> None:
+    position = state()
+    first = position.start_t_cycle(TDirection.POSITIVE, Decimal("100"), Decimal("11.0"))
+    assert position.close_t_cycle(first, Decimal("100"), Decimal("10.4")) == Decimal("60.0")
+    second = position.start_t_cycle(TDirection.POSITIVE, Decimal("80"), Decimal("10.9"))
+    assert position.close_t_cycle(second, Decimal("80"), Decimal("10.5")) == Decimal("32.0")
+    assert position.completed_t_cycles_today == 2
+    assert position.realized_t_pnl == Decimal("92.0")
+    assert position.broker_quantity == Decimal("1000")
+    assert position.core_quantity == Decimal("700")
+    assert position.core_cost == Decimal("10")
+
+
+def test_multiple_reverse_t_cycles_fixed_fill_example() -> None:
+    position = state()
+    first = position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.7"))
+    assert position.reverse_t_temporary_exposure == Decimal("970.0")
+    assert position.close_t_cycle(first, Decimal("100"), Decimal("10.1")) == Decimal("40.0")
+    second = position.start_t_cycle(TDirection.REVERSE, Decimal("50"), Decimal("9.9"))
+    assert position.close_t_cycle(second, Decimal("50"), Decimal("10.2")) == Decimal("15.0")
+    assert position.completed_t_cycles_today == 2
+    assert position.realized_t_pnl == Decimal("55.0")
+    assert position.reverse_t_temporary_exposure == Decimal("0")
+    assert position.broker_quantity == Decimal("1000")
+
+
+def test_partial_positive_t_day_end_becomes_ordinary_reduction() -> None:
+    position = state()
+    cycle = position.start_t_cycle(TDirection.POSITIVE, Decimal("100"), Decimal("11"))
+    position.close_t_cycle(cycle, Decimal("40"), Decimal("10.5"))
+    assert position.broker_quantity == Decimal("940")
+    assert position.realized_t_pnl == Decimal("20.0")
+    position.convert_open_cycles_at_day_end()
+    assert cycle.status is TCycleStatus.CONVERTED
+    assert position.broker_quantity == Decimal("940")
+    assert position.core_quantity == Decimal("640")
+    assert position.core_cost == Decimal("10")
+    assert position.completed_t_cycles_today == 0
+
+
+def test_target_reduction_and_t_cycle_coexist_without_double_counting() -> None:
+    position = state()
+    cycle = position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
+    assert position.broker_quantity == Decimal("1100")
+    position.apply_target_reduction(Decimal("200"))
+    assert position.core_quantity == Decimal("500")
+    assert position.broker_quantity == Decimal("900")
+    position.close_t_cycle(cycle, Decimal("100"), Decimal("10.2"))
+    assert position.broker_quantity == Decimal("800")
+    assert position.core_quantity == Decimal("500")
+    assert position.realized_t_pnl == Decimal("40.0")
+    assert position.core_cost == Decimal("10")

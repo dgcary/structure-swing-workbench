@@ -155,3 +155,10 @@ def test_target_reduction_and_t_cycle_coexist_without_double_counting() -> None:
     assert position.core_quantity == Decimal("500")
     assert position.realized_t_pnl == Decimal("40.0")
     assert position.core_cost == Decimal("10")
+
+
+def test_zero_remaining_reverse_exposure_is_decimal_zero() -> None:
+    position = state()
+    cycle = position.start_t_cycle(TDirection.REVERSE, Decimal("10"), Decimal("9.8"))
+    position.close_t_cycle(cycle, Decimal("10"), Decimal("10"))
+    assert position.reverse_t_temporary_exposure == Decimal("0")

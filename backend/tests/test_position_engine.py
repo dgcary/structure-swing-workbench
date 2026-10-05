@@ -87,3 +87,17 @@ def test_day_end_conversion_reclassifies_without_duplicate_broker_fill() -> None
     position.convert_open_cycles_at_day_end()
     assert position.broker_quantity == Decimal("1060")
     assert position.core_quantity == Decimal("760")
+
+
+def test_preopened_third_cycle_cannot_bypass_daily_complete_limit() -> None:
+    position = state()
+    cycles = [
+        position.start_t_cycle(TDirection.REVERSE, Decimal("10"), Decimal("10"))
+        for _ in range(3)
+    ]
+    position.close_t_cycle(cycles[0], Decimal("10"), Decimal("10.1"))
+    position.close_t_cycle(cycles[1], Decimal("10"), Decimal("10.1"))
+    with pytest.raises(ValueError, match="最多2个完整T闭环"):
+        position.close_t_cycle(cycles[2], Decimal("10"), Decimal("10.1"))
+    assert cycles[2].status is TCycleStatus.OPEN
+    assert position.completed_t_cycles_today == 2

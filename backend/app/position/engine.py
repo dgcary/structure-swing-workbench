@@ -77,13 +77,10 @@ class PositionState:
         if self.completed_t_cycles_today >= 2:
             raise ValueError("同一股票单日最多2个完整T闭环")
         if direction is TDirection.POSITIVE:
-            reserved = sum(
-                item.remaining_quantity
-                for item in self.t_cycles
-                if item.direction is TDirection.POSITIVE and item.status is TCycleStatus.OPEN
-            )
-            if quantity + reserved > self.broker_quantity - self.core_quantity:
+            if quantity > self.broker_quantity - self.core_quantity:
                 raise ValueError("T仓不得侵蚀核心仓")
+        elif quantity > self._available_old_inventory_for_reverse_t():
+            raise ValueError("反T必须有足够昨日可卖持仓，且不得侵蚀核心仓")
         cycle = TCycle(direction=direction, open_quantity=quantity, open_price=price)
         self.t_cycles.append(cycle)
         if direction is TDirection.REVERSE:
@@ -106,6 +103,16 @@ class PositionState:
         if was_open and cycle.status is TCycleStatus.CLOSED:
             self.completed_t_cycles_today += 1
         return pnl
+
+    def _available_old_inventory_for_reverse_t(self) -> Decimal:
+        open_reverse_quantity = sum(
+            cycle.remaining_quantity
+            for cycle in self.t_cycles
+            if cycle.direction is TDirection.REVERSE and cycle.status is TCycleStatus.OPEN
+        )
+        # 反T第一腿买入会同时抬高 broker_quantity；每个未闭环数量既代表
+        # 一份新增仓位，也占用一份昨日可卖旧仓，因此需要扣除两次。
+        return self.broker_quantity - self.core_quantity - open_reverse_quantity * 2
 
     def apply_broker_buy(self, quantity: Decimal, price: Decimal) -> None:
         if quantity <= 0:

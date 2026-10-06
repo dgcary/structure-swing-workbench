@@ -158,6 +158,13 @@ class PositionState:
     def apply_target_reduction(self, quantity: Decimal) -> None:
         if quantity <= 0 or quantity > self.core_quantity:
             raise ValueError("目标减仓数量必须大于0且不超过核心仓")
+        reserved_quantity = sum(
+            cycle.remaining_quantity
+            for cycle in self.t_cycles
+            if cycle.direction is TDirection.REVERSE and cycle.status is TCycleStatus.OPEN
+        )
+        if quantity > self.broker_quantity - reserved_quantity:
+            raise ValueError("目标减仓不得占用未闭环反T预留持仓")
         self.core_quantity -= quantity
         self.apply_broker_sell(quantity)
         if self.core_quantity == 0:

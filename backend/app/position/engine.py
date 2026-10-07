@@ -89,7 +89,7 @@ class PositionState:
         if self.completed_t_cycles_today >= 2:
             raise ValueError("同一股票单日最多2个完整T闭环")
         if direction is TDirection.POSITIVE:
-            if quantity > self.broker_quantity - self.core_quantity:
+            if quantity > self._available_inventory_for_positive_t():
                 raise ValueError("T仓不得侵蚀核心仓")
         elif quantity > self._available_old_inventory_for_reverse_t():
             raise ValueError("反T必须有足够昨日可卖持仓，且不得侵蚀核心仓")
@@ -119,6 +119,14 @@ class PositionState:
         if was_open and cycle.status is TCycleStatus.CLOSED:
             self.completed_t_cycles_today += 1
         return pnl
+
+    def _available_inventory_for_positive_t(self) -> Decimal:
+        open_reverse_quantity = sum(
+            cycle.remaining_quantity
+            for cycle in self.t_cycles
+            if cycle.direction is TDirection.REVERSE and cycle.status is TCycleStatus.OPEN
+        )
+        return self.broker_quantity - self.core_quantity - open_reverse_quantity
 
     def _available_old_inventory_for_reverse_t(self) -> Decimal:
         open_reverse_quantity = sum(

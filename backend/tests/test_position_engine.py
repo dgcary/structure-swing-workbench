@@ -185,3 +185,26 @@ def test_target_reduction_cannot_consume_inventory_reserved_for_open_reverse_t()
     position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
     with pytest.raises(ValueError, match="未闭环反T"):
         position.apply_target_reduction(Decimal("650"))
+
+
+def test_t_cycle_rejects_non_positive_prices_without_mutating_position() -> None:
+    position = state()
+    with pytest.raises(ValueError, match="成交价格必须大于0"):
+        position.start_t_cycle(TDirection.REVERSE, Decimal("10"), Decimal("0"))
+    assert position.broker_quantity == Decimal("1000")
+    assert position.t_cycles == []
+
+    cycle = position.start_t_cycle(TDirection.REVERSE, Decimal("10"), Decimal("9.8"))
+    with pytest.raises(ValueError, match="成交价格必须大于0"):
+        position.close_t_cycle(cycle, Decimal("10"), Decimal("0"))
+    assert cycle.status is TCycleStatus.OPEN
+    assert cycle.remaining_quantity == Decimal("10")
+    assert position.completed_t_cycles_today == 0
+
+
+def test_objective_risk_math_rejects_negative_inputs() -> None:
+    position = state()
+    with pytest.raises(ValueError, match="不得为负"):
+        position.reverse_t_exposure(Decimal("-1"), Decimal("10"))
+    with pytest.raises(ValueError, match="不得为负"):
+        position.t_stop_risk(Decimal("10"), Decimal("-1"), Decimal("9"))

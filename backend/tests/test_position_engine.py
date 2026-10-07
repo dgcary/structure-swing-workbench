@@ -175,16 +175,20 @@ def test_reverse_t_cannot_use_core_inventory_as_old_sellable_position() -> None:
         position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
 
 
-def test_target_reduction_cannot_consume_inventory_reserved_for_open_reverse_t() -> None:
+def test_large_target_reduction_keeps_open_reverse_t_separately_closeable() -> None:
     position = PositionState(
         core_quantity=Decimal("700"),
         core_cost=Decimal("10"),
         broker_quantity=Decimal("1000"),
         broker_cost=Decimal("10"),
     )
-    position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
-    with pytest.raises(ValueError, match="未闭环反T"):
-        position.apply_target_reduction(Decimal("650"))
+    cycle = position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
+    position.apply_target_reduction(Decimal("650"))
+    assert position.core_quantity == Decimal("50")
+    assert position.broker_quantity == Decimal("450")
+    position.close_t_cycle(cycle, Decimal("100"), Decimal("10.2"))
+    assert position.core_quantity == Decimal("50")
+    assert position.broker_quantity == Decimal("350")
 
 
 def test_t_cycle_rejects_non_positive_prices_without_mutating_position() -> None:

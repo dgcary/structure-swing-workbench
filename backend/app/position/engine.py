@@ -96,6 +96,8 @@ class PositionState:
         return cycle
 
     def close_t_cycle(self, cycle: TCycle, quantity: Decimal, price: Decimal) -> Decimal:
+        if cycle not in self.t_cycles:
+            raise ValueError("只能闭环当前持仓状态所属的T循环")
         if price <= 0:
             raise ValueError("T循环成交价格必须大于0")
         was_open = cycle.status is TCycleStatus.OPEN

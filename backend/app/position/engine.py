@@ -70,6 +70,12 @@ class PositionState:
             raise ValueError("风险暴露数量和价格不得为负")
         return quantity * price
 
+    def total_market_exposure(self, market_price: Decimal) -> Decimal:
+        """Return live gross exposure, including temporary reverse-T inventory."""
+        if market_price < 0:
+            raise ValueError("市场价格不得为负")
+        return self.broker_quantity * market_price
+
     def t_stop_risk(self, quantity: Decimal, entry: Decimal, stop: Decimal) -> Decimal:
         if quantity < 0 or entry < 0 or stop < 0:
             raise ValueError("止损风险数量和价格不得为负")

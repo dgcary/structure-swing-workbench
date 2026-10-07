@@ -212,3 +212,19 @@ def test_objective_risk_math_rejects_negative_inputs() -> None:
         position.reverse_t_exposure(Decimal("-1"), Decimal("10"))
     with pytest.raises(ValueError, match="不得为负"):
         position.t_stop_risk(Decimal("10"), Decimal("-1"), Decimal("9"))
+
+
+def test_positive_t_cannot_reuse_open_reverse_t_temporary_inventory() -> None:
+    position = state()
+    reverse = position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
+    assert position.broker_quantity == Decimal("1100")
+
+    with pytest.raises(ValueError, match="T仓不得侵蚀核心仓"):
+        position.start_t_cycle(TDirection.POSITIVE, Decimal("301"), Decimal("10.5"))
+
+    positive = position.start_t_cycle(TDirection.POSITIVE, Decimal("300"), Decimal("10.5"))
+    assert position.broker_quantity == Decimal("800")
+    position.close_t_cycle(positive, Decimal("300"), Decimal("10.2"))
+    position.close_t_cycle(reverse, Decimal("100"), Decimal("10.1"))
+    assert position.broker_quantity == Decimal("1000")
+    assert position.core_quantity == Decimal("700")

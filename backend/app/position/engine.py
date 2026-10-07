@@ -66,14 +66,20 @@ class PositionState:
         )
 
     def reverse_t_exposure(self, quantity: Decimal, price: Decimal) -> Decimal:
+        if quantity < 0 or price < 0:
+            raise ValueError("风险暴露数量和价格不得为负")
         return quantity * price
 
     def t_stop_risk(self, quantity: Decimal, entry: Decimal, stop: Decimal) -> Decimal:
+        if quantity < 0 or entry < 0 or stop < 0:
+            raise ValueError("止损风险数量和价格不得为负")
         return quantity * abs(entry - stop)
 
     def start_t_cycle(self, direction: TDirection, quantity: Decimal, price: Decimal) -> TCycle:
         if quantity <= 0:
             raise ValueError("T循环数量必须大于0")
+        if price <= 0:
+            raise ValueError("T循环成交价格必须大于0")
         if self.completed_t_cycles_today >= 2:
             raise ValueError("同一股票单日最多2个完整T闭环")
         if direction is TDirection.POSITIVE:
@@ -90,6 +96,8 @@ class PositionState:
         return cycle
 
     def close_t_cycle(self, cycle: TCycle, quantity: Decimal, price: Decimal) -> Decimal:
+        if price <= 0:
+            raise ValueError("T循环成交价格必须大于0")
         was_open = cycle.status is TCycleStatus.OPEN
         will_complete = quantity == cycle.remaining_quantity
         if will_complete and self.completed_t_cycles_today >= 2:

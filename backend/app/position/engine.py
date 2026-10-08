@@ -113,6 +113,28 @@ class PositionState:
             self.apply_broker_sell(quantity)
         return cycle
 
+    def add_t_open_fill(self, cycle: TCycle, quantity: Decimal, price: Decimal) -> None:
+        """Aggregate split opening fills into one logical T cycle."""
+        if not any(owned is cycle for owned in self.t_cycles):
+            raise ValueError("只能追加当前持仓状态所属的T循环")
+        if cycle.status is not TCycleStatus.OPEN or cycle.matched_quantity != 0:
+            raise ValueError("仅允许在闭环成交前追加未结束T循环的开仓成交")
+        if self.completed_t_cycles_today >= 2:
+            raise ValueError("同一股票单日最多2个完整T闭环")
+        if quantity <= 0 or price <= 0:
+            raise ValueError("追加开仓成交数量和价格必须大于0")
+        if cycle.direction is TDirection.POSITIVE:
+            if quantity > self._available_inventory_for_positive_t():
+                raise ValueError("T仓不得侵蚀核心仓")
+            self.apply_broker_sell(quantity)
+        else:
+            if quantity > self._available_old_inventory_for_reverse_t():
+                raise ValueError("反T必须有足够昨日可卖持仓，且不得侵蚀核心仓")
+            self.apply_broker_buy(quantity, price)
+        total_value = cycle.open_quantity * cycle.open_price + quantity * price
+        cycle.open_quantity += quantity
+        cycle.open_price = total_value / cycle.open_quantity
+
     def close_t_cycle(self, cycle: TCycle, quantity: Decimal, price: Decimal) -> Decimal:
         if not any(owned is cycle for owned in self.t_cycles):
             raise ValueError("只能闭环当前持仓状态所属的T循环")

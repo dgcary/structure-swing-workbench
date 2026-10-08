@@ -138,7 +138,8 @@ def test_partial_positive_t_day_end_becomes_ordinary_reduction() -> None:
     position.convert_open_cycles_at_day_end()
     assert cycle.status is TCycleStatus.CONVERTED
     assert position.broker_quantity == Decimal("940")
-    assert position.core_quantity == Decimal("640")
+    assert position.core_quantity == Decimal("700")
+    assert position.ordinary_t_reduction_quantity == Decimal("60")
     assert position.core_cost == Decimal("10")
     assert position.completed_t_cycles_today == 0
 
@@ -228,3 +229,26 @@ def test_positive_t_cannot_reuse_open_reverse_t_temporary_inventory() -> None:
     position.close_t_cycle(reverse, Decimal("100"), Decimal("10.1"))
     assert position.broker_quantity == Decimal("1000")
     assert position.core_quantity == Decimal("700")
+
+
+def test_multiple_unclosed_positive_cycles_are_noncore_reductions() -> None:
+    position = state()
+    position.start_t_cycle(TDirection.POSITIVE, Decimal("100"), Decimal("11"))
+    position.start_t_cycle(TDirection.POSITIVE, Decimal("200"), Decimal("10.8"))
+    converted = position.convert_open_cycles_at_day_end()
+    assert len(converted) == 2
+    assert position.broker_quantity == Decimal("700")
+    assert position.core_quantity == Decimal("700")
+    assert position.ordinary_t_reduction_quantity == Decimal("300")
+    assert position.convert_open_cycles_at_day_end() == ()
+    assert position.ordinary_t_reduction_quantity == Decimal("300")
+
+
+def test_unclosed_reverse_is_recorded_as_ordinary_addition_once() -> None:
+    position = state()
+    position.start_t_cycle(TDirection.REVERSE, Decimal("100"), Decimal("9.8"))
+    position.convert_open_cycles_at_day_end()
+    assert position.core_quantity == Decimal("800")
+    assert position.ordinary_t_addition_quantity == Decimal("100")
+    assert position.convert_open_cycles_at_day_end() == ()
+    assert position.ordinary_t_addition_quantity == Decimal("100")

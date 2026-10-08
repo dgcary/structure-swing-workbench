@@ -221,11 +221,11 @@ def test_positive_t_cannot_reuse_open_reverse_t_temporary_inventory() -> None:
     assert position.broker_quantity == Decimal("1100")
 
     with pytest.raises(ValueError, match="T仓不得侵蚀核心仓"):
-        position.start_t_cycle(TDirection.POSITIVE, Decimal("301"), Decimal("10.5"))
+        position.start_t_cycle(TDirection.POSITIVE, Decimal("201"), Decimal("10.5"))
 
-    positive = position.start_t_cycle(TDirection.POSITIVE, Decimal("300"), Decimal("10.5"))
-    assert position.broker_quantity == Decimal("800")
-    position.close_t_cycle(positive, Decimal("300"), Decimal("10.2"))
+    positive = position.start_t_cycle(TDirection.POSITIVE, Decimal("200"), Decimal("10.5"))
+    assert position.broker_quantity == Decimal("900")
+    position.close_t_cycle(positive, Decimal("200"), Decimal("10.2"))
     position.close_t_cycle(reverse, Decimal("100"), Decimal("10.1"))
     assert position.broker_quantity == Decimal("1000")
     assert position.core_quantity == Decimal("700")

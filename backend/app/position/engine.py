@@ -54,6 +54,12 @@ class PositionState:
     ordinary_t_addition_quantity: Decimal = Decimal(0)
     ordinary_t_reduction_quantity: Decimal = Decimal(0)
     trading_day: date | None = None
+    # A-share T+1: today's purchases are not yesterday's sellable inventory.
+    same_day_buy_quantity: Decimal = Decimal(0)
+
+    @property
+    def old_sellable_quantity(self) -> Decimal:
+        return self.broker_quantity - self.same_day_buy_quantity
 
     @property
     def effective_cost(self) -> Decimal:
@@ -121,9 +127,10 @@ class PositionState:
         if (
             was_open
             and cycle.direction is TDirection.REVERSE
-            and quantity > self.broker_quantity - self.core_quantity
+            and self.old_sellable_quantity - self.core_quantity
+            < self._open_reverse_quantity()
         ):
-            raise ValueError("反T闭环不得侵蚀核心仓")
+            raise ValueError("反T闭环不得侵蚀核心仓或占用其他反T预留旧仓")
         pnl = cycle.match(quantity, price)
         if cycle.direction is TDirection.REVERSE:
             self.apply_broker_sell(quantity)
@@ -134,34 +141,30 @@ class PositionState:
             self.completed_t_cycles_today += 1
         return pnl
 
-    def _available_inventory_for_positive_t(self) -> Decimal:
-        open_reverse_quantity = sum(
+    def _open_reverse_quantity(self) -> Decimal:
+        return sum(
             cycle.remaining_quantity
             for cycle in self.t_cycles
             if cycle.direction is TDirection.REVERSE and cycle.status is TCycleStatus.OPEN
         )
-        return self.broker_quantity - self.core_quantity - open_reverse_quantity
+
+    def _available_inventory_for_positive_t(self) -> Decimal:
+        return self.old_sellable_quantity - self.core_quantity - self._open_reverse_quantity()
 
     def _available_old_inventory_for_reverse_t(self) -> Decimal:
-        open_reverse_quantity = sum(
-            cycle.remaining_quantity
-            for cycle in self.t_cycles
-            if cycle.direction is TDirection.REVERSE and cycle.status is TCycleStatus.OPEN
-        )
-        # 反T第一腿买入会同时抬高 broker_quantity；每个未闭环数量既代表
-        # 一份新增仓位，也占用一份昨日可卖旧仓，因此需要扣除两次。
-        return self.broker_quantity - self.core_quantity - open_reverse_quantity * 2
+        return self.old_sellable_quantity - self.core_quantity - self._open_reverse_quantity()
 
     def apply_broker_buy(self, quantity: Decimal, price: Decimal) -> None:
         if quantity <= 0:
             raise ValueError("成交数量必须大于0")
         total_cost = self.broker_quantity * self.broker_cost + quantity * price
         self.broker_quantity += quantity
+        self.same_day_buy_quantity += quantity
         self.broker_cost = total_cost / self.broker_quantity
 
     def apply_broker_sell(self, quantity: Decimal) -> None:
-        if quantity <= 0 or quantity > self.broker_quantity:
-            raise ValueError("卖出数量必须大于0且不超过券商持仓")
+        if quantity <= 0 or quantity > self.old_sellable_quantity:
+            raise ValueError("卖出数量必须大于0且不超过昨日可卖持仓")
         self.broker_quantity -= quantity
         if self.broker_quantity == 0:
             self.broker_cost = Decimal(0)
@@ -181,6 +184,7 @@ class PositionState:
             return ()
         converted = self.convert_open_cycles_at_day_end()
         self.completed_t_cycles_today = 0
+        self.same_day_buy_quantity = Decimal(0)
         self.trading_day = next_day
         return converted
 
@@ -215,13 +219,9 @@ class PositionState:
     def apply_target_reduction(self, quantity: Decimal) -> None:
         if quantity <= 0 or quantity > self.core_quantity:
             raise ValueError("目标减仓数量必须大于0且不超过核心仓")
-        reserved_quantity = sum(
-            cycle.remaining_quantity
-            for cycle in self.t_cycles
-            if cycle.direction is TDirection.REVERSE and cycle.status is TCycleStatus.OPEN
-        )
-        if quantity > self.broker_quantity - reserved_quantity:
-            raise ValueError("目标减仓不得占用未闭环反T预留持仓")
+        reserved_quantity = self._open_reverse_quantity()
+        if quantity > self.old_sellable_quantity - reserved_quantity:
+            raise ValueError("目标减仓不得占用未闭环反T预留持仓或当日买入股份")
         self.core_quantity -= quantity
         self.apply_broker_sell(quantity)
         if self.core_quantity == 0:

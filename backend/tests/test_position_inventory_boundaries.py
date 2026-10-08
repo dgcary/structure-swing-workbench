@@ -17,5 +17,7 @@ def test_reverse_t_partial_fill_preserves_old_inventory_reservation() -> None:
     second = position.start_t_cycle(TDirection.REVERSE, Decimal("200"), Decimal("9.9"))
     assert first.remaining_quantity == Decimal("60")
     assert second.remaining_quantity == Decimal("200")
+    # 40 shares sold to settle the first reverse T remain unsellable when
+    # replaced by today's new shares; only 200 older noncore shares remain.
     with pytest.raises(ValueError, match="不得侵蚀核心仓"):
-        position.start_t_cycle(TDirection.REVERSE, Decimal("41"), Decimal("9.9"))
+        position.start_t_cycle(TDirection.REVERSE, Decimal("1"), Decimal("9.9"))

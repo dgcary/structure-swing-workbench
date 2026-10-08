@@ -109,7 +109,6 @@ class PositionState:
         if price <= 0:
             raise ValueError("T循环成交价格必须大于0")
         was_open = cycle.status is TCycleStatus.OPEN
-        will_complete = quantity == cycle.remaining_quantity
         if was_open and self.completed_t_cycles_today >= 2:
             raise ValueError("同一股票单日最多2个完整T闭环")
         pnl = cycle.match(quantity, price)

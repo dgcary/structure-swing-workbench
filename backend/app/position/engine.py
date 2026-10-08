@@ -220,7 +220,10 @@ class PositionState:
         if quantity <= 0 or quantity > self.core_quantity:
             raise ValueError("目标减仓数量必须大于0且不超过核心仓")
         reserved_quantity = self._open_reverse_quantity()
-        if quantity > self.old_sellable_quantity - reserved_quantity:
+        if (
+            self.old_sellable_quantity < self.core_quantity + reserved_quantity
+            or quantity > self.old_sellable_quantity - reserved_quantity
+        ):
             raise ValueError("目标减仓不得占用未闭环反T预留持仓或当日买入股份")
         self.core_quantity -= quantity
         self.apply_broker_sell(quantity)

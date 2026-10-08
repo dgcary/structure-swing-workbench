@@ -50,6 +50,8 @@ class PositionState:
     realized_t_pnl: Decimal = Decimal(0)
     t_cycles: list[TCycle] = field(default_factory=list)
     completed_t_cycles_today: int = 0
+    ordinary_t_addition_quantity: Decimal = Decimal(0)
+    ordinary_t_reduction_quantity: Decimal = Decimal(0)
 
     @property
     def effective_cost(self) -> Decimal:
@@ -161,8 +163,9 @@ class PositionState:
             if remaining > 0:
                 if cycle.direction is TDirection.REVERSE:
                     self._apply_core_buy(remaining, cycle.open_price)
+                    self.ordinary_t_addition_quantity += remaining
                 else:
-                    self._apply_core_sell(remaining)
+                    self.ordinary_t_reduction_quantity += remaining
             cycle.status = TCycleStatus.CONVERTED
             converted.append(cycle)
         return tuple(converted)

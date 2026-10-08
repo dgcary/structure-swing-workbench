@@ -111,6 +111,15 @@ class PositionState:
         was_open = cycle.status is TCycleStatus.OPEN
         if was_open and self.completed_t_cycles_today >= 2:
             raise ValueError("同一股票单日最多2个完整T闭环")
+        # Preflight inventory before mutating the cycle's matched fills/P&L.
+        # A separate broker adjustment must never turn a failed reverse-T
+        # settlement into a phantom partially closed cycle.
+        if (
+            was_open
+            and cycle.direction is TDirection.REVERSE
+            and quantity > self.broker_quantity - self.core_quantity
+        ):
+            raise ValueError("反T闭环不得侵蚀核心仓")
         pnl = cycle.match(quantity, price)
         if cycle.direction is TDirection.REVERSE:
             self.apply_broker_sell(quantity)

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from enum import Enum
 
@@ -52,6 +53,7 @@ class PositionState:
     completed_t_cycles_today: int = 0
     ordinary_t_addition_quantity: Decimal = Decimal(0)
     ordinary_t_reduction_quantity: Decimal = Decimal(0)
+    trading_day: date | None = None
 
     @property
     def effective_cost(self) -> Decimal:
@@ -161,6 +163,24 @@ class PositionState:
         self.broker_quantity -= quantity
         if self.broker_quantity == 0:
             self.broker_cost = Decimal(0)
+
+    def advance_trading_day(self, next_day: date) -> tuple[TCycle, ...]:
+        """Roll unfinished T legs into ordinary positions and reset the daily quota."""
+        if type(next_day) is not date:
+            raise TypeError("交易日必须为 date 类型")
+        if self.trading_day is None:
+            if self.t_cycles or self.completed_t_cycles_today:
+                raise ValueError("已有T成交记录，不能补录未知的初始交易日")
+            self.trading_day = next_day
+            return ()
+        if next_day < self.trading_day:
+            raise ValueError("交易日不得倒退")
+        if next_day == self.trading_day:
+            return ()
+        converted = self.convert_open_cycles_at_day_end()
+        self.completed_t_cycles_today = 0
+        self.trading_day = next_day
+        return converted
 
     def convert_open_cycles_at_day_end(self) -> tuple[TCycle, ...]:
         converted: list[TCycle] = []

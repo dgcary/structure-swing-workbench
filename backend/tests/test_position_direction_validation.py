@@ -13,7 +13,7 @@ def test_invalid_t_direction_cannot_mutate_broker_inventory(direction: object) -
         broker_quantity=Decimal(1000),
         broker_cost=Decimal(10),
     )
-    with pytest.raises(ValueError, match="方向必须为正T或反T"):
+    with pytest.raises(TypeError, match="方向必须为正T或反T"):
         position.start_t_cycle(direction, Decimal(100), Decimal(10))
     assert position.broker_quantity == Decimal(1000)
     assert position.broker_cost == Decimal(10)

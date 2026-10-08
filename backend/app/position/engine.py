@@ -86,6 +86,8 @@ class PositionState:
         return quantity * abs(entry - stop)
 
     def start_t_cycle(self, direction: TDirection, quantity: Decimal, price: Decimal) -> TCycle:
+        if not isinstance(direction, TDirection):
+            raise ValueError("T循环方向必须为正T或反T")
         if quantity <= 0:
             raise ValueError("T循环数量必须大于0")
         if price <= 0:

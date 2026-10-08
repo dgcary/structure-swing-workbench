@@ -211,6 +211,18 @@ class PositionState:
         return converted
 
     def convert_open_cycles_at_day_end(self) -> tuple[TCycle, ...]:
+        # Validate all pending additions before mutating any cycle.
+        reverse_additions = sum(
+            (
+                cycle.remaining_quantity
+                for cycle in self.t_cycles
+                if cycle.status is TCycleStatus.OPEN
+                and cycle.direction is TDirection.REVERSE
+            ),
+            Decimal(0),
+        )
+        if self.core_quantity + reverse_additions > self.broker_quantity:
+            raise ValueError("日终未闭环T转普通仓将超过券商持仓，请先核对外部成交")
         converted: list[TCycle] = []
         for cycle in self.t_cycles:
             if cycle.status is not TCycleStatus.OPEN:

@@ -252,3 +252,16 @@ def test_unclosed_reverse_is_recorded_as_ordinary_addition_once() -> None:
     assert position.ordinary_t_addition_quantity == Decimal("100")
     assert position.convert_open_cycles_at_day_end() == ()
     assert position.ordinary_t_addition_quantity == Decimal("100")
+
+
+def test_third_preopened_cycle_cannot_partially_match_after_limit() -> None:
+    position = state()
+    cycles = [position.start_t_cycle(TDirection.REVERSE, Decimal("10"), Decimal("10"))
+              for _ in range(3)]
+    for cycle in cycles[:2]:
+        position.close_t_cycle(cycle, Decimal("10"), Decimal("10.2"))
+    before = (position.realized_t_pnl, position.broker_quantity)
+    with pytest.raises(ValueError, match="最多2个完整T闭环"):
+        position.close_t_cycle(cycles[2], Decimal("1"), Decimal("10.2"))
+    assert cycles[2].matched_quantity == Decimal("0")
+    assert (position.realized_t_pnl, position.broker_quantity) == before

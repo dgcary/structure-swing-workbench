@@ -166,7 +166,7 @@ class PositionState:
 
     def advance_trading_day(self, next_day: date) -> tuple[TCycle, ...]:
         """Roll unfinished T legs into ordinary positions and reset the daily quota."""
-        if type(next_day) is not date:
+        if not isinstance(next_day, date):
             raise TypeError("交易日必须为 date 类型")
         if self.trading_day is None:
             if self.t_cycles or self.completed_t_cycles_today:

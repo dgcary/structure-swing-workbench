@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.market_data.akshare_adapter import AKShareProvider
-from app.market_data.contracts import DataQuality
+from app.market_data.contracts import DataQuality, Timeframe
 
 NOW = datetime(2026, 10, 9, 14, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
 
@@ -40,6 +40,9 @@ class QuoteClient:
     ("最新价", 12, "quote last is outside high/low"),
     ("成交量", -1, "quote volume is negative"),
     ("换手率", -0.1, "quote turnover_pct is negative"),
+    ("涨停价", -1, "quote limit_up is negative"),
+    ("跌停价", -1, "quote limit_down is negative"),
+    ("成交额", -1, "quote amount is negative"),
 ])
 def test_invalid_quote_is_explicit_error(field, value, expected):
     adapter = AKShareProvider(client=QuoteClient({field: value}), clock=lambda: NOW)
@@ -56,3 +59,34 @@ def test_bad_timeframe_returns_error(timeframe):
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert result.error == "unsupported timeframe"
+
+
+class BarClient(QuoteClient):
+    def __init__(self, override):
+        super().__init__({})
+        row = {
+            "时间": "2026-10-09 14:25:00",
+            "开盘": 10, "最高": 11, "最低": 9, "收盘": 10.5,
+            "成交量": 200, "成交额": 2100,
+        }
+        row.update(override)
+        self.bar = row
+
+    def stock_zh_a_hist_min_em(self, **kwargs):
+        return Rows([self.bar])
+
+
+@pytest.mark.parametrize("field,value,expected", [
+    ("开盘", -1, "bar open is negative"),
+    ("最高", -1, "bar high is negative"),
+    ("最低", -1, "bar low is negative"),
+    ("收盘", -1, "bar close is negative"),
+    ("成交量", -1, "bar volume is negative"),
+    ("成交额", -1, "bar amount is negative"),
+])
+def test_invalid_bar_is_explicit_error(field, value, expected):
+    adapter = AKShareProvider(client=BarClient({field: value}), clock=lambda: NOW)
+    result = adapter.get_bars("600000", Timeframe.MIN5)
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert expected in result.error

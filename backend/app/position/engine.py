@@ -15,6 +15,10 @@ class TCycleStatus(str, Enum):
     CONVERTED = "converted"
 
 
+class BrokerInventoryConflict(ValueError):
+    """Broker ledger conflicts with protected core/reverse-T inventory."""
+
+
 @dataclass(slots=True)
 class TCycle:
     direction: TDirection
@@ -87,9 +91,12 @@ class PositionState:
         return self.broker_quantity * market_price
 
     def t_stop_risk(self, quantity: Decimal, entry: Decimal, stop: Decimal) -> Decimal:
+        """Long reverse-T downside risk; stop must be below the purchase price."""
         if quantity < 0 or entry < 0 or stop < 0:
             raise ValueError("止损风险数量和价格不得为负")
-        return quantity * abs(entry - stop)
+        if stop >= entry:
+            raise ValueError("反T止损价必须低于买入价")
+        return quantity * (entry - stop)
 
     def start_t_cycle(self, direction: TDirection, quantity: Decimal, price: Decimal) -> TCycle:
         if not isinstance(direction, TDirection):
@@ -143,19 +150,15 @@ class PositionState:
         was_open = cycle.status is TCycleStatus.OPEN
         if was_open and self.completed_t_cycles_today >= 2:
             raise ValueError("同一股票单日最多2个完整T闭环")
-        # Preflight inventory before mutating the cycle's matched fills/P&L.
-        # A separate broker adjustment must never turn a failed reverse-T
-        # settlement into a phantom partially closed cycle.
-        if (
-            was_open
-            and cycle.direction is TDirection.REVERSE
-            and self.old_sellable_quantity - self.core_quantity
-            < self._open_reverse_quantity()
-        ):
-            raise ValueError("反T闭环不得侵蚀核心仓或占用其他反T预留旧仓")
+        # Preflight before changing cycle fills/P&L. The closing leg
+        # releases only its own reverse-T reservation.
+        if was_open and cycle.direction is TDirection.REVERSE:
+            if quantity <= 0 or quantity > cycle.remaining_quantity:
+                raise ValueError("闭环数量必须大于0且不超过未匹配数量")
+            self._check_broker_sell(quantity, reverse_release=quantity)
         pnl = cycle.match(quantity, price)
         if cycle.direction is TDirection.REVERSE:
-            self.apply_broker_sell(quantity)
+            self._record_broker_sell(quantity)
         else:
             self.apply_broker_buy(quantity, price)
         self.realized_t_pnl += pnl
@@ -184,12 +187,35 @@ class PositionState:
         self.same_day_buy_quantity += quantity
         self.broker_cost = total_cost / self.broker_quantity
 
-    def apply_broker_sell(self, quantity: Decimal) -> None:
+    def _check_broker_sell(
+        self,
+        quantity: Decimal,
+        *,
+        core_after: Decimal | None = None,
+        reverse_release: Decimal = Decimal(0),
+    ) -> None:
         if quantity <= 0 or quantity > self.old_sellable_quantity:
             raise ValueError("卖出数量必须大于0且不超过昨日可卖持仓")
+        protected_core = self.core_quantity if core_after is None else core_after
+        remaining_reserved = self._open_reverse_quantity() - reverse_release
+        if remaining_reserved < 0:
+            raise ValueError("反T释放数量超过已预留旧仓")
+        if self.old_sellable_quantity - quantity < protected_core + remaining_reserved:
+            raise BrokerInventoryConflict(
+                "外部对账冲突：卖出将侵蚀核心仓或反T预留旧仓，"
+                "请核对券商成交后再调整持仓"
+            )
+
+    def _record_broker_sell(self, quantity: Decimal) -> None:
+        """Commit a sell only after the relevant inventory preflight passes."""
         self.broker_quantity -= quantity
         if self.broker_quantity == 0:
             self.broker_cost = Decimal(0)
+
+    def apply_broker_sell(self, quantity: Decimal) -> None:
+        """Ordinary sell; never consume protected core or reverse-T stock."""
+        self._check_broker_sell(quantity)
+        self._record_broker_sell(quantity)
 
     def advance_trading_day(self, next_day: date) -> tuple[TCycle, ...]:
         """Roll unfinished T legs into ordinary positions and reset the daily quota."""
@@ -253,13 +279,15 @@ class PositionState:
     def apply_target_reduction(self, quantity: Decimal) -> None:
         if quantity <= 0 or quantity > self.core_quantity:
             raise ValueError("目标减仓数量必须大于0且不超过核心仓")
-        reserved_quantity = self._open_reverse_quantity()
-        if (
-            self.old_sellable_quantity < self.core_quantity + reserved_quantity
-            or quantity > self.old_sellable_quantity - reserved_quantity
-        ):
-            raise ValueError("目标减仓不得占用未闭环反T预留持仓或当日买入股份")
+        # Authorized core reduction: preflight the projected core inventory
+        # and all outstanding reverse-T reservations before any mutation.
+        try:
+            self._check_broker_sell(quantity, core_after=self.core_quantity - quantity)
+        except BrokerInventoryConflict as exc:
+            raise BrokerInventoryConflict(
+                "目标减仓不得占用未闭环反T预留持仓或当日买入股份"
+            ) from exc
         self.core_quantity -= quantity
-        self.apply_broker_sell(quantity)
+        self._record_broker_sell(quantity)
         if self.core_quantity == 0:
             self.core_cost = Decimal(0)

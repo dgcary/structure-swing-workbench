@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.position.engine import PositionState, TCycleStatus, TDirection
+from app.position.engine import BrokerInventoryConflict, PositionState, TCycleStatus, TDirection
 
 
 def position() -> PositionState:
@@ -78,26 +78,29 @@ def test_next_trading_day_resets_quota_and_unlocks_prior_buys() -> None:
     assert cycle.status is TCycleStatus.OPEN
 
 
-def test_day_end_failed_inventory_preflight_is_atomic() -> None:
+def test_external_sell_conflict_is_rejected_before_day_end() -> None:
     state = position()
     cycle = state.start_t_cycle(TDirection.REVERSE, Decimal(100), Decimal("9.8"))
-    # Simulate a broker-side adjustment not classified by the strategy.
-    state.apply_broker_sell(Decimal(350))
     before = (
         state.core_quantity,
         state.core_cost,
         state.broker_quantity,
-        state.ordinary_t_addition_quantity,
-        state.ordinary_t_reduction_quantity,
+        state.broker_cost,
+        state.same_day_buy_quantity,
+        state.realized_t_pnl,
     )
-    with pytest.raises(ValueError, match="超过券商持仓"):
-        state.convert_open_cycles_at_day_end()
+    with pytest.raises(BrokerInventoryConflict, match="外部对账冲突"):
+        state.apply_broker_sell(Decimal(350))
     assert cycle.status is TCycleStatus.OPEN
     assert cycle.remaining_quantity == Decimal(100)
     assert (
         state.core_quantity,
         state.core_cost,
         state.broker_quantity,
-        state.ordinary_t_addition_quantity,
-        state.ordinary_t_reduction_quantity,
+        state.broker_cost,
+        state.same_day_buy_quantity,
+        state.realized_t_pnl,
     ) == before
+    assert state.convert_open_cycles_at_day_end() == (cycle,)
+    assert state.core_quantity == Decimal(800)
+    assert state.broker_quantity == Decimal(1100)

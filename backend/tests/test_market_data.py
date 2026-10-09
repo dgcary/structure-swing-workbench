@@ -50,6 +50,14 @@ class Client:
         return Frame(self.bars)
 
 
+    def stock_individual_info_em(self, **kwargs):
+        assert kwargs["symbol"] == "600000"
+        return Frame([
+            {"item": "行业", "value": "银行"},
+            {"item": "上市交易所", "value": "上海证券交易所"},
+        ])
+
+
 def provider(client=None):
     return AKShareProvider(client=client or Client(), clock=lambda: NOW)
 
@@ -127,6 +135,8 @@ def test_security_flags_only_known_facts():
     assert result.value.is_st is False
     assert result.value.delisting_risk is None
     assert result.value.suspended is None
+    assert result.value.industry == "银行"
+    assert result.value.exchange == "上海证券交易所"
     assert "delisting_risk" in result.missing_fields
 
 
@@ -172,3 +182,16 @@ def test_provider_is_replaceable_and_math_does_not_predict():
     assert moving_average(bars, 3) is None
     with pytest.raises(ValueError):
         period_extrema(bars, 0)
+
+
+def test_security_detail_failure_is_explicit_and_preserves_partial_quote():
+    class NoDetails(Client):
+        def stock_individual_info_em(self, **kwargs):
+            raise RuntimeError("metadata unavailable")
+
+    result = provider(NoDetails()).get_security("600000")
+    assert result.quality is DataQuality.ERROR
+    assert result.value.name == "浦发银行"
+    assert result.value.industry is None
+    assert "industry" in result.missing_fields
+    assert "metadata unavailable" in result.error

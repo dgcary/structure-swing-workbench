@@ -15,6 +15,18 @@ class TCycleStatus(str, Enum):
     CONVERTED = "converted"
 
 
+class CoreBuyAction(str, Enum):
+    BUY_INITIAL = "BUY_INITIAL"
+    ADD = "ADD"
+
+
+@dataclass(frozen=True, slots=True)
+class CoreBuyFill:
+    action: CoreBuyAction
+    quantity: Decimal
+    price: Decimal
+
+
 class BrokerInventoryConflict(ValueError):
     """Broker ledger conflicts with protected core/reverse-T inventory."""
 
@@ -31,6 +43,12 @@ class TCycle:
     @property
     def remaining_quantity(self) -> Decimal:
         return self.open_quantity - self.matched_quantity
+
+    @property
+    def matched_gross_pnl(self) -> Decimal:
+        basis = self.matched_quantity * self.open_price
+        return (basis - self.matched_value if self.direction is TDirection.POSITIVE
+                else self.matched_value - basis)
 
     def match(self, quantity: Decimal, price: Decimal) -> Decimal:
         if self.status is not TCycleStatus.OPEN:
@@ -61,6 +79,42 @@ class PositionState:
     # A-share T+1: today's purchases are not yesterday's sellable inventory.
     same_day_buy_quantity: Decimal = Decimal(0)
     estimated_broker_cost: Decimal | None = None
+    core_same_day_buy_quantity: Decimal = Decimal(0)
+    core_buy_fills: list[CoreBuyFill] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.estimated_broker_cost is None:
+            self.estimated_broker_cost = self.broker_cost
+
+    @property
+    def broker_display_cost(self) -> Decimal:
+        return self.broker_cost
+
+    def set_broker_display_cost(self, cost: Decimal) -> None:
+        if not cost.is_finite():
+            raise ValueError("券商显示成本必须为有限数字")
+        self.broker_cost = cost
+
+    def reconcile_broker_cost(self, quantity: Decimal, cost: Decimal) -> None:
+        if not quantity.is_finite() or not cost.is_finite():
+            raise ValueError("券商对账数据必须为有限数字")
+        if quantity != self.broker_quantity:
+            raise BrokerInventoryConflict("券商持仓数量不一致，不能覆盖显示成本")
+        self.broker_cost = cost
+
+    @property
+    def sellable_core_quantity(self) -> Decimal:
+        return self.core_quantity - self.core_same_day_buy_quantity
+
+    @property
+    def pending_t_pnl(self) -> Decimal:
+        return sum((c.matched_gross_pnl for c in self.t_cycles
+                    if c.status is TCycleStatus.OPEN), Decimal(0))
+
+    @property
+    def converted_t_pnl(self) -> Decimal:
+        return sum((c.matched_gross_pnl for c in self.t_cycles
+                    if c.status is TCycleStatus.CONVERTED), Decimal(0))
 
     @property
     def old_sellable_quantity(self) -> Decimal:
@@ -162,8 +216,8 @@ class PositionState:
             self._record_broker_sell(quantity)
         else:
             self.apply_broker_buy(quantity, price)
-        self.realized_t_pnl += pnl
         if was_open and cycle.status is TCycleStatus.CLOSED:
+            self.realized_t_pnl += cycle.matched_gross_pnl
             self.completed_t_cycles_today += 1
         return pnl
 
@@ -175,18 +229,31 @@ class PositionState:
         )
 
     def _available_inventory_for_positive_t(self) -> Decimal:
-        return self.old_sellable_quantity - self.core_quantity - self._open_reverse_quantity()
+        return self.old_sellable_quantity - self.sellable_core_quantity - self._open_reverse_quantity()
 
     def _available_old_inventory_for_reverse_t(self) -> Decimal:
-        return self.old_sellable_quantity - self.core_quantity - self._open_reverse_quantity()
+        return self.old_sellable_quantity - self.sellable_core_quantity - self._open_reverse_quantity()
+
+    def apply_core_buy(
+        self, quantity: Decimal, price: Decimal, action: CoreBuyAction
+    ) -> None:
+        """Record an authorized initial/add fill atomically, including T+1."""
+        if not isinstance(action, CoreBuyAction):
+            raise TypeError("核心仓买入动作必须为 BUY_INITIAL 或 ADD")
+        if quantity <= 0 or price <= 0:
+            raise ValueError("核心仓成交数量和价格必须大于0")
+        self.apply_broker_buy(quantity, price)
+        self._apply_core_buy(quantity, price)
+        self.core_same_day_buy_quantity += quantity
+        self.core_buy_fills.append(CoreBuyFill(action, quantity, price))
 
     def apply_broker_buy(self, quantity: Decimal, price: Decimal) -> None:
-        if quantity <= 0:
-            raise ValueError("成交数量必须大于0")
-        total_cost = self.broker_quantity * self.broker_cost + quantity * price
+        if quantity <= 0 or price <= 0:
+            raise ValueError("成交数量和价格必须大于0")
+        total_cost = self.broker_quantity * self.estimated_broker_cost + quantity * price
         self.broker_quantity += quantity
         self.same_day_buy_quantity += quantity
-        self.broker_cost = total_cost / self.broker_quantity
+        self.estimated_broker_cost = total_cost / self.broker_quantity
 
     def _check_broker_sell(
         self,
@@ -197,7 +264,7 @@ class PositionState:
     ) -> None:
         if quantity <= 0 or quantity > self.old_sellable_quantity:
             raise ValueError("卖出数量必须大于0且不超过昨日可卖持仓")
-        protected_core = self.core_quantity if core_after is None else core_after
+        protected_core = self.sellable_core_quantity if core_after is None else core_after
         remaining_reserved = self._open_reverse_quantity() - reverse_release
         if remaining_reserved < 0:
             raise ValueError("反T释放数量超过已预留旧仓")
@@ -211,7 +278,7 @@ class PositionState:
         """Commit a sell only after the relevant inventory preflight passes."""
         self.broker_quantity -= quantity
         if self.broker_quantity == 0:
-            self.broker_cost = Decimal(0)
+            self.estimated_broker_cost = Decimal(0)
 
     def apply_broker_sell(self, quantity: Decimal) -> None:
         """Ordinary sell; never consume protected core or reverse-T stock."""
@@ -234,6 +301,7 @@ class PositionState:
         converted = self.convert_open_cycles_at_day_end()
         self.completed_t_cycles_today = 0
         self.same_day_buy_quantity = Decimal(0)
+        self.core_same_day_buy_quantity = Decimal(0)
         self.trading_day = next_day
         return converted
 
@@ -258,6 +326,7 @@ class PositionState:
             if remaining > 0:
                 if cycle.direction is TDirection.REVERSE:
                     self._apply_core_buy(remaining, cycle.open_price)
+                    self.core_same_day_buy_quantity += remaining
                     self.ordinary_t_addition_quantity += remaining
                 else:
                     self.ordinary_t_reduction_quantity += remaining
@@ -278,12 +347,12 @@ class PositionState:
             self.core_cost = Decimal(0)
 
     def apply_target_reduction(self, quantity: Decimal) -> None:
-        if quantity <= 0 or quantity > self.core_quantity:
-            raise ValueError("目标减仓数量必须大于0且不超过核心仓")
+        if quantity <= 0 or quantity > self.sellable_core_quantity:
+            raise ValueError("目标减仓数量必须大于0且不超过昨日可卖核心仓")
         # Authorized core reduction: preflight the projected core inventory
         # and all outstanding reverse-T reservations before any mutation.
         try:
-            self._check_broker_sell(quantity, core_after=self.core_quantity - quantity)
+            self._check_broker_sell(quantity, core_after=self.sellable_core_quantity - quantity)
         except BrokerInventoryConflict as exc:
             raise BrokerInventoryConflict(
                 "目标减仓不得占用未闭环反T预留持仓或当日买入股份"

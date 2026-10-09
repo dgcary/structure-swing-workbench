@@ -1,8 +1,15 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
 
-from app.position.engine import PositionState, TCycleStatus, TDirection
+from app.position.engine import (
+    BrokerInventoryConflict,
+    CoreBuyAction,
+    PositionState,
+    TCycleStatus,
+    TDirection,
+)
 
 
 def state() -> PositionState:
@@ -134,8 +141,11 @@ def test_partial_positive_t_day_end_becomes_ordinary_reduction() -> None:
     cycle = position.start_t_cycle(TDirection.POSITIVE, Decimal(100), Decimal(11))
     position.close_t_cycle(cycle, Decimal(40), Decimal("10.5"))
     assert position.broker_quantity == Decimal(940)
-    assert position.realized_t_pnl == Decimal("20.0")
+    assert position.realized_t_pnl == Decimal(0)
+    assert position.pending_t_pnl == Decimal("20.0")
     position.convert_open_cycles_at_day_end()
+    assert position.pending_t_pnl == Decimal(0)
+    assert position.converted_t_pnl == Decimal("20.0")
     assert cycle.status is TCycleStatus.CONVERTED
     assert position.broker_quantity == Decimal(940)
     assert position.core_quantity == Decimal(700)
@@ -265,3 +275,99 @@ def test_third_preopened_cycle_cannot_partially_match_after_limit() -> None:
         position.close_t_cycle(cycles[2], Decimal(1), Decimal("10.2"))
     assert cycles[2].matched_quantity == Decimal(0)
     assert (position.realized_t_pnl, position.broker_quantity) == before
+
+
+def test_broker_display_cost_is_external_and_reconciliation_is_atomic() -> None:
+    position = state()
+    position.set_broker_display_cost(Decimal("8.5"))
+    position.apply_core_buy(Decimal(20), Decimal(12), CoreBuyAction.ADD)
+    assert position.broker_quantity == Decimal(1020)
+    assert position.broker_display_cost == Decimal("8.5")
+    assert position.broker_cost == Decimal("8.5")
+    estimate = (Decimal(1000) * 10 + Decimal(20) * 12) / Decimal(1020)
+    assert position.estimated_broker_cost == estimate
+    with pytest.raises(BrokerInventoryConflict, match="数量不一致"):
+        position.reconcile_broker_cost(Decimal(1000), Decimal("7.1"))
+    assert position.broker_display_cost == Decimal("8.5")
+    position.reconcile_broker_cost(Decimal(1020), Decimal("-1.2"))
+    assert position.broker_display_cost == Decimal("-1.2")
+    assert position.estimated_broker_cost == estimate
+
+
+def test_core_initial_and_add_split_fills_update_both_ledgers_and_t_plus_one() -> None:
+    position = PositionState(
+        core_quantity=Decimal(0),
+        core_cost=Decimal(0),
+        broker_quantity=Decimal(0),
+        broker_cost=Decimal(0),
+        trading_day=date(2026, 10, 8),
+    )
+    position.apply_core_buy(Decimal(40), Decimal(10), CoreBuyAction.BUY_INITIAL)
+    position.apply_core_buy(Decimal(60), Decimal(12), CoreBuyAction.BUY_INITIAL)
+    position.apply_core_buy(Decimal(30), Decimal(11), CoreBuyAction.ADD)
+    assert [fill.action for fill in position.core_buy_fills] == [
+        CoreBuyAction.BUY_INITIAL, CoreBuyAction.BUY_INITIAL, CoreBuyAction.ADD
+    ]
+    assert position.core_quantity == position.broker_quantity == Decimal(130)
+    assert position.core_cost == Decimal(1450) / Decimal(130)
+    assert position.estimated_broker_cost == position.core_cost
+    assert position.broker_display_cost == Decimal(0)
+    assert position.same_day_buy_quantity == Decimal(130)
+    assert position.core_same_day_buy_quantity == Decimal(130)
+    assert position.old_sellable_quantity == Decimal(0)
+    with pytest.raises(ValueError, match="昨日可卖核心仓"):
+        position.apply_target_reduction(Decimal(10))
+    assert position.broker_quantity == Decimal(130)
+    assert position.core_quantity == Decimal(130)
+    position.advance_trading_day(date(2026, 10, 9))
+    assert position.old_sellable_quantity == Decimal(130)
+    assert position.sellable_core_quantity == Decimal(130)
+    position.apply_target_reduction(Decimal(30))
+    assert position.broker_quantity == position.core_quantity == Decimal(100)
+
+
+def test_core_buy_invalid_fill_is_atomic() -> None:
+    position = state()
+    before = (
+        position.core_quantity, position.core_cost, position.broker_quantity,
+        position.estimated_broker_cost, position.same_day_buy_quantity,
+    )
+    with pytest.raises(TypeError, match="BUY_INITIAL"):
+        position.apply_core_buy(Decimal(10), Decimal(11), "ADD")
+    with pytest.raises(ValueError, match="必须大于0"):
+        position.apply_core_buy(Decimal(10), Decimal(0), CoreBuyAction.ADD)
+    assert (
+        position.core_quantity, position.core_cost, position.broker_quantity,
+        position.estimated_broker_cost, position.same_day_buy_quantity,
+    ) == before
+    assert position.core_buy_fills == []
+
+
+def test_partial_t_pnl_is_pending_until_full_cycle_close() -> None:
+    position = state()
+    cycle = position.start_t_cycle(TDirection.REVERSE, Decimal(100), Decimal("9.8"))
+    assert position.close_t_cycle(cycle, Decimal(40), Decimal("10.1")) == Decimal("12.0")
+    assert position.pending_t_pnl == Decimal("12.0")
+    assert position.realized_t_pnl == Decimal(0)
+    assert position.effective_cost == Decimal(10)
+    assert position.close_t_cycle(cycle, Decimal(60), Decimal("10.2")) == Decimal("24.0")
+    assert position.pending_t_pnl == Decimal(0)
+    assert position.realized_t_pnl == Decimal("36.0")
+    assert position.effective_cost == Decimal(10) - Decimal(36) / Decimal(700)
+
+
+def test_converted_partial_t_pnl_remains_separate_across_day_roll() -> None:
+    position = state()
+    position.trading_day = date(2026, 10, 8)
+    cycle = position.start_t_cycle(TDirection.REVERSE, Decimal(100), Decimal("9.8"))
+    position.close_t_cycle(cycle, Decimal(40), Decimal(10))
+    assert position.pending_t_pnl == Decimal("8.0")
+    assert position.realized_t_pnl == Decimal(0)
+    position.advance_trading_day(date(2026, 10, 9))
+    assert cycle.status is TCycleStatus.CONVERTED
+    assert position.pending_t_pnl == Decimal(0)
+    assert position.converted_t_pnl == Decimal("8.0")
+    assert position.realized_t_pnl == Decimal(0)
+    assert position.core_quantity == Decimal(760)
+    assert position.broker_quantity == Decimal(1060)
+    assert position.core_same_day_buy_quantity == Decimal(0)

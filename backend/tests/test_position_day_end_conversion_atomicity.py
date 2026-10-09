@@ -13,7 +13,8 @@ def test_conversion_rejects_insufficient_broker_inventory_without_partial_change
     state.advance_trading_day(date(2026, 10, 8))
     positive = state.start_t_cycle(TDirection.POSITIVE, Decimal(100), Decimal(11))
     reverse = state.start_t_cycle(TDirection.REVERSE, Decimal(100), Decimal(9))
-    state.apply_broker_sell(Decimal(300))
+    # Simulate an out-of-band broker discrepancy that bypassed the protected API.
+    state.broker_quantity -= Decimal(300)
 
     before = (
         state.core_quantity,

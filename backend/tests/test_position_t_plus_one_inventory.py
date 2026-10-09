@@ -72,10 +72,11 @@ def test_next_trading_day_releases_prior_day_buyback_inventory() -> None:
 def test_target_reduction_cannot_consume_reverse_t_reserved_old_inventory() -> None:
     p = position()
     reverse = p.start_t_cycle(TDirection.REVERSE, Decimal(100), Decimal("9.8"))
-    p.apply_broker_sell(Decimal(300))
+    # Simulate an unclassified broker-side adjustment, not a normal engine sell.
+    p.broker_quantity -= Decimal(300)
     before = (p.core_quantity, p.broker_quantity)
     with pytest.raises(ValueError, match="预留持仓"):
         p.apply_target_reduction(Decimal(1))
     assert (p.core_quantity, p.broker_quantity) == before
-    with pytest.raises(ValueError, match="不得侵蚀核心仓"):
+    with pytest.raises(ValueError, match="外部对账冲突"):
         p.close_t_cycle(reverse, Decimal(10), Decimal("10.2"))

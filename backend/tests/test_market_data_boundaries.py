@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.market_data.akshare_adapter import AKShareProvider
-from app.market_data.contracts import DataQuality, Timeframe
+from app.market_data.contracts import DataQuality, DataResult, Quote, Timeframe
 
 NOW = datetime(2026, 10, 9, 14, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
 
@@ -161,3 +161,34 @@ def test_malformed_bar_source_timestamp_is_error_not_unverified():
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert "invalid source timestamp" in result.error
+
+
+@pytest.mark.parametrize("value,quality,observed,reason", [
+    (None, DataQuality.FRESH, NOW, "without a value"),
+    (None, DataQuality.STALE, NOW, "without a value"),
+    (None, DataQuality.UNVERIFIED, None, "without a value"),
+    (Quote(symbol="600000"), DataQuality.MISSING, None, "MISSING cannot"),
+    (Quote(symbol="600000"), DataQuality.FRESH, None, "FRESH/STALE require"),
+    (Quote(symbol="600000"), DataQuality.STALE, None, "FRESH/STALE require"),
+])
+def test_provider_neutral_result_rejects_contradictory_quality(
+    value, quality, observed, reason,
+):
+    with pytest.raises(ValueError, match=reason):
+        DataResult(
+            value=value, source="fixture", fetched_at=NOW,
+            observed_at=observed, quality=quality,
+        )
+
+
+def test_provider_neutral_result_allows_explicit_missing_and_unverified():
+    missing = DataResult(
+        value=None, source="fixture", fetched_at=NOW,
+        observed_at=None, quality=DataQuality.MISSING,
+    )
+    unverified = DataResult(
+        value=Quote(symbol="600000"), source="fixture", fetched_at=NOW,
+        observed_at=None, quality=DataQuality.UNVERIFIED,
+    )
+    assert missing.quality is DataQuality.MISSING
+    assert unverified.quality is DataQuality.UNVERIFIED

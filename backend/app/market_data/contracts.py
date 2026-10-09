@@ -79,8 +79,14 @@ class DataResult(Generic[T]):
             raise ValueError("fetched_at must include a timezone")
         if self.observed_at is not None and self.observed_at.tzinfo is None:
             raise ValueError("observed_at must include a timezone")
-        if self.quality is DataQuality.FRESH and self.observed_at is None:
-            raise ValueError("FRESH requires a source observation timestamp")
+        if self.value is None and self.quality in (
+            DataQuality.FRESH, DataQuality.STALE, DataQuality.UNVERIFIED,
+        ):
+            raise ValueError("data without a value must be MISSING or ERROR")
+        if self.value is not None and self.quality is DataQuality.MISSING:
+            raise ValueError("MISSING cannot contain a data value")
+        if self.quality in (DataQuality.FRESH, DataQuality.STALE) and self.observed_at is None:
+            raise ValueError("FRESH/STALE require a source observation timestamp")
 
 
 def quality_at(

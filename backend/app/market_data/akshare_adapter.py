@@ -156,9 +156,28 @@ class AKShareProvider:
             )
         name = quote_result.value.name
         st = name.upper().startswith(("ST", "*ST", "S*ST")) if name else None
-        info = SecurityInfo(symbol=symbol, name=name, is_st=st)
+        details: dict[str, Any] = {}
+        detail_error = None
+        try:
+            rows = self.client.stock_individual_info_em(symbol=symbol).to_dict("records")
+            details = {str(row.get("item")): row.get("value") for row in rows}
+        except Exception as exc:
+            detail_error = f"security details unavailable: {type(exc).__name__}: {exc}"
+        industry = details.get("行业")
+        exchange = details.get("交易所") or details.get("上市交易所")
+        info = SecurityInfo(
+            symbol=symbol, name=name,
+            industry=str(industry) if industry is not None else None,
+            exchange=str(exchange) if exchange is not None else None,
+            is_st=st,
+        )
+        missing = tuple(
+            field.name for field in fields(SecurityInfo)
+            if getattr(info, field.name) is None
+        )
         return DataResult(
             value=info, source=self.source, fetched_at=quote_result.fetched_at,
-            observed_at=quote_result.observed_at, quality=quote_result.quality,
-            missing_fields=("industry", "exchange", "suspended", "delisting_risk"),
+            observed_at=quote_result.observed_at,
+            quality=DataQuality.ERROR if detail_error else quote_result.quality,
+            missing_fields=missing, error=detail_error,
         )

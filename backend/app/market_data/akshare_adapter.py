@@ -97,7 +97,7 @@ class AKShareProvider:
                 raw = record.get(column)
                 values[key] = str(raw) if key == "name" and raw is not None else _decimal(raw)
             values["close"] = values["last"]
-            for key in ("last", "previous_close", "open", "high", "low"):
+            for key in ("last", "previous_close", "open", "high", "low", "limit_up", "limit_down"):
                 if values[key] is not None and values[key] < 0:
                     raise ValueError(f"quote {key} is negative")
             if values["high"] is not None and values["low"] is not None:
@@ -144,14 +144,18 @@ class AKShareProvider:
                           for key, column in BAR_COLUMNS.items()}
                 if any(values[key] is None for key in ("open", "high", "low", "close")):
                     raise ValueError("bar OHLC contains invalid values")
+                for key in ("open", "high", "low", "close"):
+                    if values[key] < 0:
+                        raise ValueError(f"bar {key} is negative")
                 if values["high"] < values["low"]:
                     raise ValueError("bar high is below low")
                 if not values["low"] <= values["open"] <= values["high"]:
                     raise ValueError("bar open is outside high/low")
                 if not values["low"] <= values["close"] <= values["high"]:
                     raise ValueError("bar close is outside high/low")
-                if values["volume"] is not None and values["volume"] < 0:
-                    raise ValueError("bar volume is negative")
+                for key in ("volume", "amount"):
+                    if values[key] is not None and values[key] < 0:
+                        raise ValueError(f"bar {key} is negative")
                 bars.append(Bar(observed_at=timestamp, **values))
             bars.sort(key=lambda bar: bar.observed_at)
             # Daily AKShare bars provide dates, not reliable intraday observation times.

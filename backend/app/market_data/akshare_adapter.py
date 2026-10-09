@@ -48,12 +48,12 @@ def _decimal(value: Any) -> Decimal | None:
 
 
 def _timestamp(value: Any) -> datetime | None:
-    if value is None or str(value).strip() in {"", "nan", "NaT"}:
+    if _is_missing(value):
         return None
     try:
-        parsed = datetime.fromisoformat(str(value))
-    except ValueError:
-        return None
+        parsed = datetime.fromisoformat(str(value).strip())
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"invalid source timestamp: {value}") from exc
     return parsed.replace(tzinfo=CHINA) if parsed.tzinfo is None else parsed
 
 

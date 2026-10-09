@@ -143,3 +143,21 @@ def test_malformed_present_bar_number_is_error_not_missing():
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert "invalid numeric value" in result.error
+
+
+@pytest.mark.parametrize("timestamp", ["yesterday at noon", "2026-99-99 99:99:99"])
+def test_malformed_quote_source_timestamp_is_error_not_unverified(timestamp):
+    client = QuoteClient({"更新时间": timestamp})
+    result = AKShareProvider(client=client, clock=lambda: NOW).get_quote("600000")
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "invalid source timestamp" in result.error
+
+
+def test_malformed_bar_source_timestamp_is_error_not_unverified():
+    result = AKShareProvider(
+        client=BarClient({"时间": "2026-10-09 invalid"}), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.MIN5)
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "invalid source timestamp" in result.error

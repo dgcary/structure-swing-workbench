@@ -111,3 +111,35 @@ def test_duplicate_bar_timestamps_are_rejected_not_double_counted():
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert "duplicate bar observation timestamp" in result.error
+
+
+@pytest.mark.parametrize("field,value", [
+    ("最新价", "not-a-price"),
+    ("成交额", "Infinity"),
+    ("换手率", "broken"),
+])
+def test_malformed_present_quote_number_is_error_not_missing(field, value):
+    client = QuoteClient({field: value})
+    result = AKShareProvider(client=client, clock=lambda: NOW).get_quote("600000")
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "numeric value" in result.error
+
+
+def test_explicit_missing_quote_marker_is_not_an_error():
+    client = QuoteClient({"成交额": "--", "名称": "NaN"})
+    result = AKShareProvider(client=client, clock=lambda: NOW).get_quote("600000")
+    assert result.quality is DataQuality.FRESH
+    assert result.value.name is None
+    assert result.value.amount is None
+    assert "name" in result.missing_fields
+    assert "amount" in result.missing_fields
+
+
+def test_malformed_present_bar_number_is_error_not_missing():
+    result = AKShareProvider(
+        client=BarClient({"成交额": "unparseable"}), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.MIN5)
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "invalid numeric value" in result.error

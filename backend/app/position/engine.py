@@ -229,10 +229,18 @@ class PositionState:
         )
 
     def _available_inventory_for_positive_t(self) -> Decimal:
-        return self.old_sellable_quantity - self.sellable_core_quantity - self._open_reverse_quantity()
+        return (
+            self.old_sellable_quantity
+            - self.sellable_core_quantity
+            - self._open_reverse_quantity()
+        )
 
     def _available_old_inventory_for_reverse_t(self) -> Decimal:
-        return self.old_sellable_quantity - self.sellable_core_quantity - self._open_reverse_quantity()
+        return (
+            self.old_sellable_quantity
+            - self.sellable_core_quantity
+            - self._open_reverse_quantity()
+        )
 
     def apply_core_buy(
         self, quantity: Decimal, price: Decimal, action: CoreBuyAction

@@ -6,8 +6,15 @@ import pytest
 
 from app.market_data.akshare_adapter import AKShareProvider
 from app.market_data.contracts import (
-    Bar, DataQuality, DataResult, MarketDataProvider, Quote, Timeframe,
-    moving_average, period_extrema, quality_at,
+    Bar,
+    DataQuality,
+    DataResult,
+    MarketDataProvider,
+    Quote,
+    Timeframe,
+    moving_average,
+    period_extrema,
+    quality_at,
 )
 
 CN = ZoneInfo("Asia/Shanghai")
@@ -69,7 +76,7 @@ def test_quote_maps_objective_fields_and_explicit_missing_values():
     assert result.fetched_at == NOW
     assert result.observed_at == datetime(2026, 10, 9, 14, 29, tzinfo=CN)
     assert result.value.last == Decimal("10.5")
-    assert result.value.previous_close == Decimal("10")
+    assert result.value.previous_close == Decimal(10)
     assert result.value.close == result.value.last
     assert result.value.limit_up is None
     assert "limit_up" in result.missing_fields
@@ -113,7 +120,7 @@ def test_ohlcv_timeframes_are_mapped(timeframe, method, period):
     client = Client()
     result = provider(client).get_bars("600000", timeframe)
     assert result.value[0].close == Decimal("10.5")
-    assert result.value[0].volume == Decimal("200")
+    assert result.value[0].volume == Decimal(200)
     assert client.periods[-1]["period"] == period
     assert client.periods[-1]["adjust"] == ""
     assert result.quality is (

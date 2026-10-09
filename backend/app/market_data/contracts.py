@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
-from typing import Generic, Protocol, TypeVar
+from typing import Protocol
 
 
 class DataQuality(str, Enum):
@@ -61,11 +61,8 @@ class SecurityInfo:
     delisting_risk: bool | None = None
 
 
-T = TypeVar("T")
-
-
 @dataclass(frozen=True, slots=True)
-class DataResult(Generic[T]):
+class DataResult[T]:
     value: T | None
     source: str
     fetched_at: datetime

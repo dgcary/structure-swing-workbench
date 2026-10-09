@@ -1,14 +1,20 @@
 """Deterministic boundary coverage for provider-neutral market-data contracts."""
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 
 from app.market_data.contracts import (
-    Bar, DataQuality, DataResult, Quote, moving_average, period_extrema, quality_at,
+    Bar,
+    DataQuality,
+    DataResult,
+    Quote,
+    moving_average,
+    period_extrema,
+    quality_at,
 )
 
-NOW = datetime(2026, 10, 9, 14, 30, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 9, 14, 30, tzinfo=UTC)
 
 
 def test_source_freshness_threshold_is_inclusive():
@@ -53,8 +59,8 @@ def test_result_rejects_naive_observation_or_fetch_time():
 
 def test_math_returns_none_when_window_is_too_large_and_rejects_zero():
     bars = (
-        Bar(NOW, Decimal("10"), Decimal("12"), Decimal("9"), Decimal("11")),
-        Bar(NOW, Decimal("11"), Decimal("13"), Decimal("10"), Decimal("12")),
+        Bar(NOW, Decimal(10), Decimal(12), Decimal(9), Decimal(11)),
+        Bar(NOW, Decimal(11), Decimal(13), Decimal(10), Decimal(12)),
     )
     assert moving_average(bars, 3) is None
     assert period_extrema(bars, 3) is None

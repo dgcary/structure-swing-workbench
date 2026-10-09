@@ -60,6 +60,7 @@ class PositionState:
     trading_day: date | None = None
     # A-share T+1: today's purchases are not yesterday's sellable inventory.
     same_day_buy_quantity: Decimal = Decimal(0)
+    estimated_broker_cost: Decimal | None = None
 
     @property
     def old_sellable_quantity(self) -> Decimal:

@@ -195,3 +195,17 @@ def test_security_detail_failure_is_explicit_and_preserves_partial_quote():
     assert result.value.industry is None
     assert "industry" in result.missing_fields
     assert "metadata unavailable" in result.error
+
+
+def test_bar_optional_missing_and_impossible_ohlc_are_explicit():
+    client = Client()
+    client.bars[0]["成交额"] = None
+    result = provider(client).get_bars("600000", Timeframe.MIN5)
+    assert result.quality is DataQuality.FRESH
+    assert result.value[0].amount is None
+    assert "amount" in result.missing_fields
+
+    client.bars[0]["最高"] = 8
+    invalid = provider(client).get_bars("600000", Timeframe.MIN5)
+    assert invalid.quality is DataQuality.ERROR
+    assert "high is below low" in invalid.error

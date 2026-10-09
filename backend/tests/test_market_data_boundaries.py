@@ -90,3 +90,24 @@ def test_invalid_bar_is_explicit_error(field, value, expected):
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert expected in result.error
+
+
+def test_inverted_price_limits_return_explicit_error():
+    client = QuoteClient({"涨停价": 9, "跌停价": 11})
+    result = AKShareProvider(client=client, clock=lambda: NOW).get_quote("600000")
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "limit_down exceeds limit_up" in result.error
+
+
+def test_duplicate_bar_timestamps_are_rejected_not_double_counted():
+    class DuplicateBars(BarClient):
+        def stock_zh_a_hist_min_em(self, **kwargs):
+            return Rows([self.bar, dict(self.bar)])
+
+    result = AKShareProvider(
+        client=DuplicateBars({}), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.MIN5)
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "duplicate bar observation timestamp" in result.error

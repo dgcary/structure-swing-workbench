@@ -110,6 +110,9 @@ class AKShareProvider:
             for key in ("volume", "amount", "turnover_pct", "amplitude_pct"):
                 if values[key] is not None and values[key] < 0:
                     raise ValueError(f"quote {key} is negative")
+            if values["limit_up"] is not None and values["limit_down"] is not None:
+                if values["limit_down"] > values["limit_up"]:
+                    raise ValueError("quote limit_down exceeds limit_up")
             quote = Quote(**values)
             observed = _timestamp(record.get("更新时间") or record.get("时间"))
             missing = tuple(f.name for f in fields(Quote)
@@ -158,6 +161,9 @@ class AKShareProvider:
                         raise ValueError(f"bar {key} is negative")
                 bars.append(Bar(observed_at=timestamp, **values))
             bars.sort(key=lambda bar: bar.observed_at)
+            if any(left.observed_at == right.observed_at
+                   for left, right in zip(bars, bars[1:])):
+                raise ValueError("duplicate bar observation timestamp")
             # Daily AKShare bars provide dates, not reliable intraday observation times.
             observed = None if timeframe is Timeframe.DAY else bars[-1].observed_at
             quality = (

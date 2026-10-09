@@ -1,0 +1,164 @@
+"""AKShare implementation of the provider-neutral market-data interface.
+
+AKShare is imported lazily; deterministic tests inject a fake client.
+No timestamp is invented when a source omits its observation time.
+"""
+from dataclasses import fields
+from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
+from typing import Any, Callable
+from zoneinfo import ZoneInfo
+
+from app.market_data.contracts import (
+    Bar, DataQuality, DataResult, Quote, SecurityInfo, Timeframe, quality_at,
+)
+
+CHINA = ZoneInfo("Asia/Shanghai")
+QUOTE_COLUMNS = {
+    "name": "名称", "last": "最新价", "previous_close": "昨收",
+    "open": "今开", "high": "最高", "low": "最低",
+    "change_pct": "涨跌幅", "limit_up": "涨停价",
+    "limit_down": "跌停价", "volume": "成交量",
+    "amount": "成交额", "turnover_pct": "换手率",
+    "amplitude_pct": "振幅",
+}
+BAR_COLUMNS = {
+    "open": "开盘", "high": "最高", "low": "最低", "close": "收盘",
+    "volume": "成交量", "amount": "成交额",
+}
+
+
+def _decimal(value: Any) -> Decimal | None:
+    if value is None or str(value).strip() in {"", "nan", "NaN", "--", "None"}:
+        return None
+    try:
+        result = Decimal(str(value).replace(",", ""))
+    except (InvalidOperation, ValueError):
+        return None
+    return result if result.is_finite() else None
+
+
+def _timestamp(value: Any) -> datetime | None:
+    if value is None or str(value).strip() in {"", "nan", "NaT"}:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=CHINA) if parsed.tzinfo is None else parsed
+
+
+class AKShareProvider:
+    source = "AKShare"
+
+    def __init__(
+        self,
+        client: Any = None,
+        clock: Callable[[], datetime] | None = None,
+        quote_max_age: timedelta = timedelta(minutes=15),
+        bar_max_age: timedelta = timedelta(minutes=45),
+    ) -> None:
+        if client is None:
+            import akshare  # optional external dependency, never imported by core modules
+
+            client = akshare
+        self.client = client
+        self.clock = clock or (lambda: datetime.now(CHINA))
+        self.quote_max_age = quote_max_age
+        self.bar_max_age = bar_max_age
+
+    def _result(
+        self, value: Any, fetched: datetime, observed: datetime | None,
+        missing: tuple[str, ...] = (), error: str | None = None,
+    ) -> DataResult[Any]:
+        if error:
+            quality = DataQuality.ERROR
+        elif value is None:
+            quality = DataQuality.MISSING
+        else:
+            quality = quality_at(observed, fetched, self.quote_max_age)
+        return DataResult(
+            value=value, source=self.source, fetched_at=fetched,
+            observed_at=observed, quality=quality,
+            missing_fields=missing, error=error,
+        )
+
+    def get_quote(self, symbol: str) -> DataResult[Quote]:
+        fetched = self.clock()
+        try:
+            rows = self.client.stock_zh_a_spot_em().to_dict("records")
+            record = next(
+                (row for row in rows if str(row.get("代码", "")).zfill(6) == symbol), None
+            )
+            if record is None:
+                return self._result(None, fetched, None, ("symbol",))
+            values: dict[str, Any] = {"symbol": symbol}
+            for key, column in QUOTE_COLUMNS.items():
+                raw = record.get(column)
+                values[key] = str(raw) if key == "name" and raw is not None else _decimal(raw)
+            values["close"] = values["last"]
+            quote = Quote(**values)
+            observed = _timestamp(record.get("更新时间") or record.get("时间"))
+            missing = tuple(f.name for f in fields(Quote)
+                            if getattr(quote, f.name) is None)
+            return self._result(quote, fetched, observed, missing)
+        except Exception as exc:
+            return self._result(None, fetched, None, error=f"{type(exc).__name__}: {exc}")
+
+    def get_bars(self, symbol: str, timeframe: Timeframe) -> DataResult[tuple[Bar, ...]]:
+        fetched = self.clock()
+        if timeframe not in Timeframe:
+            return self._result(None, fetched, None, error="unsupported timeframe")
+        try:
+            if timeframe is Timeframe.DAY:
+                frame = self.client.stock_zh_a_hist(
+                    symbol=symbol, period="daily", adjust=""
+                )
+            else:
+                period = "5" if timeframe is Timeframe.MIN5 else "15"
+                frame = self.client.stock_zh_a_hist_min_em(
+                    symbol=symbol, period=period, adjust=""
+                )
+            records = frame.to_dict("records")
+            if not records:
+                return self._result(None, fetched, None, ("bars",))
+            bars = []
+            for row in records:
+                timestamp = _timestamp(row.get("时间") or row.get("日期"))
+                if timestamp is None:
+                    raise ValueError("bar observation date/time missing")
+                values = {key: _decimal(row.get(column))
+                          for key, column in BAR_COLUMNS.items()}
+                if any(values[key] is None for key in ("open", "high", "low", "close")):
+                    raise ValueError("bar OHLC contains invalid values")
+                bars.append(Bar(observed_at=timestamp, **values))
+            bars.sort(key=lambda bar: bar.observed_at)
+            # Daily AKShare bars provide dates, not reliable intraday observation times.
+            observed = None if timeframe is Timeframe.DAY else bars[-1].observed_at
+            quality = (
+                DataQuality.UNVERIFIED if observed is None
+                else quality_at(observed, fetched, self.bar_max_age)
+            )
+            return DataResult(
+                value=tuple(bars), source=self.source, fetched_at=fetched,
+                observed_at=observed, quality=quality,
+            )
+        except Exception as exc:
+            return self._result(None, fetched, None, error=f"{type(exc).__name__}: {exc}")
+
+    def get_security(self, symbol: str) -> DataResult[SecurityInfo]:
+        quote_result = self.get_quote(symbol)
+        if quote_result.value is None:
+            return DataResult(
+                value=None, source=self.source, fetched_at=quote_result.fetched_at,
+                observed_at=quote_result.observed_at, quality=quote_result.quality,
+                missing_fields=quote_result.missing_fields, error=quote_result.error,
+            )
+        name = quote_result.value.name
+        st = name.upper().startswith(("ST", "*ST", "S*ST")) if name else None
+        info = SecurityInfo(symbol=symbol, name=name, is_st=st)
+        return DataResult(
+            value=info, source=self.source, fetched_at=quote_result.fetched_at,
+            observed_at=quote_result.observed_at, quality=quote_result.quality,
+            missing_fields=("industry", "exchange", "suspended", "delisting_risk"),
+        )

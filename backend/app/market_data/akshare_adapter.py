@@ -12,7 +12,13 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.market_data.contracts import (
-    Bar, DataQuality, DataResult, Quote, SecurityInfo, Timeframe, quality_at,
+    Bar,
+    DataQuality,
+    DataResult,
+    Quote,
+    SecurityInfo,
+    Timeframe,
+    quality_at,
 )
 
 CHINA = ZoneInfo("Asia/Shanghai")
@@ -133,7 +139,7 @@ class AKShareProvider:
             missing = tuple(f.name for f in fields(Quote)
                             if getattr(quote, f.name) is None)
             return self._result(quote, fetched, observed, missing)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - external provider failures are surfaced
             return self._result(None, fetched, None, error=f"{type(exc).__name__}: {exc}")
 
     def get_bars(self, symbol: str, timeframe: Timeframe) -> DataResult[tuple[Bar, ...]]:
@@ -193,7 +199,7 @@ class AKShareProvider:
                 value=tuple(bars), source=self.source, fetched_at=fetched,
                 observed_at=observed, quality=quality, missing_fields=missing,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - external provider failures are surfaced
             return self._result(None, fetched, None, error=f"{type(exc).__name__}: {exc}")
 
     def get_security(self, symbol: str) -> DataResult[SecurityInfo]:
@@ -211,7 +217,7 @@ class AKShareProvider:
         try:
             rows = self.client.stock_individual_info_em(symbol=symbol).to_dict("records")
             details = {str(row.get("item")): row.get("value") for row in rows}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - external provider failures are surfaced
             detail_error = f"security details unavailable: {type(exc).__name__}: {exc}"
         industry = details.get("行业")
         exchange = details.get("交易所") or details.get("上市交易所")

@@ -28,14 +28,23 @@ BAR_COLUMNS = {
 }
 
 
+MISSING_MARKERS = {"", "nan", "nat", "none", "null", "--", "-", "—", "n/a"}
+
+
+def _is_missing(value: Any) -> bool:
+    return value is None or str(value).strip().lower() in MISSING_MARKERS
+
+
 def _decimal(value: Any) -> Decimal | None:
-    if value is None or str(value).strip() in {"", "nan", "NaN", "--", "None"}:
+    if _is_missing(value):
         return None
     try:
         result = Decimal(str(value).replace(",", ""))
-    except (InvalidOperation, ValueError):
-        return None
-    return result if result.is_finite() else None
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"invalid numeric value: {value}") from exc
+    if not result.is_finite():
+        raise ValueError(f"non-finite numeric value: {value}")
+    return result
 
 
 def _timestamp(value: Any) -> datetime | None:
@@ -95,7 +104,7 @@ class AKShareProvider:
             values: dict[str, Any] = {"symbol": symbol}
             for key, column in QUOTE_COLUMNS.items():
                 raw = record.get(column)
-                values[key] = str(raw) if key == "name" and raw is not None else _decimal(raw)
+                values[key] = (None if _is_missing(raw) else str(raw)) if key == "name" else _decimal(raw)
             values["close"] = values["last"]
             for key in ("last", "previous_close", "open", "high", "low", "limit_up", "limit_down"):
                 if values[key] is not None and values[key] < 0:

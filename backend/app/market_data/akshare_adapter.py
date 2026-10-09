@@ -167,6 +167,10 @@ class AKShareProvider:
                 timestamp = _timestamp(row.get("时间") or row.get("日期"))
                 if timestamp is None:
                     raise ValueError("bar observation date/time missing")
+                if timeframe is Timeframe.DAY and (
+                    timestamp.astimezone(CHINA).date() > fetched.astimezone(CHINA).date()
+                ):
+                    raise ValueError("daily bar observation date is in the future")
                 values = {key: _decimal(row.get(column))
                           for key, column in BAR_COLUMNS.items()}
                 if any(values[key] is None for key in ("open", "high", "low", "close")):

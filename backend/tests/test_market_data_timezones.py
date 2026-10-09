@@ -34,6 +34,12 @@ class Client:
             "最高": 10, "最低": 10, "收盘": 10,
         }])
 
+    def stock_zh_a_hist(self, **kwargs):
+        return Rows([{
+            "日期": self.timestamp, "开盘": 10,
+            "最高": 10, "最低": 10, "收盘": 10,
+        }])
+
 
 def test_future_source_time_is_error_with_reason_for_quote_and_bar():
     adapter = AKShareProvider(
@@ -54,3 +60,18 @@ def test_utc_offset_source_time_maps_to_china_clock():
     )
     assert adapter.get_quote("600000").quality is DataQuality.FRESH
     assert adapter.get_bars("600000", Timeframe.MIN5).quality is DataQuality.FRESH
+
+
+def test_daily_bars_reject_future_trading_date_but_allow_today():
+    future = AKShareProvider(
+        client=Client("2026-10-10"), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.DAY)
+    assert future.quality is DataQuality.ERROR
+    assert future.value is None
+    assert "date is in the future" in future.error
+
+    today = AKShareProvider(
+        client=Client("2026-10-09"), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.DAY)
+    assert today.quality is DataQuality.UNVERIFIED
+    assert today.value[0].close == 10

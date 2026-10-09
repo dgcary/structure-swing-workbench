@@ -94,6 +94,9 @@ class AKShareProvider:
             quality = DataQuality.MISSING
         else:
             quality = quality_at(observed, fetched, self.quote_max_age)
+            if quality is DataQuality.ERROR:
+                value = None
+                error = "source observation timestamp is more than five minutes ahead of fetch time"
         return DataResult(
             value=value, source=self.source, fetched_at=fetched,
             observed_at=observed, quality=quality,
@@ -191,6 +194,11 @@ class AKShareProvider:
                 DataQuality.UNVERIFIED if observed is None
                 else quality_at(observed, fetched, self.bar_max_age)
             )
+            if quality is DataQuality.ERROR:
+                return self._result(
+                    None, fetched, observed,
+                    error="bar source timestamp is more than five minutes ahead of fetch time",
+                )
             missing = tuple(
                 field for field in ("volume", "amount")
                 if any(getattr(bar, field) is None for bar in bars)

@@ -97,6 +97,19 @@ class AKShareProvider:
                 raw = record.get(column)
                 values[key] = str(raw) if key == "name" and raw is not None else _decimal(raw)
             values["close"] = values["last"]
+            for key in ("last", "previous_close", "open", "high", "low"):
+                if values[key] is not None and values[key] < 0:
+                    raise ValueError(f"quote {key} is negative")
+            if values["high"] is not None and values["low"] is not None:
+                if values["high"] < values["low"]:
+                    raise ValueError("quote high is below low")
+                for key in ("open", "last"):
+                    if values[key] is not None:
+                        if not values["low"] <= values[key] <= values["high"]:
+                            raise ValueError(f"quote {key} is outside high/low")
+            for key in ("volume", "amount", "turnover_pct", "amplitude_pct"):
+                if values[key] is not None and values[key] < 0:
+                    raise ValueError(f"quote {key} is negative")
             quote = Quote(**values)
             observed = _timestamp(record.get("更新时间") or record.get("时间"))
             missing = tuple(f.name for f in fields(Quote)
@@ -107,7 +120,7 @@ class AKShareProvider:
 
     def get_bars(self, symbol: str, timeframe: Timeframe) -> DataResult[tuple[Bar, ...]]:
         fetched = self.clock()
-        if timeframe not in Timeframe:
+        if not isinstance(timeframe, Timeframe):
             return self._result(None, fetched, None, error="unsupported timeframe")
         try:
             if timeframe is Timeframe.DAY:

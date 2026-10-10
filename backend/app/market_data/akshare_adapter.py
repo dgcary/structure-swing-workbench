@@ -135,9 +135,13 @@ class AKShareProvider:
         fetched = self.clock()
         try:
             rows = self.client.stock_zh_a_spot_em().to_dict("records")
-            record = next(
-                (row for row in rows if str(row.get("代码", "")).zfill(6) == symbol), None
-            )
+            matches = [
+                row for row in rows
+                if str(row.get("代码", "")).zfill(6) == symbol
+            ]
+            if len(matches) > 1:
+                raise ValueError("duplicate quote rows for symbol")
+            record = matches[0] if matches else None
             if record is None:
                 return self._result(None, fetched, None, ("symbol",))
             values: dict[str, Any] = {"symbol": symbol}

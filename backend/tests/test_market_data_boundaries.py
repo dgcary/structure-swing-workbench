@@ -192,3 +192,19 @@ def test_provider_neutral_result_allows_explicit_missing_and_unverified():
     )
     assert missing.quality is DataQuality.MISSING
     assert unverified.quality is DataQuality.UNVERIFIED
+
+
+@pytest.mark.parametrize("other_last", [10.5, 10.6])
+def test_duplicate_quote_rows_are_rejected_even_when_identical(other_last):
+    class DuplicateQuotes(QuoteClient):
+        def stock_zh_a_spot_em(self):
+            second = dict(self.row)
+            second["最新价"] = other_last
+            return Rows([self.row, second])
+
+    result = AKShareProvider(
+        client=DuplicateQuotes({}), clock=lambda: NOW
+    ).get_quote("600000")
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "duplicate quote rows for symbol" in result.error

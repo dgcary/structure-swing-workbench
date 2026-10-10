@@ -112,3 +112,41 @@ def test_date_only_minute_bar_is_rejected_without_intraday_time():
     assert result.value is None
     assert result.quality is DataQuality.ERROR
     assert "date/time missing" in result.error
+
+
+def test_daily_bar_prefers_trading_date_when_intraday_time_also_exists():
+    class BothColumns(Client):
+        def stock_zh_a_hist(self, **kwargs):
+            return Rows([{
+                "日期": "2026-10-08", "时间": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 11, "最低": 9, "收盘": 10,
+            }])
+
+        def stock_zh_a_hist_min_em(self, **kwargs):
+            return self.stock_zh_a_hist(**kwargs)
+
+    adapter = AKShareProvider(client=BothColumns("unused"), clock=lambda: NOW)
+    daily = adapter.get_bars("600000", Timeframe.DAY)
+    minute = adapter.get_bars("600000", Timeframe.MIN5)
+
+    assert daily.quality is DataQuality.UNVERIFIED
+    assert daily.value[0].observed_at.date().isoformat() == "2026-10-08"
+    assert minute.quality is DataQuality.FRESH
+    assert minute.value[0].observed_at == datetime(
+        2026, 10, 9, 14, 25, tzinfo=ZoneInfo("Asia/Shanghai")
+    )
+
+
+def test_future_daily_trading_date_is_not_masked_by_older_time_column():
+    class BothColumns(Client):
+        def stock_zh_a_hist(self, **kwargs):
+            return Rows([{
+                "日期": "2026-10-11", "时间": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 10, "最低": 10, "收盘": 10,
+            }])
+
+    adapter = AKShareProvider(client=BothColumns("unused"), clock=lambda: NOW)
+    result = adapter.get_bars("600000", Timeframe.DAY)
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "date is in the future" in result.error

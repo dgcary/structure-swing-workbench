@@ -5,7 +5,7 @@ No timestamp is invented when a source omits its observation time.
 """
 from collections.abc import Callable
 from dataclasses import fields
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from itertools import pairwise
 from typing import Any
@@ -55,10 +55,18 @@ def _decimal(value: Any) -> Decimal | None:
     return result
 
 
-def _timestamp(value: Any) -> datetime | None:
+def _timestamp(value: Any, *, date_only_allowed: bool = True) -> datetime | None:
     if _is_missing(value):
         return None
     raw = str(value).strip()
+    try:
+        date.fromisoformat(raw)
+    except ValueError:
+        pass
+    else:
+        if not date_only_allowed:
+            # A trading date is not a quote time or a minute-bar observation.
+            return None
     try:
         parsed = datetime.fromisoformat(raw)
     except (ValueError, TypeError) as exc:
@@ -144,7 +152,9 @@ class AKShareProvider:
             ):
                 raise ValueError("quote limit_down exceeds limit_up")
             quote = Quote(**values)
-            observed = _timestamp(record.get("更新时间") or record.get("时间"))
+            observed = _timestamp(
+                record.get("更新时间") or record.get("时间"), date_only_allowed=False
+            )
             missing = tuple(f.name for f in fields(Quote)
                             if getattr(quote, f.name) is None)
             return self._result(quote, fetched, observed, missing)
@@ -170,7 +180,10 @@ class AKShareProvider:
                 return self._result(None, fetched, None, ("bars",))
             bars = []
             for row in records:
-                timestamp = _timestamp(row.get("时间") or row.get("日期"))
+                timestamp = _timestamp(
+                    row.get("时间") or row.get("日期"),
+                    date_only_allowed=timeframe is Timeframe.DAY,
+                )
                 if timestamp is None:
                     raise ValueError("bar observation date/time missing")
                 if timeframe is Timeframe.DAY and (

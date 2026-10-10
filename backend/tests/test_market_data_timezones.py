@@ -96,3 +96,19 @@ def test_time_only_minute_bar_is_error_without_a_full_observation_date():
     assert bars.value is None
     assert bars.quality is DataQuality.ERROR
     assert "date/time missing" in bars.error
+
+
+def test_date_only_quote_time_is_unverified_not_an_intraday_timestamp():
+    adapter = AKShareProvider(client=Client("2026-10-09"), clock=lambda: NOW)
+    result = adapter.get_quote("600000")
+    assert result.value is not None
+    assert result.observed_at is None
+    assert result.quality is DataQuality.UNVERIFIED
+
+
+def test_date_only_minute_bar_is_rejected_without_intraday_time():
+    adapter = AKShareProvider(client=Client("2026-10-09"), clock=lambda: NOW)
+    result = adapter.get_bars("600000", Timeframe.MIN5)
+    assert result.value is None
+    assert result.quality is DataQuality.ERROR
+    assert "date/time missing" in result.error

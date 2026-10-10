@@ -266,7 +266,11 @@ class AKShareProvider:
         detail_error = None
         try:
             rows = self.client.stock_individual_info_em(symbol=symbol).to_dict("records")
-            details = {str(row.get("item")): row.get("value") for row in rows}
+            for row in rows:
+                key = str(row.get("item"))
+                if key in details:
+                    raise ValueError(f"duplicate security detail field: {key}")
+                details[key] = row.get("value")
         except Exception as exc:  # noqa: BLE001 - external provider failures are surfaced
             detail_error = f"security details unavailable: {type(exc).__name__}: {exc}"
         industry = details.get("行业")

@@ -181,7 +181,8 @@ class AKShareProvider:
             bars = []
             for row in records:
                 timestamp = _timestamp(
-                    row.get("时间") or row.get("日期"),
+                    (row.get("日期") or row.get("时间")) if timeframe is Timeframe.DAY
+                    else (row.get("时间") or row.get("日期")),
                     date_only_allowed=timeframe is Timeframe.DAY,
                 )
                 if timestamp is None:

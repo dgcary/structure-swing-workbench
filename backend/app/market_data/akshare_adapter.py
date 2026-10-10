@@ -43,15 +43,6 @@ def _is_missing(value: Any) -> bool:
     return value is None or str(value).strip().lower() in MISSING_MARKERS
 
 
-def _first_present(row: dict[str, Any], *columns: str) -> Any:
-    """Select a timestamp fallback only when the primary is explicitly missing."""
-    for column in columns:
-        value = row.get(column)
-        if not _is_missing(value):
-            return value
-    return None
-
-
 def _decimal(value: Any) -> Decimal | None:
     if _is_missing(value):
         return None
@@ -86,6 +77,20 @@ def _timestamp(value: Any, *, date_only_allowed: bool = True) -> datetime | None
             raise ValueError(f"invalid source timestamp: {value}") from exc
         return None
     return parsed.replace(tzinfo=CHINA) if parsed.tzinfo is None else parsed
+
+
+def _first_timestamp(
+    row: dict[str, Any], *columns: str, date_only_allowed: bool,
+) -> datetime | None:
+    """Try a backup column when the primary lacks a verifiable date and time."""
+    for column in columns:
+        raw = row.get(column)
+        if _is_missing(raw):
+            continue
+        parsed = _timestamp(raw, date_only_allowed=date_only_allowed)
+        if parsed is not None:
+            return parsed
+    return None
 
 
 class AKShareProvider:
@@ -161,8 +166,8 @@ class AKShareProvider:
             ):
                 raise ValueError("quote limit_down exceeds limit_up")
             quote = Quote(**values)
-            observed = _timestamp(
-                _first_present(record, "更新时间", "时间"), date_only_allowed=False
+            observed = _first_timestamp(
+                record, "更新时间", "时间", date_only_allowed=False
             )
             missing = tuple(f.name for f in fields(Quote)
                             if getattr(quote, f.name) is None)
@@ -189,10 +194,10 @@ class AKShareProvider:
                 return self._result(None, fetched, None, ("bars",))
             bars = []
             for row in records:
-                timestamp = _timestamp(
-                    _first_present(row, "日期", "时间") if timeframe is Timeframe.DAY
-                    else _first_present(row, "时间", "日期"),
-                    date_only_allowed=timeframe is Timeframe.DAY,
+                timestamp = (
+                    _first_timestamp(row, "日期", "时间", date_only_allowed=True)
+                    if timeframe is Timeframe.DAY
+                    else _first_timestamp(row, "时间", "日期", date_only_allowed=False)
                 )
                 if timestamp is None:
                     raise ValueError("bar observation date/time missing")

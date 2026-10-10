@@ -208,3 +208,24 @@ def test_duplicate_quote_rows_are_rejected_even_when_identical(other_last):
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert "duplicate quote rows for symbol" in result.error
+
+
+@pytest.mark.parametrize("raw_code,symbol", [
+    (600000.0, "600000"),
+    ("600000.0", "600000"),
+    (1.0, "000001"),
+    ("1", "000001"),
+])
+def test_integral_numeric_source_codes_match_six_digit_symbols(raw_code, symbol):
+    client = QuoteClient({"代码": raw_code})
+    result = AKShareProvider(client=client, clock=lambda: NOW).get_quote(symbol)
+    assert result.quality is DataQuality.FRESH
+    assert result.value.symbol == symbol
+
+
+@pytest.mark.parametrize("raw_code", [1.5, "1.5", "1000000.0", "-1", None])
+def test_malformed_source_codes_never_round_or_match(raw_code):
+    client = QuoteClient({"代码": raw_code})
+    result = AKShareProvider(client=client, clock=lambda: NOW).get_quote("000001")
+    assert result.quality is DataQuality.MISSING
+    assert result.value is None

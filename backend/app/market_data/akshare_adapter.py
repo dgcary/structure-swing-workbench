@@ -252,11 +252,13 @@ class AKShareProvider:
         except Exception as exc:  # noqa: BLE001 - external provider failures are surfaced
             detail_error = f"security details unavailable: {type(exc).__name__}: {exc}"
         industry = details.get("行业")
-        exchange = details.get("交易所") or details.get("上市交易所")
+        exchange = details.get("交易所")
+        if _is_missing(exchange):
+            exchange = details.get("上市交易所")
         info = SecurityInfo(
             symbol=symbol, name=name,
-            industry=str(industry) if industry is not None else None,
-            exchange=str(exchange) if exchange is not None else None,
+            industry=None if _is_missing(industry) else str(industry),
+            exchange=None if _is_missing(exchange) else str(exchange),
             is_st=st,
         )
         missing = tuple(

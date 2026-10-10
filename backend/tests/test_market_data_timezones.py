@@ -183,3 +183,49 @@ def test_minute_bar_missing_primary_timestamp_uses_valid_fallback():
     assert result.value[0].observed_at == datetime(
         2026, 10, 9, 14, 25, tzinfo=ZoneInfo("Asia/Shanghai")
     )
+
+
+def test_time_only_primary_uses_full_datetime_backup_for_quote_and_minute_bar():
+    class BothTimesClient(Client):
+        def stock_zh_a_spot_em(self):
+            return Rows([{
+                "代码": "600000", "名称": "浦发银行",
+                "最新价": 10, "今开": 10, "最高": 10, "最低": 10,
+                "更新时间": "14:29:00", "时间": "2026-10-09 14:29:00",
+            }])
+
+        def stock_zh_a_hist_min_em(self, **kwargs):
+            return Rows([{
+                "时间": "14:25:00", "日期": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 10, "最低": 10, "收盘": 10,
+            }])
+
+    adapter = AKShareProvider(client=BothTimesClient("unused"), clock=lambda: NOW)
+    quote = adapter.get_quote("600000")
+    bars = adapter.get_bars("600000", Timeframe.MIN5)
+
+    assert quote.quality is DataQuality.FRESH
+    assert quote.observed_at == datetime(
+        2026, 10, 9, 14, 29, tzinfo=ZoneInfo("Asia/Shanghai")
+    )
+    assert bars.quality is DataQuality.FRESH
+    assert bars.value[0].observed_at == datetime(
+        2026, 10, 9, 14, 25, tzinfo=ZoneInfo("Asia/Shanghai")
+    )
+
+
+def test_malformed_primary_timestamp_is_not_hidden_by_valid_backup():
+    class BadTimeClient(Client):
+        def stock_zh_a_spot_em(self):
+            return Rows([{
+                "代码": "600000", "名称": "浦发银行",
+                "最新价": 10, "今开": 10, "最高": 10, "最低": 10,
+                "更新时间": "not-a-timestamp", "时间": "2026-10-09 14:29:00",
+            }])
+
+    result = AKShareProvider(client=BadTimeClient("unused"), clock=lambda: NOW).get_quote(
+        "600000"
+    )
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "invalid source timestamp" in result.error

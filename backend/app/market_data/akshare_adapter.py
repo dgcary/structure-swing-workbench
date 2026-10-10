@@ -43,6 +43,21 @@ def _is_missing(value: Any) -> bool:
     return value is None or str(value).strip().lower() in MISSING_MARKERS
 
 
+def _stock_code(value: Any) -> str | None:
+    """Normalize a six-digit A-share code without rounding malformed identifiers."""
+    if _is_missing(value):
+        return None
+    raw = str(value).strip()
+    if raw.isascii() and raw.isdecimal() and len(raw) <= 6:
+        return raw.zfill(6)
+    # Some upstream DataFrames coerce zero-padded codes to integral floats.
+    if raw.endswith(".0") and raw[:-2].isascii() and raw[:-2].isdecimal():
+        digits = raw[:-2]
+        if len(digits) <= 6:
+            return digits.zfill(6)
+    return None
+
+
 def _decimal(value: Any) -> Decimal | None:
     if _is_missing(value):
         return None
@@ -137,7 +152,7 @@ class AKShareProvider:
             rows = self.client.stock_zh_a_spot_em().to_dict("records")
             matches = [
                 row for row in rows
-                if str(row.get("代码", "")).zfill(6) == symbol
+                if _stock_code(row.get("代码")) == symbol
             ]
             if len(matches) > 1:
                 raise ValueError("duplicate quote rows for symbol")

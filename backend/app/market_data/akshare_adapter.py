@@ -43,6 +43,15 @@ def _is_missing(value: Any) -> bool:
     return value is None or str(value).strip().lower() in MISSING_MARKERS
 
 
+def _first_present(row: dict[str, Any], *columns: str) -> Any:
+    """Select a timestamp fallback only when the primary is explicitly missing."""
+    for column in columns:
+        value = row.get(column)
+        if not _is_missing(value):
+            return value
+    return None
+
+
 def _decimal(value: Any) -> Decimal | None:
     if _is_missing(value):
         return None
@@ -153,7 +162,7 @@ class AKShareProvider:
                 raise ValueError("quote limit_down exceeds limit_up")
             quote = Quote(**values)
             observed = _timestamp(
-                record.get("更新时间") or record.get("时间"), date_only_allowed=False
+                _first_present(record, "更新时间", "时间"), date_only_allowed=False
             )
             missing = tuple(f.name for f in fields(Quote)
                             if getattr(quote, f.name) is None)
@@ -181,8 +190,8 @@ class AKShareProvider:
             bars = []
             for row in records:
                 timestamp = _timestamp(
-                    (row.get("日期") or row.get("时间")) if timeframe is Timeframe.DAY
-                    else (row.get("时间") or row.get("日期")),
+                    _first_present(row, "日期", "时间") if timeframe is Timeframe.DAY
+                    else _first_present(row, "时间", "日期"),
                     date_only_allowed=timeframe is Timeframe.DAY,
                 )
                 if timestamp is None:

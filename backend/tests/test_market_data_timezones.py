@@ -150,3 +150,36 @@ def test_future_daily_trading_date_is_not_masked_by_older_time_column():
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert "date is in the future" in result.error
+
+
+def test_quote_missing_primary_timestamp_uses_valid_fallback():
+    class FallbackClient(Client):
+        def stock_zh_a_spot_em(self):
+            return Rows([{
+                "代码": "600000", "名称": "浦发银行",
+                "最新价": 10, "今开": 10, "最高": 10, "最低": 10,
+                "更新时间": "--", "时间": "2026-10-09 14:29:00",
+            }])
+
+    result = AKShareProvider(client=FallbackClient("unused"), clock=lambda: NOW).get_quote(
+        "600000"
+    )
+    assert result.quality is DataQuality.FRESH
+    assert result.observed_at == datetime(2026, 10, 9, 14, 29, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+
+def test_minute_bar_missing_primary_timestamp_uses_valid_fallback():
+    class FallbackClient(Client):
+        def stock_zh_a_hist_min_em(self, **kwargs):
+            return Rows([{
+                "时间": "NaN", "日期": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 10, "最低": 10, "收盘": 10,
+            }])
+
+    result = AKShareProvider(client=FallbackClient("unused"), clock=lambda: NOW).get_bars(
+        "600000", Timeframe.MIN5
+    )
+    assert result.quality is DataQuality.FRESH
+    assert result.value[0].observed_at == datetime(
+        2026, 10, 9, 14, 25, tzinfo=ZoneInfo("Asia/Shanghai")
+    )

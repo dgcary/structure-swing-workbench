@@ -90,3 +90,24 @@ def test_legacy_sst_prefix_is_classified_without_guessing_delisting_risk():
         client=NamedClient("浦发银行"), clock=lambda: NOW
     ).get_security("600000")
     assert ordinary.value.is_st is False
+
+
+def test_duplicate_security_detail_rows_are_error_not_silently_overwritten():
+    class DuplicateDetails(Client):
+        def stock_individual_info_em(self, **kwargs):
+            return Rows([
+                {"item": "行业", "value": "银行"},
+                {"item": "行业", "value": "其他"},
+                {"item": "上市交易所", "value": "上海证券交易所"},
+            ])
+
+    result = AKShareProvider(
+        client=DuplicateDetails({}), clock=lambda: NOW
+    ).get_security("600000")
+    assert result.quality is DataQuality.ERROR
+    assert result.observed_at is None
+    assert result.value.name == "浦发银行"
+    assert result.value.industry is None
+    assert result.value.exchange is None
+    assert "industry" in result.missing_fields
+    assert "duplicate security detail field: 行业" in result.error

@@ -36,7 +36,7 @@ BAR_COLUMNS = {
 }
 
 
-MISSING_MARKERS = {"", "nan", "nat", "none", "null", "--", "-", "—", "n/a"}
+MISSING_MARKERS = {"", "nan", "nat", "none", "null", "--", "-", "—", "n/a", "<na>"}
 
 
 def _is_missing(value: Any) -> bool:

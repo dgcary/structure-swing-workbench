@@ -75,3 +75,24 @@ def test_daily_bars_reject_future_trading_date_but_allow_today():
     ).get_bars("600000", Timeframe.DAY)
     assert today.quality is DataQuality.UNVERIFIED
     assert today.value[0].close == 10
+
+
+def test_time_only_quote_observation_is_unverified_not_malformed():
+    adapter = AKShareProvider(
+        client=Client("14:29:00"), clock=lambda: NOW
+    )
+    quote = adapter.get_quote("600000")
+    assert quote.value is not None
+    assert quote.observed_at is None
+    assert quote.quality is DataQuality.UNVERIFIED
+    assert quote.error is None
+
+
+def test_time_only_minute_bar_is_error_without_a_full_observation_date():
+    adapter = AKShareProvider(
+        client=Client("14:25:00"), clock=lambda: NOW
+    )
+    bars = adapter.get_bars("600000", Timeframe.MIN5)
+    assert bars.value is None
+    assert bars.quality is DataQuality.ERROR
+    assert "date/time missing" in bars.error

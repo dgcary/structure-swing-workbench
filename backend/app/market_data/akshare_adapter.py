@@ -5,7 +5,7 @@ No timestamp is invented when a source omits its observation time.
 """
 from collections.abc import Callable
 from dataclasses import fields
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from itertools import pairwise
 from typing import Any
@@ -58,10 +58,16 @@ def _decimal(value: Any) -> Decimal | None:
 def _timestamp(value: Any) -> datetime | None:
     if _is_missing(value):
         return None
+    raw = str(value).strip()
     try:
-        parsed = datetime.fromisoformat(str(value).strip())
+        parsed = datetime.fromisoformat(raw)
     except (ValueError, TypeError) as exc:
-        raise ValueError(f"invalid source timestamp: {value}") from exc
+        # A time of day without a date cannot prove the source is fresh.
+        try:
+            time.fromisoformat(raw)
+        except ValueError:
+            raise ValueError(f"invalid source timestamp: {value}") from exc
+        return None
     return parsed.replace(tzinfo=CHINA) if parsed.tzinfo is None else parsed
 
 

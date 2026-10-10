@@ -38,7 +38,8 @@ def test_missing_industry_and_primary_exchange_use_known_fallback():
         "行业": float("nan"), "交易所": "--",
         "上市交易所": "上海证券交易所",
     }), clock=lambda: NOW).get_security("600000")
-    assert result.quality is DataQuality.FRESH
+    assert result.quality is DataQuality.UNVERIFIED
+    assert result.observed_at is None
     assert result.value.industry is None
     assert result.value.exchange == "上海证券交易所"
     assert "industry" in result.missing_fields
@@ -49,7 +50,19 @@ def test_missing_exchange_metadata_is_not_serialized_as_placeholder():
     result = AKShareProvider(client=Client({
         "行业": "银行", "交易所": "NaN", "上市交易所": "-",
     }), clock=lambda: NOW).get_security("600000")
-    assert result.quality is DataQuality.FRESH
+    assert result.quality is DataQuality.UNVERIFIED
+    assert result.observed_at is None
     assert result.value.industry == "银行"
     assert result.value.exchange is None
     assert "exchange" in result.missing_fields
+
+
+def test_fresh_quote_does_not_certify_undated_security_metadata():
+    adapter = AKShareProvider(client=Client({
+        "行业": "银行", "交易所": "上海证券交易所",
+    }), clock=lambda: NOW)
+    assert adapter.get_quote("600000").quality is DataQuality.FRESH
+    metadata = adapter.get_security("600000")
+    assert metadata.value.industry == "银行"
+    assert metadata.quality is DataQuality.UNVERIFIED
+    assert metadata.observed_at is None

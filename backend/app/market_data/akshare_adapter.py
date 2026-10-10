@@ -265,9 +265,11 @@ class AKShareProvider:
             field.name for field in fields(SecurityInfo)
             if getattr(info, field.name) is None
         )
+        # A quote observation time cannot verify separately fetched metadata.
+        # Keep undated industry/exchange facts explicitly unverified.
         return DataResult(
             value=info, source=self.source, fetched_at=quote_result.fetched_at,
-            observed_at=quote_result.observed_at,
-            quality=DataQuality.ERROR if detail_error else quote_result.quality,
+            observed_at=None,
+            quality=DataQuality.ERROR if detail_error else DataQuality.UNVERIFIED,
             missing_fields=missing, error=detail_error,
         )

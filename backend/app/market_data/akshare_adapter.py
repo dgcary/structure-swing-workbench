@@ -257,7 +257,7 @@ class AKShareProvider:
                 missing_fields=quote_result.missing_fields, error=quote_result.error,
             )
         name = quote_result.value.name
-        st = name.upper().startswith(("ST", "*ST", "S*ST")) if name else None
+        st = name.upper().startswith(("ST", "*ST", "S*ST", "SST")) if name else None
         details: dict[str, Any] = {}
         detail_error = None
         try:

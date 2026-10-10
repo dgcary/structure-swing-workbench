@@ -66,3 +66,27 @@ def test_fresh_quote_does_not_certify_undated_security_metadata():
     assert metadata.value.industry == "银行"
     assert metadata.quality is DataQuality.UNVERIFIED
     assert metadata.observed_at is None
+
+
+def test_legacy_sst_prefix_is_classified_without_guessing_delisting_risk():
+    class NamedClient(Client):
+        def __init__(self, name):
+            super().__init__({"行业": "银行"})
+            self.name = name
+
+        def stock_zh_a_spot_em(self):
+            rows = super().stock_zh_a_spot_em()
+            rows.records[0]["名称"] = self.name
+            return rows
+
+    for name in ("ST银行", "*ST银行", "S*ST银行", "SST银行"):
+        result = AKShareProvider(client=NamedClient(name), clock=lambda: NOW).get_security(
+            "600000"
+        )
+        assert result.value.is_st is True
+        assert result.value.delisting_risk is None
+
+    ordinary = AKShareProvider(
+        client=NamedClient("浦发银行"), clock=lambda: NOW
+    ).get_security("600000")
+    assert ordinary.value.is_st is False

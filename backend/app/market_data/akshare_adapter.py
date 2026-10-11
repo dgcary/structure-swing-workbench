@@ -114,6 +114,29 @@ def _first_timestamp(
     return None
 
 
+def _explicit_status_flag(
+    details: dict[str, Any], keys: tuple[str, ...],
+    true_values: tuple[str, ...], false_values: tuple[str, ...],
+) -> bool | None:
+    """Only map explicit source status fields; never infer a negative."""
+    found: set[bool] = set()
+    for key in keys:
+        raw = details.get(key)
+        if _is_missing(raw):
+            continue
+        if isinstance(raw, bool):
+            found.add(raw)
+            continue
+        value = str(raw).strip().lower()
+        if value in true_values:
+            found.add(True)
+        elif value in false_values:
+            found.add(False)
+    if len(found) > 1:
+        raise ValueError(f"conflicting source status fields: {keys}")
+    return next(iter(found)) if found else None
+
+
 class AKShareProvider:
     source = "AKShare"
 
@@ -303,11 +326,26 @@ class AKShareProvider:
         exchange = details.get("交易所")
         if _is_missing(exchange):
             exchange = details.get("上市交易所")
+        try:
+            suspended = _explicit_status_flag(
+                details, ("是否停牌", "停牌状态"),
+                ("是", "停牌", "已停牌", "true", "1"),
+                ("否", "正常交易", "交易中", "未停牌", "false", "0"),
+            )
+            delisting_risk = _explicit_status_flag(
+                details, ("是否退市风险警示", "退市风险警示"),
+                ("是", "有", "存在", "true", "1"),
+                ("否", "无", "不存在", "false", "0"),
+            )
+        except ValueError as exc:
+            detail_error = f"security status conflict: {exc}"
+            suspended = None
+            delisting_risk = None
         info = SecurityInfo(
             symbol=symbol, name=name,
             industry=None if _is_missing(industry) else str(industry),
             exchange=None if _is_missing(exchange) else str(exchange),
-            is_st=st,
+            suspended=suspended, is_st=st, delisting_risk=delisting_risk,
         )
         missing = tuple(
             field.name for field in fields(SecurityInfo)

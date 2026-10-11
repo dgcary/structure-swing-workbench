@@ -72,6 +72,8 @@ class DataResult[T]:
     error: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.quality, DataQuality):
+            raise TypeError("quality must be a DataQuality enum value")
         if self.fetched_at.tzinfo is None:
             raise ValueError("fetched_at must include a timezone")
         if self.observed_at is not None and self.observed_at.tzinfo is None:

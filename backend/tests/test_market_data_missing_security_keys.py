@@ -22,5 +22,6 @@ def test_missing_security_detail_key_is_not_silent():
 
     now = datetime(2026, 10, 9, 14, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
     result = AKShareProvider(client=Client(), clock=lambda: now).get_security("600000")
-    assert result.quality is DataQuality.ERROR
-    assert "field name is missing" in result.error
+    assert result.quality is DataQuality.UNVERIFIED
+    assert "industry" in result.missing_fields
+    assert result.error is None

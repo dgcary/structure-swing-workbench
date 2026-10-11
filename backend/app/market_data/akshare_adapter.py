@@ -3,12 +3,12 @@
 AKShare is imported lazily; deterministic tests inject a fake client.
 No timestamp is invented when a source omits its observation time.
 """
+import re
 from collections.abc import Callable
 from dataclasses import fields
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from itertools import pairwise
-import re
 from typing import Any
 from zoneinfo import ZoneInfo
 

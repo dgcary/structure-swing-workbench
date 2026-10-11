@@ -72,6 +72,8 @@ class DataResult[T]:
     error: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise ValueError("source must identify a non-empty provider")
         if not isinstance(self.quality, DataQuality):
             raise TypeError("quality must be a DataQuality enum value")
         if self.fetched_at.tzinfo is None:

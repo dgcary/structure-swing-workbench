@@ -293,6 +293,7 @@ class AKShareProvider:
                     raise ValueError(f"duplicate security detail field: {key}")
                 details[key] = row.get("value")
         except Exception as exc:  # noqa: BLE001 - external provider failures are surfaced
+            details.clear()  # do not expose partially parsed, inconsistent metadata
             detail_error = f"security details unavailable: {type(exc).__name__}: {exc}"
         industry = details.get("行业")
         exchange = details.get("交易所")

@@ -173,6 +173,8 @@ class AKShareProvider:
             for key in ("last", "previous_close", "open", "high", "low", "limit_up", "limit_down"):
                 if values[key] is not None and values[key] < 0:
                     raise ValueError(f"quote {key} is negative")
+                if values[key] == 0:
+                    raise ValueError(f"quote {key} must be positive")
             if values["high"] is not None and values["low"] is not None:
                 if values["high"] < values["low"]:
                     raise ValueError("quote high is below low")
@@ -237,6 +239,8 @@ class AKShareProvider:
                 for key in ("open", "high", "low", "close"):
                     if values[key] < 0:
                         raise ValueError(f"bar {key} is negative")
+                    if values[key] == 0:
+                        raise ValueError(f"bar {key} must be positive")
                 if values["high"] < values["low"]:
                     raise ValueError("bar high is below low")
                 if not values["low"] <= values["open"] <= values["high"]:

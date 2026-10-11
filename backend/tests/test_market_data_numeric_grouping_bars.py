@@ -9,7 +9,6 @@ import pytest
 from app.market_data.akshare_adapter import AKShareProvider
 from app.market_data.contracts import DataQuality, Timeframe
 
-
 NOW = datetime(2026, 10, 9, 14, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
 
 
@@ -56,7 +55,7 @@ def test_bad_grouping_in_minute_bars_is_error(field, raw):
 
 
 @pytest.mark.parametrize("field,raw,expected", [
-    ("成交量", "1,234", Decimal("1234")),
+    ("成交量", "1,234", Decimal(1234)),
     ("成交额", "12,345.67", Decimal("12345.67")),
 ])
 def test_valid_grouping_in_minute_bars_preserves_values(field, raw, expected):

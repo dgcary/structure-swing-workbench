@@ -43,7 +43,7 @@ def test_malformed_grouped_amount_is_error(raw):
 
 
 @pytest.mark.parametrize("raw,expected", [
-    ("1,234", Decimal("1234")),
+    ("1,234", Decimal(1234)),
     ("1,234.56", Decimal("1234.56")),
     ("1,234,567.89", Decimal("1234567.89")),
 ])

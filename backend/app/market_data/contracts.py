@@ -84,8 +84,11 @@ class DataResult[T]:
             raise ValueError("data without a value must be MISSING or ERROR")
         if self.value is not None and self.quality is DataQuality.MISSING:
             raise ValueError("MISSING cannot contain a data value")
-        if self.quality in (DataQuality.FRESH, DataQuality.STALE) and self.observed_at is None:
-            raise ValueError("FRESH/STALE require a source observation timestamp")
+        if self.quality in (DataQuality.FRESH, DataQuality.STALE):
+            if self.observed_at is None:
+                raise ValueError("FRESH/STALE require a source observation timestamp")
+            if self.observed_at - self.fetched_at > timedelta(minutes=5):
+                raise ValueError("FRESH/STALE cannot contain a future source observation")
 
 
 def quality_at(

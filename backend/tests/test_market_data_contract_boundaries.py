@@ -77,3 +77,23 @@ def test_result_rejects_non_enum_quality_before_other_checks(invalid_quality):
             value=None, source="fixture", fetched_at=NOW,
             observed_at=None, quality=invalid_quality,
         )
+
+
+@pytest.mark.parametrize("quality", [DataQuality.FRESH, DataQuality.STALE])
+def test_result_rejects_far_future_observation_even_when_provider_claims_valid(quality):
+    with pytest.raises(ValueError, match="future source observation"):
+        DataResult(
+            value=Quote(symbol="600000"), source="fixture",
+            fetched_at=NOW,
+            observed_at=NOW + timedelta(minutes=5, seconds=1),
+            quality=quality,
+        )
+
+
+def test_result_allows_future_observation_within_clock_skew_tolerance():
+    result = DataResult(
+        value=Quote(symbol="600000"), source="fixture",
+        fetched_at=NOW, observed_at=NOW + timedelta(minutes=5),
+        quality=DataQuality.FRESH,
+    )
+    assert result.quality is DataQuality.FRESH

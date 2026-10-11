@@ -231,9 +231,13 @@ def test_malformed_source_codes_never_round_or_match(raw_code):
     assert result.value is None
 
 
-@pytest.mark.parametrize("field", ["最新价", "昨收", "今开", "最高", "最低", "涨停价", "跌停价"])
+@pytest.mark.parametrize("field", [
+    "最新价", "昨收", "今开", "最高", "最低", "涨停价", "跌停价",
+])
 def test_zero_quote_price_is_explicitly_invalid(field):
-    result = AKShareProvider(client=QuoteClient({field: 0}), clock=lambda: NOW).get_quote("600000")
+    result = AKShareProvider(
+        client=QuoteClient({field: 0}), clock=lambda: NOW
+    ).get_quote("600000")
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert "must be positive" in result.error
@@ -241,7 +245,9 @@ def test_zero_quote_price_is_explicitly_invalid(field):
 
 @pytest.mark.parametrize("field", ["开盘", "最高", "最低", "收盘"])
 def test_zero_bar_price_is_explicitly_invalid(field):
-    result = AKShareProvider(client=BarClient({field: 0}), clock=lambda: NOW).get_bars("600000", Timeframe.MIN5)
+    result = AKShareProvider(
+        client=BarClient({field: 0}), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.MIN5)
     assert result.quality is DataQuality.ERROR
     assert result.value is None
     assert "must be positive" in result.error

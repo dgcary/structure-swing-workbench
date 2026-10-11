@@ -8,6 +8,7 @@ from dataclasses import fields
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from itertools import pairwise
+import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -61,8 +62,13 @@ def _stock_code(value: Any) -> str | None:
 def _decimal(value: Any) -> Decimal | None:
     if _is_missing(value):
         return None
+    raw = str(value).strip()
+    if "," in raw and not re.fullmatch(
+        r"[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?(?:[eE][+-]?\d+)?", raw
+    ):
+        raise ValueError(f"invalid numeric grouping: {value}")
     try:
-        result = Decimal(str(value).replace(",", ""))
+        result = Decimal(raw.replace(",", ""))
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"invalid numeric value: {value}") from exc
     if not result.is_finite():

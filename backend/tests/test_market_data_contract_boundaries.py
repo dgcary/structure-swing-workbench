@@ -68,3 +68,12 @@ def test_math_returns_none_when_window_is_too_large_and_rejects_zero():
         moving_average(bars, 0)
     with pytest.raises(ValueError):
         period_extrema(bars, -1)
+
+
+@pytest.mark.parametrize("invalid_quality", ["FRESH", "ERROR", None, 1])
+def test_result_rejects_non_enum_quality_before_other_checks(invalid_quality):
+    with pytest.raises(TypeError, match="DataQuality enum"):
+        DataResult(
+            value=None, source="fixture", fetched_at=NOW,
+            observed_at=None, quality=invalid_quality,
+        )

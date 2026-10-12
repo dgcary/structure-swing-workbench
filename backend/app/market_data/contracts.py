@@ -103,6 +103,10 @@ class DataResult[T]:
             raise ValueError("data without a value must be MISSING or ERROR")
         if self.value is not None and self.quality is DataQuality.MISSING:
             raise ValueError("MISSING cannot contain a data value")
+        if self.quality is DataQuality.ERROR and (
+            not isinstance(self.error, str) or not self.error.strip()
+        ):
+            raise ValueError("ERROR requires a non-empty error reason")
         if self.quality in (DataQuality.FRESH, DataQuality.STALE):
             if self.observed_at is None:
                 raise ValueError("FRESH/STALE require a source observation timestamp")

@@ -256,7 +256,7 @@ def estimate_distribution(
     previous_float: Decimal | None = None
     for day in observations:
         current_float = day.floating_shares
-        if not day.corporate_action_checked and day.split_factor is None:
+        if not day.corporate_action_checked:
             warnings.append("CORPORATE_ACTION_UNVERIFIED")
         if previous_float is None:
             warnings.append("INITIAL_COST_BOOTSTRAP")

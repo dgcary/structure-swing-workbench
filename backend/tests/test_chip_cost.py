@@ -276,3 +276,17 @@ def test_zero_volume_positive_turnover_is_rejected_without_fabricated_shares():
     assert idle.source_quality is DataQuality.FRESH
     assert idle.estimated_total == D("1000")
     assert idle.metrics.estimated_mean_cost == D("10")
+
+def test_split_factor_does_not_imply_all_corporate_actions_were_checked():
+    # A known split factor is not proof that the entire action history was verified.
+    result = estimate_distribution(
+        (
+            obs(1, "20", turnover="0", floating="1000"),
+            obs(2, "10", turnover="0", floating="2000", split="2", checked=False),
+        ),
+        computed_at=CLOCK,
+    )
+    assert result.estimated_total == D("2000")
+    assert result.metrics.estimated_mean_cost == D("10")
+    assert "SPLIT_REBASED" in result.warnings
+    assert "CORPORATE_ACTION_UNVERIFIED" in result.warnings

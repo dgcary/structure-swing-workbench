@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
+from itertools import pairwise
 from typing import Protocol
 
 
@@ -140,7 +141,7 @@ class MarketDataProvider(Protocol):
 
 def _require_chronological_bars(bars: tuple[Bar, ...]) -> None:
     """Reject unordered or duplicated observations instead of silently miscalculating."""
-    if any(a.observed_at >= b.observed_at for a, b in zip(bars, bars[1:])):
+    if any(a.observed_at >= b.observed_at for a, b in pairwise(bars)):
         raise ValueError("bar timestamps must be strictly increasing")
 
 

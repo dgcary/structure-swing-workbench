@@ -63,11 +63,11 @@ def test_quality_at_rejects_non_resolving_observation_timezone():
 def test_objective_window_math_rejects_unordered_or_duplicate_observations():
     first = Bar(
         datetime.now().astimezone(),
-        Decimal("10"), Decimal("12"), Decimal("9"), Decimal("11"),
+        Decimal(10), Decimal(12), Decimal(9), Decimal(11),
     )
     later = Bar(
         first.observed_at + timedelta(minutes=5),
-        Decimal("11"), Decimal("13"), Decimal("10"), Decimal("12"),
+        Decimal(11), Decimal(13), Decimal(10), Decimal(12),
     )
     for invalid in ((later, first), (first, first)):
         with pytest.raises(ValueError, match="strictly increasing"):

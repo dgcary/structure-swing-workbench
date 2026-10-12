@@ -1,0 +1,231 @@
+"""M4 provider source-time boundary tests."""
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from app.market_data.akshare_adapter import AKShareProvider
+from app.market_data.contracts import DataQuality, Timeframe
+
+NOW = datetime(2026, 10, 9, 14, 30, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+
+class Rows:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def to_dict(self, orient):
+        assert orient == "records"
+        return self.rows
+
+
+class Client:
+    def __init__(self, timestamp):
+        self.timestamp = timestamp
+
+    def stock_zh_a_spot_em(self):
+        return Rows([{
+            "代码": "600000", "名称": "浦发银行",
+            "最新价": 10, "今开": 10, "最高": 10, "最低": 10,
+            "更新时间": self.timestamp,
+        }])
+
+    def stock_zh_a_hist_min_em(self, **kwargs):
+        return Rows([{
+            "时间": self.timestamp, "开盘": 10,
+            "最高": 10, "最低": 10, "收盘": 10,
+        }])
+
+    def stock_zh_a_hist(self, **kwargs):
+        return Rows([{
+            "日期": self.timestamp, "开盘": 10,
+            "最高": 10, "最低": 10, "收盘": 10,
+        }])
+
+
+def test_future_source_time_is_error_with_reason_for_quote_and_bar():
+    adapter = AKShareProvider(
+        client=Client("2026-10-09T06:36:00+00:00"), clock=lambda: NOW
+    )
+    for result in (
+        adapter.get_quote("600000"),
+        adapter.get_bars("600000", Timeframe.MIN5),
+    ):
+        assert result.quality is DataQuality.ERROR
+        assert result.value is None
+        assert "ahead of fetch time" in result.error
+
+
+def test_utc_offset_source_time_maps_to_china_clock():
+    adapter = AKShareProvider(
+        client=Client("2026-10-09T06:29:00+00:00"), clock=lambda: NOW
+    )
+    assert adapter.get_quote("600000").quality is DataQuality.FRESH
+    assert adapter.get_bars("600000", Timeframe.MIN5).quality is DataQuality.FRESH
+
+
+def test_daily_bars_reject_future_trading_date_but_allow_today():
+    future = AKShareProvider(
+        client=Client("2026-10-10"), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.DAY)
+    assert future.quality is DataQuality.ERROR
+    assert future.value is None
+    assert "date is in the future" in future.error
+
+    today = AKShareProvider(
+        client=Client("2026-10-09"), clock=lambda: NOW
+    ).get_bars("600000", Timeframe.DAY)
+    assert today.quality is DataQuality.UNVERIFIED
+    assert today.value[0].close == 10
+
+
+def test_time_only_quote_observation_is_unverified_not_malformed():
+    adapter = AKShareProvider(
+        client=Client("14:29:00"), clock=lambda: NOW
+    )
+    quote = adapter.get_quote("600000")
+    assert quote.value is not None
+    assert quote.observed_at is None
+    assert quote.quality is DataQuality.UNVERIFIED
+    assert quote.error is None
+
+
+def test_time_only_minute_bar_is_error_without_a_full_observation_date():
+    adapter = AKShareProvider(
+        client=Client("14:25:00"), clock=lambda: NOW
+    )
+    bars = adapter.get_bars("600000", Timeframe.MIN5)
+    assert bars.value is None
+    assert bars.quality is DataQuality.ERROR
+    assert "date/time missing" in bars.error
+
+
+def test_date_only_quote_time_is_unverified_not_an_intraday_timestamp():
+    adapter = AKShareProvider(client=Client("2026-10-09"), clock=lambda: NOW)
+    result = adapter.get_quote("600000")
+    assert result.value is not None
+    assert result.observed_at is None
+    assert result.quality is DataQuality.UNVERIFIED
+
+
+def test_date_only_minute_bar_is_rejected_without_intraday_time():
+    adapter = AKShareProvider(client=Client("2026-10-09"), clock=lambda: NOW)
+    result = adapter.get_bars("600000", Timeframe.MIN5)
+    assert result.value is None
+    assert result.quality is DataQuality.ERROR
+    assert "date/time missing" in result.error
+
+
+def test_daily_bar_prefers_trading_date_when_intraday_time_also_exists():
+    class BothColumns(Client):
+        def stock_zh_a_hist(self, **kwargs):
+            return Rows([{
+                "日期": "2026-10-08", "时间": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 11, "最低": 9, "收盘": 10,
+            }])
+
+        def stock_zh_a_hist_min_em(self, **kwargs):
+            return self.stock_zh_a_hist(**kwargs)
+
+    adapter = AKShareProvider(client=BothColumns("unused"), clock=lambda: NOW)
+    daily = adapter.get_bars("600000", Timeframe.DAY)
+    minute = adapter.get_bars("600000", Timeframe.MIN5)
+
+    assert daily.quality is DataQuality.UNVERIFIED
+    assert daily.value[0].observed_at.date().isoformat() == "2026-10-08"
+    assert minute.quality is DataQuality.FRESH
+    assert minute.value[0].observed_at == datetime(
+        2026, 10, 9, 14, 25, tzinfo=ZoneInfo("Asia/Shanghai")
+    )
+
+
+def test_future_daily_trading_date_is_not_masked_by_older_time_column():
+    class BothColumns(Client):
+        def stock_zh_a_hist(self, **kwargs):
+            return Rows([{
+                "日期": "2026-10-11", "时间": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 10, "最低": 10, "收盘": 10,
+            }])
+
+    adapter = AKShareProvider(client=BothColumns("unused"), clock=lambda: NOW)
+    result = adapter.get_bars("600000", Timeframe.DAY)
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "date is in the future" in result.error
+
+
+def test_quote_missing_primary_timestamp_uses_valid_fallback():
+    class FallbackClient(Client):
+        def stock_zh_a_spot_em(self):
+            return Rows([{
+                "代码": "600000", "名称": "浦发银行",
+                "最新价": 10, "今开": 10, "最高": 10, "最低": 10,
+                "更新时间": "--", "时间": "2026-10-09 14:29:00",
+            }])
+
+    result = AKShareProvider(client=FallbackClient("unused"), clock=lambda: NOW).get_quote(
+        "600000"
+    )
+    assert result.quality is DataQuality.FRESH
+    assert result.observed_at == datetime(2026, 10, 9, 14, 29, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+
+def test_minute_bar_missing_primary_timestamp_uses_valid_fallback():
+    class FallbackClient(Client):
+        def stock_zh_a_hist_min_em(self, **kwargs):
+            return Rows([{
+                "时间": "NaN", "日期": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 10, "最低": 10, "收盘": 10,
+            }])
+
+    result = AKShareProvider(client=FallbackClient("unused"), clock=lambda: NOW).get_bars(
+        "600000", Timeframe.MIN5
+    )
+    assert result.quality is DataQuality.FRESH
+    assert result.value[0].observed_at == datetime(
+        2026, 10, 9, 14, 25, tzinfo=ZoneInfo("Asia/Shanghai")
+    )
+
+
+def test_time_only_primary_uses_full_datetime_backup_for_quote_and_minute_bar():
+    class BothTimesClient(Client):
+        def stock_zh_a_spot_em(self):
+            return Rows([{
+                "代码": "600000", "名称": "浦发银行",
+                "最新价": 10, "今开": 10, "最高": 10, "最低": 10,
+                "更新时间": "14:29:00", "时间": "2026-10-09 14:29:00",
+            }])
+
+        def stock_zh_a_hist_min_em(self, **kwargs):
+            return Rows([{
+                "时间": "14:25:00", "日期": "2026-10-09 14:25:00",
+                "开盘": 10, "最高": 10, "最低": 10, "收盘": 10,
+            }])
+
+    adapter = AKShareProvider(client=BothTimesClient("unused"), clock=lambda: NOW)
+    quote = adapter.get_quote("600000")
+    bars = adapter.get_bars("600000", Timeframe.MIN5)
+
+    assert quote.quality is DataQuality.FRESH
+    assert quote.observed_at == datetime(
+        2026, 10, 9, 14, 29, tzinfo=ZoneInfo("Asia/Shanghai")
+    )
+    assert bars.quality is DataQuality.FRESH
+    assert bars.value[0].observed_at == datetime(
+        2026, 10, 9, 14, 25, tzinfo=ZoneInfo("Asia/Shanghai")
+    )
+
+
+def test_malformed_primary_timestamp_is_not_hidden_by_valid_backup():
+    class BadTimeClient(Client):
+        def stock_zh_a_spot_em(self):
+            return Rows([{
+                "代码": "600000", "名称": "浦发银行",
+                "最新价": 10, "今开": 10, "最高": 10, "最低": 10,
+                "更新时间": "not-a-timestamp", "时间": "2026-10-09 14:29:00",
+            }])
+
+    result = AKShareProvider(client=BadTimeClient("unused"), clock=lambda: NOW).get_quote(
+        "600000"
+    )
+    assert result.quality is DataQuality.ERROR
+    assert result.value is None
+    assert "invalid source timestamp" in result.error

@@ -182,7 +182,7 @@ def test_provider_is_replaceable_and_math_does_not_predict():
     assert replacement.get_quote("600000").value.last == Decimal(10)
     bars = (
         Bar(NOW, Decimal(10), Decimal(12), Decimal(9), Decimal(11)),
-        Bar(NOW, Decimal(11), Decimal(13), Decimal(10), Decimal(12)),
+        Bar(NOW + timedelta(minutes=5), Decimal(11), Decimal(13), Decimal(10), Decimal(12)),
     )
     assert moving_average(bars, 2) == Decimal("11.5")
     assert period_extrema(bars, 2) == (Decimal(13), Decimal(9))

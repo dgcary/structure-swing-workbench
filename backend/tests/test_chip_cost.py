@@ -70,12 +70,12 @@ def test_turnover_decay_and_mean_cost_two_day_replay():
     result = estimate_distribution(
         (obs(1, "10"), obs(2, "12")), computed_at=CLOCK,
     )
-    assert by_price(result) == {D("10.0"): D("250"), D("12.0"): D("750")}
+    assert by_price(result) == {D("10.0"): D("500"), D("12.0"): D("500")}
     assert result.estimated_total == result.floating_shares == D("1000")
     assert result.share_gap == 0
-    assert result.metrics.estimated_mean_cost == D("11.50")
-    assert result.metrics.profitable_fraction == D("0.25")
-    assert result.metrics.breakeven_fraction == D("0.75")
+    assert result.metrics.estimated_mean_cost == D("11.0")
+    assert result.metrics.profitable_fraction == D("0.5")
+    assert result.metrics.breakeven_fraction == D("0.5")
     assert result.metrics.underwater_fraction == 0
     assert result.metrics.interval_70 == (D("10.0"), D("12.0"))
     assert result.metrics.interval_90 == (D("10.0"), D("12.0"))

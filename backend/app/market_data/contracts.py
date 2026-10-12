@@ -93,7 +93,7 @@ class DataResult[T]:
             raise ValueError("source must identify a non-empty provider")
         if not isinstance(self.quality, DataQuality):
             raise TypeError("quality must be a DataQuality enum value")
-        if self.fetched_at.tzinfo is None:
+        if self.fetched_at.tzinfo is None or self.fetched_at.utcoffset() is None:
             raise ValueError("fetched_at must include a timezone")
         if self.observed_at is not None and self.observed_at.tzinfo is None:
             raise ValueError("observed_at must include a timezone")

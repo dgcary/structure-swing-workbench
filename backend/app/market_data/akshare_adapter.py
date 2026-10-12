@@ -361,7 +361,7 @@ class AKShareProvider:
         # A quote observation time cannot verify separately fetched metadata.
         # Keep undated industry/exchange facts explicitly unverified.
         return DataResult(
-            value=info, source=self.source, fetched_at=quote_result.fetched_at,
+            value=info, source=self.source, fetched_at=self.clock(),
             observed_at=None,
             quality=DataQuality.ERROR if detail_error else DataQuality.UNVERIFIED,
             missing_fields=missing, error=detail_error,

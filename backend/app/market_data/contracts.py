@@ -95,7 +95,7 @@ class DataResult[T]:
             raise TypeError("quality must be a DataQuality enum value")
         if self.fetched_at.tzinfo is None or self.fetched_at.utcoffset() is None:
             raise ValueError("fetched_at must include a timezone")
-        if self.observed_at is not None and self.observed_at.tzinfo is None:
+        if self.observed_at is not None and self.observed_at.utcoffset() is None:
             raise ValueError("observed_at must include a timezone")
         if self.value is None and self.quality in (
             DataQuality.FRESH, DataQuality.STALE, DataQuality.UNVERIFIED,

@@ -60,7 +60,7 @@ def test_result_rejects_naive_observation_or_fetch_time():
 def test_math_returns_none_when_window_is_too_large_and_rejects_zero():
     bars = (
         Bar(NOW, Decimal(10), Decimal(12), Decimal(9), Decimal(11)),
-        Bar(NOW, Decimal(11), Decimal(13), Decimal(10), Decimal(12)),
+        Bar(NOW + timedelta(minutes=5), Decimal(11), Decimal(13), Decimal(10), Decimal(12)),
     )
     assert moving_average(bars, 3) is None
     assert period_extrema(bars, 3) is None

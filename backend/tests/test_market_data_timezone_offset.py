@@ -46,3 +46,8 @@ def test_quality_at_rejects_non_resolving_fetch_timezone():
 def test_bar_rejects_non_resolving_timezone():
     with pytest.raises(ValueError, match="timezone"):
         Bar(INVALID, Decimal(10), Decimal(12), Decimal(9), Decimal(11))
+
+
+def test_quality_at_rejects_non_resolving_observation_timezone():
+    with pytest.raises(ValueError, match="timezone"):
+        quality_at(INVALID, datetime.now().astimezone(), timedelta(minutes=15))

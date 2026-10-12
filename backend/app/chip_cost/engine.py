@@ -8,12 +8,19 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_FLOOR
 from itertools import pairwise
+from zoneinfo import ZoneInfo
 
 from app.market_data.contracts import Bar, DataQuality
 
 MODEL_VERSION = "turnover-decay-price-bins-v1"
 ZERO = Decimal(0)
 ONE = Decimal(1)
+A_SHARE_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
+
+def _trading_date(timestamp: datetime):
+    """Normalize provider timestamps to the A-share exchange calendar date."""
+    return timestamp.astimezone(A_SHARE_TIMEZONE).date()
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +121,7 @@ def _new_shares(
     bars = observation.minute_bars
     if bars:
         same_day = all(
-            bar.observed_at.date() == observation.bar.observed_at.date()
+            _trading_date(bar.observed_at) == _trading_date(observation.bar.observed_at)
             for bar in bars
         )
         chronological = all(
@@ -202,7 +209,7 @@ def estimate_distribution(
     if now.utcoffset() is None:
         raise ValueError("computed_at must include timezone")
     if any(
-        left.bar.observed_at.date() >= right.bar.observed_at.date()
+        _trading_date(left.bar.observed_at) >= _trading_date(right.bar.observed_at)
         for left, right in pairwise(observations)
     ):
         raise ValueError("daily observations must be strictly chronological by trading date")

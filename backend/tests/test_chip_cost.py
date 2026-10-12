@@ -224,3 +224,36 @@ def test_impossible_minute_price_reverts_to_daily_range_and_warns():
     assert by_price(result) == {D("10.0"): D("1000")}
     assert "MINUTE_DATA_REJECTED_DAILY_FALLBACK" in result.warnings
     assert "DAILY_UNIFORM_PRICE_APPROXIMATION" in result.warnings
+
+
+def test_exchange_date_duplicate_across_utc_midnight_is_rejected():
+    from dataclasses import replace
+
+    first = replace(obs(1, "10"), bar=replace(
+        bar(1, "10"), observed_at=datetime(2026, 10, 1, 23, tzinfo=timezone.utc),
+    ))
+    second = replace(obs(2, "11"), bar=replace(
+        bar(2, "11"), observed_at=datetime(2026, 10, 2, 1, tzinfo=timezone.utc),
+    ))
+    with pytest.raises(ValueError, match="trading date"):
+        estimate_distribution((first, second), computed_at=CLOCK)
+
+
+def test_minute_bar_uses_exchange_date_not_utc_date():
+    from dataclasses import replace
+
+    daily = replace(bar(1, "10"), observed_at=datetime(
+        2026, 10, 1, 23, tzinfo=timezone.utc,
+    ))
+    minute = replace(bar(2, "10"), observed_at=datetime(
+        2026, 10, 2, 1, tzinfo=timezone.utc,
+    ))
+    item = DayObservation(
+        bar=daily, turnover_rate=D("1"), floating_shares=D("1000"),
+        source="fixture", quality=DataQuality.FRESH, minute_bars=(minute,),
+        corporate_action_checked=True,
+    )
+    result = estimate_distribution((item,), computed_at=CLOCK)
+    assert "MINUTE_DATA_REJECTED_DAILY_FALLBACK" not in result.warnings
+    assert "DAILY_UNIFORM_PRICE_APPROXIMATION" not in result.warnings
+    assert result.estimated_total == D("1000")

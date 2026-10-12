@@ -121,6 +121,10 @@ def _new_shares(
             left.observed_at < right.observed_at for left, right in pairwise(bars)
         )
         valid_volumes = all(bar.volume is not None for bar in bars)
+        within_daily_range = all(
+            observation.bar.low <= bar.low <= bar.high <= observation.bar.high
+            for bar in bars
+        )
         minute_volume = sum((bar.volume or ZERO for bar in bars), ZERO)
         day_volume = observation.bar.volume
         # Volume units are source-specific; reject incompatible minute/day scales.
@@ -129,7 +133,10 @@ def _new_shares(
             and day_volume > ZERO
             and abs(minute_volume - day_volume) <= day_volume * Decimal("0.01")
         )
-        if same_day and chronological and valid_volumes and minute_volume > ZERO and consistent:
+        if (
+            same_day and chronological and valid_volumes and within_daily_range
+            and minute_volume > ZERO and consistent
+        ):
             for bar in bars:
                 _spread(
                     result, bar.low, bar.high,
@@ -195,10 +202,10 @@ def estimate_distribution(
     if now.utcoffset() is None:
         raise ValueError("computed_at must include timezone")
     if any(
-        left.bar.observed_at >= right.bar.observed_at
+        left.bar.observed_at.date() >= right.bar.observed_at.date()
         for left, right in pairwise(observations)
     ):
-        raise ValueError("daily observations must be strictly chronological")
+        raise ValueError("daily observations must be strictly chronological by trading date")
     warnings: list[str] = []
     sources = tuple(dict.fromkeys(item.source for item in observations))
     if not observations:

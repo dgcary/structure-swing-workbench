@@ -194,3 +194,33 @@ def test_replay_is_deterministic_and_never_emits_signals():
     assert not hasattr(first, "buy_signal")
     assert first.metrics.interval_70[0] <= first.metrics.interval_70[1]
     assert first.metrics.interval_90[0] <= first.metrics.interval_90[1]
+
+
+
+def test_same_day_double_count_is_rejected_even_with_different_timestamps():
+    morning = obs(1, "10")
+    afternoon = DayObservation(
+        bar=bar(1, "11", hour=3),
+        turnover_rate=D("0.5"),
+        floating_shares=D("1000"),
+        source="fixture",
+        quality=DataQuality.FRESH,
+        corporate_action_checked=True,
+    )
+    with pytest.raises(ValueError, match="trading date"):
+        estimate_distribution((morning, afternoon), computed_at=CLOCK)
+
+
+def test_impossible_minute_price_reverts_to_daily_range_and_warns():
+    # Matching volumes alone must not allow minute prices outside the daily OHLC.
+    bad_minute = (
+        bar(1, "10", volume="500", hour=1),
+        bar(1, "30", volume="500", hour=2),
+    )
+    result = estimate_distribution(
+        (obs(1, "10", turnover="1", minute_bars=bad_minute),),
+        computed_at=CLOCK,
+    )
+    assert by_price(result) == {D("10.0"): D("1000")}
+    assert "MINUTE_DATA_REJECTED_DAILY_FALLBACK" in result.warnings
+    assert "DAILY_UNIFORM_PRICE_APPROXIMATION" in result.warnings

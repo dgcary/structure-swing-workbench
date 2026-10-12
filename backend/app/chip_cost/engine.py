@@ -118,6 +118,8 @@ def _new_shares(
     warnings: list[str],
 ) -> dict[Decimal, Decimal]:
     result: dict[Decimal, Decimal] = defaultdict(Decimal)
+    if traded_shares == ZERO:
+        return result
     bars = observation.minute_bars
     if bars:
         same_day = all(

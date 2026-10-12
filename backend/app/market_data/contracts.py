@@ -49,6 +49,23 @@ class Bar:
     volume: Decimal | None = None
     amount: Decimal | None = None
 
+    def __post_init__(self) -> None:
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("bar timestamp must include a timezone")
+        prices = (self.open, self.high, self.low, self.close)
+        if any(not price.is_finite() or price <= 0 for price in prices):
+            raise ValueError("bar prices must be positive and finite")
+        if self.high < self.low or not (
+            self.low <= self.open <= self.high
+            and self.low <= self.close <= self.high
+        ):
+            raise ValueError("bar OHLC is inconsistent")
+        if any(
+            value is not None and (not value.is_finite() or value < 0)
+            for value in (self.volume, self.amount)
+        ):
+            raise ValueError("bar volume and amount must be nonnegative and finite")
+
 
 @dataclass(frozen=True, slots=True)
 class SecurityInfo:

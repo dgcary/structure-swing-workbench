@@ -5,8 +5,8 @@ must be unadjusted (raw). The model is deliberately not a trading signal.
 """
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from decimal import Decimal, ROUND_FLOOR
+from datetime import UTC, datetime
+from decimal import ROUND_FLOOR, Decimal
 from itertools import pairwise
 from zoneinfo import ZoneInfo
 
@@ -207,7 +207,7 @@ def estimate_distribution(
     """
     if not bin_width.is_finite() or bin_width <= ZERO:
         raise ValueError("bin_width must be positive and finite")
-    now = computed_at or datetime.now(timezone.utc)
+    now = computed_at or datetime.now(UTC)
     if now.utcoffset() is None:
         raise ValueError("computed_at must include timezone")
     if any(

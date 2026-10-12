@@ -1,5 +1,5 @@
 """Fixed-fill replay tests for probabilistic cost distribution, not trade signals."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -8,14 +8,14 @@ from app.chip_cost import DayObservation, estimate_distribution
 from app.market_data.contracts import Bar, DataQuality
 
 D = Decimal
-CLOCK = datetime(2026, 10, 12, 16, 0, tzinfo=timezone.utc)
+CLOCK = datetime(2026, 10, 12, 16, 0, tzinfo=UTC)
 
 
 def bar(day: int, price: str, *, low: str | None = None,
         high: str | None = None, volume: str = "1000", hour: int = 0) -> Bar:
     price_value = D(price)
     return Bar(
-        observed_at=datetime(2026, 10, day, hour, tzinfo=timezone.utc),
+        observed_at=datetime(2026, 10, day, hour, tzinfo=UTC),
         open=price_value,
         high=D(high) if high is not None else price_value,
         low=D(low) if low is not None else price_value,
@@ -230,10 +230,10 @@ def test_exchange_date_duplicate_across_utc_midnight_is_rejected():
     from dataclasses import replace
 
     first = replace(obs(1, "10"), bar=replace(
-        bar(1, "10"), observed_at=datetime(2026, 10, 1, 23, tzinfo=timezone.utc),
+        bar(1, "10"), observed_at=datetime(2026, 10, 1, 23, tzinfo=UTC),
     ))
     second = replace(obs(2, "11"), bar=replace(
-        bar(2, "11"), observed_at=datetime(2026, 10, 2, 1, tzinfo=timezone.utc),
+        bar(2, "11"), observed_at=datetime(2026, 10, 2, 1, tzinfo=UTC),
     ))
     with pytest.raises(ValueError, match="trading date"):
         estimate_distribution((first, second), computed_at=CLOCK)
@@ -243,10 +243,10 @@ def test_minute_bar_uses_exchange_date_not_utc_date():
     from dataclasses import replace
 
     daily = replace(bar(1, "10"), observed_at=datetime(
-        2026, 10, 1, 23, tzinfo=timezone.utc,
+        2026, 10, 1, 23, tzinfo=UTC,
     ))
     minute = replace(bar(2, "10"), observed_at=datetime(
-        2026, 10, 2, 1, tzinfo=timezone.utc,
+        2026, 10, 2, 1, tzinfo=UTC,
     ))
     item = DayObservation(
         bar=daily, turnover_rate=D("1"), floating_shares=D("1000"),

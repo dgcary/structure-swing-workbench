@@ -122,7 +122,7 @@ def quality_at(
         raise ValueError("invalid freshness inputs")
     if observed_at is None:
         return DataQuality.UNVERIFIED
-    if observed_at.tzinfo is None:
+    if observed_at.utcoffset() is None:
         raise ValueError("observed_at must include a timezone")
     age = fetched_at - observed_at
     if age < -timedelta(minutes=5):

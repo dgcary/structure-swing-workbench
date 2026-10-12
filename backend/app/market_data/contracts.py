@@ -138,9 +138,16 @@ class MarketDataProvider(Protocol):
     def get_security(self, symbol: str) -> DataResult[SecurityInfo]: ...
 
 
+def _require_chronological_bars(bars: tuple[Bar, ...]) -> None:
+    """Reject unordered or duplicated observations instead of silently miscalculating."""
+    if any(a.observed_at >= b.observed_at for a, b in zip(bars, bars[1:])):
+        raise ValueError("bar timestamps must be strictly increasing")
+
+
 def moving_average(bars: tuple[Bar, ...], window: int) -> Decimal | None:
     if window <= 0:
         raise ValueError("window must be positive")
+    _require_chronological_bars(bars)
     if len(bars) < window:
         return None
     return sum((bar.close for bar in bars[-window:]), Decimal(0)) / Decimal(window)
@@ -149,6 +156,7 @@ def moving_average(bars: tuple[Bar, ...], window: int) -> Decimal | None:
 def period_extrema(bars: tuple[Bar, ...], window: int) -> tuple[Decimal, Decimal] | None:
     if window <= 0:
         raise ValueError("window must be positive")
+    _require_chronological_bars(bars)
     if len(bars) < window:
         return None
     recent = bars[-window:]

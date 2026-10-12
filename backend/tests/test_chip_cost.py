@@ -257,3 +257,22 @@ def test_minute_bar_uses_exchange_date_not_utc_date():
     assert "MINUTE_DATA_REJECTED_DAILY_FALLBACK" not in result.warnings
     assert "DAILY_UNIFORM_PRICE_APPROXIMATION" not in result.warnings
     assert result.estimated_total == D("1000")
+
+
+def test_zero_volume_positive_turnover_is_rejected_without_fabricated_shares():
+    contradictory = estimate_distribution(
+        (obs(1, "10", turnover="0.3", volume="0"),), computed_at=CLOCK,
+    )
+    assert contradictory.source_quality is DataQuality.ERROR
+    assert contradictory.metrics is None
+    assert contradictory.bins == ()
+    assert contradictory.estimated_total == 0
+    assert "TURNOVER_VOLUME_CONFLICT" in contradictory.warnings
+
+    # No turnover and no volume is a valid unchanged-float observation.
+    idle = estimate_distribution(
+        (obs(1, "10", turnover="0", volume="0"),), computed_at=CLOCK,
+    )
+    assert idle.source_quality is DataQuality.FRESH
+    assert idle.estimated_total == D("1000")
+    assert idle.metrics.estimated_mean_cost == D("10")

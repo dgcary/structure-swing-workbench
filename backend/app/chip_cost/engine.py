@@ -229,15 +229,26 @@ def estimate_distribution(
         DataQuality.ERROR: 4,
     }
     quality = max((item.quality for item in observations), key=quality_order.__getitem__)
+    # A positive turnover cannot be inferred from a reported zero-volume day.
+    # Fail closed rather than creating fictional traded cost buckets.
+    volume_conflict = any(
+        item.bar.volume == ZERO
+        and item.turnover_rate is not None
+        and item.turnover_rate > ZERO
+        for item in observations
+    )
     if any(
         item.turnover_rate is None or item.floating_shares is None
         or item.bar.volume is None
         for item in observations
-    ) or quality in (DataQuality.MISSING, DataQuality.ERROR):
+    ) or quality in (DataQuality.MISSING, DataQuality.ERROR) or volume_conflict:
         warnings.append("INCOMPLETE_OR_UNTRUSTED_HISTORY")
+        if volume_conflict:
+            warnings.append("TURNOVER_VOLUME_CONFLICT")
         return DistributionResult(
             (), None, observations[-1].floating_shares, ZERO, None,
-            DataQuality.ERROR if quality is DataQuality.ERROR else DataQuality.MISSING,
+            DataQuality.ERROR if quality is DataQuality.ERROR or volume_conflict
+            else DataQuality.MISSING,
             tuple(warnings), sources, observations[-1].bar.observed_at, now,
         )
 

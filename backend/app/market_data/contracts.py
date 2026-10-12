@@ -118,7 +118,7 @@ def quality_at(
     observed_at: datetime | None, fetched_at: datetime, max_age: timedelta,
 ) -> DataQuality:
     """A fetch timestamp alone cannot establish observation freshness."""
-    if fetched_at.tzinfo is None or max_age.total_seconds() < 0:
+    if fetched_at.utcoffset() is None or max_age.total_seconds() < 0:
         raise ValueError("invalid freshness inputs")
     if observed_at is None:
         return DataQuality.UNVERIFIED

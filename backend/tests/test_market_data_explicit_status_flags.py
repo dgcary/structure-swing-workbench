@@ -43,6 +43,8 @@ class Client:
     ({"停牌状态": "正常交易", "是否退市风险警示": "否"}, (False, False)),
     ({"是否停牌": None, "退市风险警示": "--"}, (None, None)),
     ({"停牌状态": "未识别状态", "退市风险警示": "待核实"}, (None, None)),
+    ({"是否停牌": "是", "停牌状态": "待核实", "退市风险警示": "无"}, (None, False)),
+    ({"是否停牌": "否", "是否退市风险警示": "有", "退市风险警示": "待核实"}, (False, None)),
 ])
 def test_only_explicit_status_values_are_mapped(details, expected):
     result = AKShareProvider(

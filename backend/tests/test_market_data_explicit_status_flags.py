@@ -74,3 +74,38 @@ def test_quote_does_not_infer_suspension_from_zero_volume():
     )
     assert result.value.suspended is None
     assert result.value.delisting_risk is None
+
+
+def test_security_detail_fetch_failure_is_explicit_and_preserves_known_quote_facts():
+    class FailingClient(Client):
+        def stock_individual_info_em(self, **kwargs):
+            raise TimeoutError("security metadata source unavailable")
+
+    result = AKShareProvider(
+        client=FailingClient({}), clock=lambda: NOW
+    ).get_security("600000")
+    assert result.quality is DataQuality.ERROR
+    assert "TimeoutError" in result.error
+    assert result.value.symbol == "600000"
+    assert result.value.name == "浦发银行"
+    assert result.value.suspended is None
+    assert result.value.delisting_risk is None
+    assert result.observed_at is None
+    assert {"suspended", "delisting_risk"} <= set(result.missing_fields)
+
+
+def test_duplicate_security_detail_field_is_not_silently_overwritten():
+    class DuplicateClient(Client):
+        def stock_individual_info_em(self, **kwargs):
+            return Rows([
+                {"item": "是否停牌", "value": "是"},
+                {"item": "是否停牌", "value": "否"},
+            ])
+
+    result = AKShareProvider(
+        client=DuplicateClient({}), clock=lambda: NOW
+    ).get_security("600000")
+    assert result.quality is DataQuality.ERROR
+    assert "duplicate security detail field" in result.error
+    assert result.value.suspended is None
+    assert result.value.delisting_risk is None

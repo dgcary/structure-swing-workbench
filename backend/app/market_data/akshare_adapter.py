@@ -120,6 +120,7 @@ def _explicit_status_flag(
 ) -> bool | None:
     """Only map explicit source status fields; never infer a negative."""
     found: set[bool] = set()
+    has_unrecognized_value = False
     for key in keys:
         raw = details.get(key)
         if _is_missing(raw):
@@ -132,8 +133,14 @@ def _explicit_status_flag(
             found.add(True)
         elif value in false_values:
             found.add(False)
+        else:
+            # A known alias must not override another present but undecodable
+            # status field; the source record is ambiguous, not affirmative.
+            has_unrecognized_value = True
     if len(found) > 1:
         raise ValueError(f"conflicting source status fields: {keys}")
+    if has_unrecognized_value:
+        return None
     return next(iter(found)) if found else None
 
 

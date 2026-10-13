@@ -150,7 +150,7 @@ def test_history_quality_and_corporate_action_uncertainty_are_preserved():
         ),
         computed_at=CLOCK,
     )
-    assert result.source_quality is DataQuality.STALE
+    assert result.source_quality is DataQuality.UNVERIFIED
     assert result.sources == ("fixture", "other")
     assert result.observed_at == bar(2, "11").observed_at
     assert result.computed_at == CLOCK

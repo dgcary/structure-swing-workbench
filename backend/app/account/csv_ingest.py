@@ -7,7 +7,7 @@ from hashlib import sha256
 from app.account.csv_rows import apply_row
 from app.account.imports import parse_number, parse_rows, parse_time
 from app.account.ledger import AccountLedger
-from app.account.models import FillSide, ImportConflictError, ImportResult, SourceKind
+from app.account.models import FillSide, ImportConflictError, ImportResult
 from app.account.position_view import position_view
 
 SCHEMAS = {
@@ -18,10 +18,10 @@ SCHEMAS = {
 
 
 def _check_snapshot_against_fills(ledger: AccountLedger, row: dict[str, str]) -> None:
-    """Do not let a newer snapshot silently erase confirmed intervening fills."""
+    """Reconcile a newer snapshot with fills since any accepted position baseline."""
     symbol = row["symbol"]
     previous = ledger.facts.get(f"position:{symbol}:quantity")
-    if previous is None or previous.source is not SourceKind.SNAPSHOT:
+    if previous is None:
         return
     observed_at = parse_time(row["as_of"])
     if observed_at <= previous.observed_at:

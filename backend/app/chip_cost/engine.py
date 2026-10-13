@@ -263,6 +263,12 @@ def estimate_distribution(
             tuple(warnings), sources, observations[-1].bar.observed_at, now,
         )
 
+    # Unchecked corporate actions can invalidate historical cost bases.
+    # A warning alone must not leave the aggregate labelled FRESH/STALE.
+    if any(not day.corporate_action_checked for day in observations):
+        if quality_order[quality] < quality_order[DataQuality.UNVERIFIED]:
+            quality = DataQuality.UNVERIFIED
+
     # A zero turnover rate alongside nonzero volume can be caused by
     # provider rounding or incompatible units. Keep the estimate but expose
     # uncertainty instead of silently treating it as verified input.
@@ -314,7 +320,18 @@ def estimate_distribution(
 
     total = sum(shares.values(), ZERO)
     ordered = sorted((price, quantity) for price, quantity in shares.items() if quantity > ZERO)
-    bins = tuple(PriceBin(price, qty, qty / total) for price, qty in ordered)
+    # Decimal division can leave a recurring fractional remainder.
+    # Allocate the last bin's fraction by subtraction for exact conservation.
+    bins_list: list[PriceBin] = []
+    allocated_fraction = ZERO
+    for index, (price, quantity) in enumerate(ordered):
+        fraction = (
+            ONE - allocated_fraction
+            if index == len(ordered) - 1 else quantity / total
+        )
+        bins_list.append(PriceBin(price, quantity, fraction))
+        allocated_fraction += fraction
+    bins = tuple(bins_list)
     metrics = _metrics(ordered, observations[-1].bar.close, total)
     return DistributionResult(
         bins=bins, metrics=metrics, floating_shares=previous_float,

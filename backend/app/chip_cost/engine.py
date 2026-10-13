@@ -107,8 +107,12 @@ def _spread(
     if count > 20000:
         raise ValueError("price range exceeds 20000 bins; choose a wider bin")
     each = quantity / Decimal(count)
+    allocated = ZERO
     for index in range(count):
-        output[first + width * index] += each
+        # Assign the rounding remainder to the last bucket: no phantom share gap.
+        portion = quantity - allocated if index == count - 1 else each
+        output[first + width * index] += portion
+        allocated += portion
 
 
 def _new_shares(

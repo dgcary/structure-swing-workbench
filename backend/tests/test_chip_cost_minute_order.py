@@ -38,3 +38,26 @@ def test_duplicate_minute_timestamps_fall_back_to_daily_allocation():
     )
     assert "MINUTE_DATA_REJECTED_DAILY_FALLBACK" in result.warnings
     assert "DAILY_UNIFORM_PRICE_APPROXIMATION" in result.warnings
+
+
+
+def test_uniform_three_bucket_allocation_conserves_exact_floating_shares():
+    timestamp = datetime(2026, 10, 12, 2, tzinfo=UTC)
+    daily = Bar(
+        observed_at=timestamp, open=Decimal(10), high=Decimal(12),
+        low=Decimal(10), close=Decimal(11), volume=Decimal(1000),
+    )
+    observation = DayObservation(
+        bar=daily, turnover_rate=Decimal(1), floating_shares=Decimal(1000),
+        source="fixture", quality=DataQuality.FRESH,
+        corporate_action_checked=True,
+    )
+    result = estimate_distribution(
+        (observation,), bin_width=Decimal(1),
+        computed_at=timestamp + timedelta(days=1),
+    )
+    assert len(result.bins) == 3
+    assert result.estimated_total == Decimal(1000)
+    assert result.share_gap == 0
+    assert sum((item.estimated_shares for item in result.bins), Decimal(0)) == Decimal(1000)
+    assert sum((item.fraction for item in result.bins), Decimal(0)) == Decimal(1)

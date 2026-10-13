@@ -150,11 +150,16 @@ def _new_shares(
             same_day and chronological and valid_volumes and within_daily_range
             and minute_volume > ZERO and consistent
         ):
-            for bar in bars:
-                _spread(
-                    result, bar.low, bar.high,
-                    traded_shares * bar.volume / minute_volume, width,
+            allocated = ZERO
+            for index, bar in enumerate(bars):
+                # Give the last minute the remainder to avoid Decimal division drift.
+                quantity = (
+                    traded_shares - allocated
+                    if index == len(bars) - 1
+                    else traded_shares * bar.volume / minute_volume
                 )
+                _spread(result, bar.low, bar.high, quantity, width)
+                allocated += quantity
             return result
         warnings.append("MINUTE_DATA_REJECTED_DAILY_FALLBACK")
     warnings.append("DAILY_UNIFORM_PRICE_APPROXIMATION")

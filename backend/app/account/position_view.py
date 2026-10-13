@@ -24,7 +24,7 @@ def position_view(ledger: AccountLedger, symbol: str) -> PositionView:
         raise ImportConflictError("成交数量与持仓快照不一致")
     current_cost = (
         cost.value if cost and baseline and cost.observed_at == baseline.observed_at
-        and not later else None
+        and cost.source_id == baseline.source_id and not later else None
     )
     return PositionView(
         symbol, quantity, delta if baseline is None else Decimal(0),

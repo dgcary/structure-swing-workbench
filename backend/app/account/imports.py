@@ -37,6 +37,6 @@ def parse_rows(data: str, required: tuple[str, ...]) -> list[dict[str, str]]:
     if not rows:
         raise ValueError("CSV 不能为空")
     for row in rows:
-        if None in row or any(not row.get(k, "").strip() for k in required):
+        if None in row or any(not (row.get(k) or "").strip() for k in required):
             raise ValueError("CSV 行缺少必填值或包含多余字段")
     return rows

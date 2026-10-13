@@ -1,5 +1,6 @@
 """Immutable execution IDs and auditable manual account corrections."""
 
+from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal
 
@@ -29,11 +30,24 @@ def apply_fill(ledger: AccountLedger, item: Fill) -> bool:
     return True
 
 
+def _record_manual_pair(ledger: AccountLedger, first: Fact, second: Fact) -> None:
+    """Validate both fields before publishing a manual correction or its audit trail."""
+    staged = deepcopy(ledger)
+    staged.record_fact(first)
+    staged.record_fact(second)
+    ledger.facts = staged.facts
+    ledger.audit = staged.audit
+    ledger.conflicts = staged.conflicts
+
+
 def correct_account(
     ledger: AccountLedger, *, equity: Decimal, cash: Decimal, at: datetime, source_id: str
 ) -> None:
-    ledger.record_fact(Fact("account.equity", equity, SourceKind.MANUAL, source_id, at))
-    ledger.record_fact(Fact("account.available_cash", cash, SourceKind.MANUAL, source_id, at))
+    _record_manual_pair(
+        ledger,
+        Fact("account.equity", equity, SourceKind.MANUAL, source_id, at),
+        Fact("account.available_cash", cash, SourceKind.MANUAL, source_id, at),
+    )
 
 
 def correct_holding(
@@ -42,5 +56,8 @@ def correct_holding(
 ) -> None:
     if not symbol.strip():
         raise ValueError("证券代码不能为空")
-    for suffix, value in (("quantity", quantity), ("cost", cost)):
-        ledger.record_fact(Fact(f"position:{symbol}:{suffix}", value, SourceKind.MANUAL, source_id, at))
+    _record_manual_pair(
+        ledger,
+        Fact(f"position:{symbol}:quantity", quantity, SourceKind.MANUAL, source_id, at),
+        Fact(f"position:{symbol}:cost", cost, SourceKind.MANUAL, source_id, at),
+    )

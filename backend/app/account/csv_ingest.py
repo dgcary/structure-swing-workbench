@@ -1,12 +1,13 @@
 """Atomic CSV batch import with provenance and idempotency."""
 
 from copy import deepcopy
+from decimal import Decimal
 from hashlib import sha256
 
 from app.account.csv_rows import apply_row
-from app.account.imports import parse_rows
+from app.account.imports import parse_number, parse_rows, parse_time
 from app.account.ledger import AccountLedger
-from app.account.models import ImportConflictError, ImportResult
+from app.account.models import FillSide, ImportConflictError, ImportResult, SourceKind
 from app.account.position_view import position_view
 
 SCHEMAS = {
@@ -14,6 +15,39 @@ SCHEMAS = {
     "holdings": ("symbol", "quantity", "cost", "as_of"),
     "account": ("equity", "available_cash", "as_of"),
 }
+
+
+def _check_snapshot_against_fills(ledger: AccountLedger, row: dict[str, str]) -> None:
+    """Do not let a newer snapshot silently erase confirmed intervening fills."""
+    symbol = row["symbol"]
+    previous = ledger.facts.get(f"position:{symbol}:quantity")
+    if previous is None or previous.source is not SourceKind.SNAPSHOT:
+        return
+    observed_at = parse_time(row["as_of"])
+    if observed_at <= previous.observed_at:
+        return
+    intervening = [
+        fill for fill in ledger.fills.values()
+        if fill.symbol == symbol
+        and previous.observed_at < fill.executed_at <= observed_at
+    ]
+    if not intervening:
+        return
+    delta = sum(
+        (
+            fill.quantity if fill.side is FillSide.BUY else -fill.quantity
+            for fill in intervening
+        ),
+        Decimal(0),
+    )
+    expected = previous.value + delta
+    incoming = parse_number(row["quantity"], "持仓数量")
+    if incoming != expected:
+        raise ImportConflictError(
+            f"持仓快照 {symbol} 与期间已确认成交冲突："
+            f"预计数量 {expected}，导入数量 {incoming}；"
+            "请核对缺失成交或快照口径"
+        )
 
 
 def import_csv(ledger: AccountLedger, kind: str, data: str, *, batch_id: str) -> ImportResult:
@@ -34,6 +68,8 @@ def import_csv(ledger: AccountLedger, kind: str, data: str, *, batch_id: str) ->
     before = len(staged.conflicts)
     symbols: set[str] = set()
     for row in rows:
+        if kind == "holdings":
+            _check_snapshot_against_fills(staged, row)
         count, duplicate, symbol = apply_row(staged, kind, row, batch_id)
         if symbol:
             if kind == "holdings" and symbol in symbols:

@@ -18,7 +18,7 @@ def parse_number(value: str, label: str, *, positive: bool = False) -> Decimal:
 
 def parse_time(value: str) -> datetime:
     try:
-        instant = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        instant = datetime.fromisoformat(value.strip())
     except (ValueError, AttributeError) as exc:
         raise ValueError("时间格式必须为 ISO8601") from exc
     if instant.tzinfo is None or instant.utcoffset() is None:

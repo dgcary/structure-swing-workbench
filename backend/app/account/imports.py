@@ -27,13 +27,16 @@ def parse_time(value: str) -> datetime:
 
 
 def parse_rows(data: str, required: tuple[str, ...]) -> list[dict[str, str]]:
-    reader = csv.DictReader(io.StringIO(data.lstrip("\ufeff")))
+    reader = csv.DictReader(io.StringIO(data.lstrip("\ufeff")), strict=True)
     if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)):
         raise ValueError("CSV 表头缺失或重复")
     missing = set(required) - set(reader.fieldnames)
     if missing:
         raise ValueError(f"CSV 缺少字段：{', '.join(sorted(missing))}")
-    rows = list(reader)
+    try:
+        rows = list(reader)
+    except csv.Error as exc:
+        raise ValueError("CSV 格式错误：引号或字段结构不完整") from exc
     if not rows:
         raise ValueError("CSV 不能为空")
     for row in rows:

@@ -26,3 +26,15 @@ def test_missing_column_and_timezone_rejected() -> None:
             "equity,available_cash,as_of\n100,50,2026-10-13T10:00:00\n",
             batch_id="naive",
         )
+
+
+def test_unterminated_quoted_csv_is_rejected_atomically() -> None:
+    book = AccountLedger()
+    malformed = (
+        "equity,available_cash,as_of\n"
+        '"100,50,2026-10-13T10:00:00+08:00\n'
+    )
+    with pytest.raises(ValueError, match="CSV 格式错误"):
+        import_csv(book, "account", malformed, batch_id="bad-quotes")
+    assert not book.facts
+    assert not book.batches

@@ -265,9 +265,11 @@ def estimate_distribution(
 
     # Unchecked corporate actions can invalidate historical cost bases.
     # A warning alone must not leave the aggregate labelled FRESH/STALE.
-    if any(not day.corporate_action_checked for day in observations):
-        if quality_order[quality] < quality_order[DataQuality.UNVERIFIED]:
-            quality = DataQuality.UNVERIFIED
+    if (
+        any(not day.corporate_action_checked for day in observations)
+        and quality_order[quality] < quality_order[DataQuality.UNVERIFIED]
+    ):
+        quality = DataQuality.UNVERIFIED
 
     # A zero turnover rate alongside nonzero volume can be caused by
     # provider rounding or incompatible units. Keep the estimate but expose

@@ -254,6 +254,17 @@ def estimate_distribution(
             tuple(warnings), sources, observations[-1].bar.observed_at, now,
         )
 
+    # A zero turnover rate alongside nonzero volume can be caused by
+    # provider rounding or incompatible units. Keep the estimate but expose
+    # uncertainty instead of silently treating it as verified input.
+    if any(
+        day.turnover_rate == ZERO and day.bar.volume > ZERO
+        for day in observations
+    ):
+        warnings.append("ZERO_TURNOVER_WITH_POSITIVE_VOLUME")
+        if quality_order[quality] < quality_order[DataQuality.UNVERIFIED]:
+            quality = DataQuality.UNVERIFIED
+
     shares: dict[Decimal, Decimal] = defaultdict(Decimal)
     previous_float: Decimal | None = None
     for day in observations:

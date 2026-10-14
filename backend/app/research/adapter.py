@@ -102,6 +102,8 @@ def parse_research_pack(data: bytes) -> ResearchReport:
                 if name in members:
                     raise ResearchPackError("研究包存在重复路径")
                 members.add(name)
+                if info.file_size > MAX_MEMBER_BYTES:
+                    raise ResearchPackError("研究包单个文件超出大小限制")
                 total += info.file_size
                 if total > MAX_UNCOMPRESSED_BYTES:
                     raise ResearchPackError("研究包解压大小超出限制")

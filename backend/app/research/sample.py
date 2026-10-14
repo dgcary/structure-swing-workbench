@@ -24,7 +24,7 @@ SAMPLE_FILES: dict[str, object] = {
             "data_quality": "data_quality.json",
         },
     },
-    "identity.json": {"symbol": "600000.SH", "name": "演示证券（虚构）"},
+    "identity.json": {"symbol": "DEMO000.SH", "name": "演示证券（虚构）"},
     "market.json": {"status": "OK", "data": {"last_close": 10.5, "currency": "CNY"}},
     "technical.json": {"status": "OK", "data": {"ma5": 10.2, "ma10": 10.1}},
     "financial_snapshot.json": {

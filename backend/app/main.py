@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.research import parse_research_pack
+from app.research.sample import sample_zip
 
 settings = get_settings()
 
@@ -26,3 +28,9 @@ def health() -> dict[str, str]:
         "service": "structure-swing-backend",
         "environment": settings.app_env,
     }
+
+
+@app.get("/research/sample", tags=["research"])
+def research_sample() -> dict[str, object]:
+    """Display-only synthetic fixture; no remote TradingAgents or trade execution."""
+    return parse_research_pack(sample_zip()).to_dict()

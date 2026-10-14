@@ -22,7 +22,7 @@ def test_fixed_stock_research_pack_round_trip() -> None:
     assert view["schema_version"] == "1.0-fixture"
     assert view["source"] == "StockResearchPack synthetic fixture"
     assert view["generated_at"].endswith("+08:00")
-    assert view["symbol"] == "600000.SH"
+    assert view["symbol"] == "DEMO000.SH"
     assert view["quality"] == "PARTIAL"
     sections = {section["key"]: section for section in view["sections"]}
     assert sections["market"]["data"]["data"]["last_close"] == 10.5
@@ -39,7 +39,12 @@ def test_missing_and_corrupt_sections_are_not_silently_filled() -> None:
     files = dict(SAMPLE_FILES)
     files.pop("news.json")
     files["market.json"] = "{broken"
-    report = parse_research_pack(_zip(files))
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            value = "{broken" if name == "market.json" else json.dumps(content)
+            archive.writestr(name, value)
+    report = parse_research_pack(buffer.getvalue())
     sections = {section.key: section for section in report.sections}
     assert sections["news"].status == "MISSING"
     assert sections["market"].status == "INVALID"

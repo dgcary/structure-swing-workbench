@@ -5,7 +5,13 @@ from decimal import Decimal
 
 import pytest
 
-from app.account import AccountLedger, ImportConflictError, correct_holding, import_csv, position_view
+from app.account import (
+    AccountLedger,
+    ImportConflictError,
+    correct_holding,
+    import_csv,
+    position_view,
+)
 
 T = "2026-10-13T10:00:00+08:00"
 LATER = "2026-10-13T11:00:00+08:00"

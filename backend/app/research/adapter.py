@@ -121,7 +121,7 @@ def parse_research_pack(data: bytes) -> ResearchReport:
             if not all(isinstance(v, str) and v.strip() for v in (version, source, generated_at)):
                 raise ResearchPackError("manifest 缺少版本、来源或研究时间")
             try:
-                parsed_at = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+                parsed_at = datetime.fromisoformat(generated_at)
             except ValueError as exc:
                 raise ResearchPackError("研究时间不是 ISO-8601 格式") from exc
             if parsed_at.tzinfo is None or parsed_at.utcoffset() is None:

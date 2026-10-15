@@ -36,6 +36,12 @@ class ObservedFact:
     value: str
     evidence: Evidence
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.value, str) or not self.value.strip():
+            raise ValueError("客观事实必须提供非空分类值")
+        if not isinstance(self.evidence, Evidence):
+            raise ValueError("客观事实必须提供可追踪证据")
+
 
 @dataclass(frozen=True, slots=True)
 class RiskFact:
@@ -44,6 +50,8 @@ class RiskFact:
     evidence: Evidence
 
     def __post_init__(self) -> None:
+        if not isinstance(self.evidence, Evidence):
+            raise ValueError("风险事实必须提供可追踪证据")
         if self.code not in HARD_RISKS | SOFT_RISKS:
             raise ValueError("未知风险事实代码")
         if self.state not in ("PRESENT", "ABSENT", "UNKNOWN"):

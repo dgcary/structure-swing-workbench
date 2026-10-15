@@ -24,3 +24,8 @@ class RiskFact:
     def __post_init__(self) -> None:
         if self.state not in ("PRESENT", "ABSENT", "UNKNOWN"):
             raise ValueError("风险事实状态不合法")
+
+HARD_RISKS = frozenset({
+    "ST", "DELISTING", "REGULATORY_INVESTIGATION",
+    "FINANCIAL_FRAUD", "QUALIFIED_AUDIT", "SEVERE_DEBT", "GOING_CONCERN",
+})

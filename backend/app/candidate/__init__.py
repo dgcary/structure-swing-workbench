@@ -7,7 +7,13 @@ from app.candidate.engine import (
     screen_candidates,
 )
 from app.candidate.facts import Evidence, ObservedFact, RiskFact
-from app.candidate.labels import PROFILE_LABELS, RISK_LABELS, RISK_STATE_LABELS, STATUS_LABELS
+from app.candidate.labels import (
+    PROFILE_LABELS,
+    REVIEW_LANE_LABELS,
+    RISK_LABELS,
+    RISK_STATE_LABELS,
+    STATUS_LABELS,
+)
 
 def status_label(status: str) -> str:
     """Chinese label for a canonical candidate status."""
@@ -18,6 +24,15 @@ def present_screening_result(result: ScreeningResult) -> dict[str, object]:
     """Add Chinese labels without replacing the original codes and evidence."""
     payload = result.to_dict()
     payload["status_label"] = status_label(result.status)
+    payload["review_lane_label"] = REVIEW_LANE_LABELS[result.review_lane]
+    payload["profile_labels"] = [
+        PROFILE_LABELS[field][fact.value]
+        for field, fact in zip(
+            ("board", "liquidity", "size", "listing_age"),
+            result.profile_facts,
+            strict=True,
+        )
+    ]
     payload["risk_labels"] = [RISK_LABELS[risk.code] for risk in result.risk_facts]
     payload["risk_state_labels"] = [
         RISK_STATE_LABELS[risk.state] for risk in result.risk_facts
@@ -30,6 +45,7 @@ def present_screening_result(result: ScreeningResult) -> dict[str, object]:
 
 __all__ = [
     "PROFILE_LABELS",
+    "REVIEW_LANE_LABELS",
     "RISK_LABELS",
     "RISK_STATE_LABELS",
     "STATUS_LABELS",

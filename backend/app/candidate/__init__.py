@@ -10,13 +10,13 @@ from app.candidate.facts import Evidence, ObservedFact, RiskFact
 from app.candidate.labels import PROFILE_LABELS, RISK_LABELS, RISK_STATE_LABELS, STATUS_LABELS
 
 __all__ = [
-    "CandidateInput",
-    "Evidence",
-    "ObservedFact",
     "PROFILE_LABELS",
     "RISK_LABELS",
     "RISK_STATE_LABELS",
     "STATUS_LABELS",
+    "CandidateInput",
+    "Evidence",
+    "ObservedFact",
     "RiskFact",
     "ScreeningResult",
     "screen_candidate",

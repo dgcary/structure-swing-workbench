@@ -14,6 +14,14 @@ def status_label(status: str) -> str:
     return STATUS_LABELS[status]
 
 
+def present_screening_result(result: ScreeningResult) -> dict[str, object]:
+    """Add Chinese labels without replacing the original codes and evidence."""
+    payload = result.to_dict()
+    payload["status_label"] = status_label(result.status)
+    payload["risk_labels"] = [RISK_LABELS[risk.code] for risk in result.risk_facts]
+    return payload
+
+
 __all__ = [
     "PROFILE_LABELS",
     "RISK_LABELS",
@@ -24,6 +32,7 @@ __all__ = [
     "ObservedFact",
     "RiskFact",
     "ScreeningResult",
+    "present_screening_result",
     "screen_candidate",
     "screen_candidates",
     "status_label",

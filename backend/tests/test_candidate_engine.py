@@ -117,3 +117,17 @@ def test_reject_missing_fact_provenance() -> None:
         ObservedFact("GOOD", None)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="证据"):
         RiskFact("ST", "ABSENT", None)  # type: ignore[arg-type]
+
+
+def test_nonpreferred_profile_requires_positive_evidence_for_candidate_admission() -> None:
+    item = sample()
+    result = screen_candidate(replace(
+        item,
+        board=ObservedFact("OTHER", E),
+        liquidity=ObservedFact("GOOD", E),
+        size=ObservedFact("SMALL", E),
+        listing_age=ObservedFact("ESTABLISHED", E),
+    ))
+    assert result.status == "CANDIDATE"
+    assert len(result.reasons) == 2
+    assert all(reason.evidence.reference for reason in result.reasons)

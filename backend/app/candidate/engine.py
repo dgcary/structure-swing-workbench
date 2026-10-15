@@ -56,6 +56,7 @@ class ScreeningResult:
     status: str
     review_lane: str | None
     review_lane_evidence: Evidence | None
+    profile_facts: tuple[ObservedFact, ...]
     reasons: tuple[ObservedFact, ...]
     risk_facts: tuple[RiskFact, ...]
     missing_risk_checks: tuple[str, ...]
@@ -75,6 +76,7 @@ def screen_candidate(item: CandidateInput) -> ScreeningResult:
     unknown = sorted(
         code for code in HARD_RISKS if code in checks and checks[code].state == "UNKNOWN"
     )
+    profile_facts = (item.board, item.liquidity, item.size, item.listing_age)
     reasons: list[ObservedFact] = []
     messages: list[str] = []
     for fact, preferred, label in (
@@ -87,6 +89,10 @@ def screen_candidate(item: CandidateInput) -> ScreeningResult:
             reasons.append(fact)
             messages.append("客观偏好：" + label)
 
+    if item.board.value == "OTHER":
+        messages.append("非优选：非主板；保留原始分类证据供人工复核")
+    if item.size.value == "SMALL":
+        messages.append("非优选：小盘；保留原始分类证据供人工复核")
     if present:
         messages.append("排除：已确认重大风险 " + "、".join(present))
     if item.liquidity.value == "LOW":
@@ -110,10 +116,16 @@ def screen_candidate(item: CandidateInput) -> ScreeningResult:
         status = "REVIEW"
     else:
         status = "CANDIDATE"
-    if any(
-        checks[code].state == "PRESENT" for code in SOFT_RISKS if code in checks
-    ):
-        messages.append("提示：普通业绩、估值或其他非硬排除风险待人工核查")
+    soft_present = sorted(
+        code for code in SOFT_RISKS if code in checks and checks[code].state == "PRESENT"
+    )
+    soft_unknown = sorted(
+        code for code in SOFT_RISKS if code in checks and checks[code].state == "UNKNOWN"
+    )
+    if soft_present:
+        messages.append("提示：非硬排除风险待人工核查 " + "、".join(soft_present))
+    if soft_unknown:
+        messages.append("提示：非硬排除风险状态未知 " + "、".join(soft_unknown))
     if item.review_lane:
         messages.append("C/A/B 仅为外部提供的候选复核顺序，不代表 Setup 成立")
     else:
@@ -125,6 +137,7 @@ def screen_candidate(item: CandidateInput) -> ScreeningResult:
         status=status,
         review_lane=item.review_lane,
         review_lane_evidence=item.review_lane_evidence,
+        profile_facts=profile_facts,
         reasons=tuple(reasons),
         risk_facts=item.risks,
         missing_risk_checks=missing,

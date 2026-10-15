@@ -32,3 +32,30 @@ def test_public_status_label() -> None:
     assert status_label("CANDIDATE") == "候选待人工判断"
     assert status_label("REVIEW") == "资料待核实"
     assert status_label("EXCLUDED") == "风险排除"
+
+
+def test_chinese_projection_keeps_original_codes() -> None:
+    from app.candidate import present_screening_result
+    from app.candidate.engine import ScreeningResult
+    from app.candidate.facts import Evidence, ObservedFact, RiskFact
+
+    evidence = Evidence("fixture", "fixture://labels", "2026-10-16T04:00:00+08:00")
+    result = ScreeningResult(
+        symbol="TEST.SH", name="测试", status="EXCLUDED",
+        review_lane=None, review_lane_evidence=None,
+        profile_facts=tuple(ObservedFact(value, evidence) for value in (
+            "MAIN", "GOOD", "MID_LARGE", "ESTABLISHED"
+        )),
+        reasons=(), risk_facts=(RiskFact("FINANCIAL_FRAUD", "PRESENT", evidence),),
+        missing_risk_checks=("GOING_CONCERN",),
+        messages=("排除：已确认重大风险 FINANCIAL_FRAUD",),
+    )
+    view = present_screening_result(result)
+    assert view["status_label"] == "风险排除"
+    assert view["risk_labels"] == ["财务造假"]
+    assert view["risk_state_labels"] == ["已确认存在"]
+    assert view["missing_risk_labels"] == ["持续经营风险"]
+    assert view["profile_labels"] == ["主板", "流动性良好", "大中盘", "非次新"]
+    assert "财务造假" in view["display_messages"][0]
+    assert view["risk_facts"][0]["code"] == "FINANCIAL_FRAUD"
+    assert view["risk_facts"][0]["evidence"]["reference"] == evidence.reference

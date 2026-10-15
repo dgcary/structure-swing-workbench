@@ -13,3 +13,14 @@ class Evidence:
 class ObservedFact:
     value: str
     evidence: Evidence
+
+
+@dataclass(frozen=True, slots=True)
+class RiskFact:
+    code: str
+    state: str
+    evidence: Evidence
+
+    def __post_init__(self) -> None:
+        if self.state not in ("PRESENT", "ABSENT", "UNKNOWN"):
+            raise ValueError("风险事实状态不合法")

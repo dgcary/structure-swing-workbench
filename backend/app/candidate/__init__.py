@@ -19,6 +19,12 @@ def present_screening_result(result: ScreeningResult) -> dict[str, object]:
     payload = result.to_dict()
     payload["status_label"] = status_label(result.status)
     payload["risk_labels"] = [RISK_LABELS[risk.code] for risk in result.risk_facts]
+    payload["risk_state_labels"] = [
+        RISK_STATE_LABELS[risk.state] for risk in result.risk_facts
+    ]
+    payload["missing_risk_labels"] = [
+        RISK_LABELS[code] for code in result.missing_risk_checks
+    ]
     return payload
 
 

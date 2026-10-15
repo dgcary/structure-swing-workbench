@@ -1,4 +1,5 @@
 """Deterministic M7 fixtures: only supplied facts, no automatic trade decisions."""
+
 from dataclasses import replace
 
 import pytest

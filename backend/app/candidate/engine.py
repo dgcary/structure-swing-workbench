@@ -28,12 +28,22 @@ class CandidateInput:
             (self.size, {"MID_LARGE", "SMALL", "UNKNOWN"}),
             (self.listing_age, {"ESTABLISHED", "NEW", "UNKNOWN"}),
         ):
+            if not isinstance(fact, ObservedFact):
+                raise TypeError("基础分类必须使用带证据的 ObservedFact")
             if fact.value not in values:
                 raise ValueError("基础分类值不合法")
         if self.review_lane not in LANE_ORDER:
             raise ValueError("候选复核通道只能为 C/A/B 或未分类")
         if (self.review_lane is None) != (self.review_lane_evidence is None):
             raise ValueError("复核通道必须有独立证据，且不能自动推断 Setup")
+        if self.review_lane_evidence is not None and not isinstance(
+            self.review_lane_evidence, Evidence
+        ):
+            raise TypeError("复核通道证据必须使用 Evidence")
+        if not isinstance(self.risks, tuple) or any(
+            not isinstance(risk, RiskFact) for risk in self.risks
+        ):
+            raise TypeError("风险事实必须使用带证据的 RiskFact 元组")
         codes = [risk.code for risk in self.risks]
         if len(codes) != len(set(codes)):
             raise ValueError("同一风险事实不得重复")

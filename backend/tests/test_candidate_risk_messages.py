@@ -1,8 +1,9 @@
 from dataclasses import replace
 
+from test_candidate_engine import E, sample
+
 from app.candidate.engine import screen_candidate
 from app.candidate.facts import RiskFact
-from test_candidate_engine import E, sample
 
 
 def test_named_soft_risk_facts() -> None:

@@ -2,9 +2,10 @@
 
 from dataclasses import replace
 
+from test_candidate_engine import sample
+
 from app.candidate.engine import screen_candidate
 from app.candidate.facts import Evidence, RiskFact
-from test_candidate_engine import sample
 
 
 def test_soft_risk_evidence_is_preserved_without_trade_signal() -> None:

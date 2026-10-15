@@ -7,6 +7,7 @@ from app.candidate.engine import (
     screen_candidates,
 )
 from app.candidate.facts import Evidence, ObservedFact, RiskFact
+from app.candidate.labels import PROFILE_LABELS, RISK_LABELS, RISK_STATE_LABELS, STATUS_LABELS
 
 __all__ = [
     "CandidateInput",

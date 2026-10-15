@@ -15,6 +15,7 @@ from app.candidate.labels import (
     STATUS_LABELS,
 )
 
+
 def status_label(status: str) -> str:
     """Chinese label for a canonical candidate status."""
     return STATUS_LABELS[status]

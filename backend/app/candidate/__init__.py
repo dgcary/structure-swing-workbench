@@ -40,6 +40,12 @@ def present_screening_result(result: ScreeningResult) -> dict[str, object]:
     payload["missing_risk_labels"] = [
         RISK_LABELS[code] for code in result.missing_risk_checks
     ]
+    display_messages = []
+    for message in result.messages:
+        for code in sorted(RISK_LABELS, key=len, reverse=True):
+            message = message.replace(code, RISK_LABELS[code])
+        display_messages.append(message)
+    payload["display_messages"] = display_messages
     return payload
 
 

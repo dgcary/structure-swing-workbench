@@ -7,7 +7,6 @@ import pytest
 from app.candidate.engine import CandidateInput, screen_candidate, screen_candidates
 from app.candidate.facts import HARD_RISKS, Evidence, ObservedFact, RiskFact
 
-
 E = Evidence("synthetic-fixture", "fixture://m7/2026-10-15", "2026-10-15T08:00:00+08:00")
 
 

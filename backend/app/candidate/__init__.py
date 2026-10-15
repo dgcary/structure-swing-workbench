@@ -9,6 +9,11 @@ from app.candidate.engine import (
 from app.candidate.facts import Evidence, ObservedFact, RiskFact
 from app.candidate.labels import PROFILE_LABELS, RISK_LABELS, RISK_STATE_LABELS, STATUS_LABELS
 
+def status_label(status: str) -> str:
+    """Chinese label for a canonical candidate status."""
+    return STATUS_LABELS[status]
+
+
 __all__ = [
     "PROFILE_LABELS",
     "RISK_LABELS",
@@ -21,4 +26,5 @@ __all__ = [
     "ScreeningResult",
     "screen_candidate",
     "screen_candidates",
+    "status_label",
 ]

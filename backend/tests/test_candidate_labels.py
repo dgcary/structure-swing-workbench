@@ -24,3 +24,11 @@ def test_all_screening_states_and_profile_values_are_labeled() -> None:
     assert set(PROFILE_LABELS["liquidity"]) == {"GOOD", "LOW", "UNKNOWN"}
     assert set(PROFILE_LABELS["size"]) == {"MID_LARGE", "SMALL", "UNKNOWN"}
     assert set(PROFILE_LABELS["listing_age"]) == {"ESTABLISHED", "NEW", "UNKNOWN"}
+
+
+def test_public_status_label() -> None:
+    from app.candidate import status_label
+
+    assert status_label("CANDIDATE") == "候选待人工判断"
+    assert status_label("REVIEW") == "资料待核实"
+    assert status_label("EXCLUDED") == "风险排除"

@@ -110,3 +110,10 @@ def test_reject_invalid_provenance_and_unrecognized_risk_state() -> None:
         Evidence("fixture", "fixture://m7", "2026-10-15T08:00:00")
     with pytest.raises(ValueError, match="风险"):
         RiskFact("ST", "SUSPECTED", E)
+
+
+def test_reject_missing_fact_provenance() -> None:
+    with pytest.raises(ValueError, match="证据"):
+        ObservedFact("GOOD", None)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="证据"):
+        RiskFact("ST", "ABSENT", None)  # type: ignore[arg-type]

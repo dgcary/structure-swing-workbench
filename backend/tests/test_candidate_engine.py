@@ -113,7 +113,7 @@ def test_reject_invalid_provenance_and_unrecognized_risk_state() -> None:
 
 
 def test_reject_missing_fact_provenance() -> None:
-    with pytest.raises(ValueError, match="证据"):
+    with pytest.raises(TypeError, match="证据"):
         ObservedFact("GOOD", None)  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="证据"):
+    with pytest.raises(TypeError, match="证据"):
         RiskFact("ST", "ABSENT", None)  # type: ignore[arg-type]

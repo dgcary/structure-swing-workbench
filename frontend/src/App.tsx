@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PlanPreview } from "./PlanPreview";
 import { CSVPreview } from "./CSVPreview";
 import { KlinePreview } from "./KlinePreview";
+import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
 
 type Metric = {
   key: string;
@@ -27,7 +28,7 @@ type Holding = {
 
 type Overview = {
   schema_version: string;
-  mode: "read_only";
+  mode: "read_only" | "isolated_csv_preview";
   notice: string;
   metrics: Metric[];
   holdings: Holding[] | null;
@@ -141,6 +142,7 @@ function ResearchDemo() {
 export function App() {
   const [section, setSection] = useState<Section>("总览");
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [baselineOverview, setBaselineOverview] = useState<Overview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState("连接中");
 
@@ -162,7 +164,8 @@ export function App() {
         if (payload.schema_version !== "m8.overview.v1" || payload.mode !== "read_only") {
           throw new Error("工作台数据协议不匹配");
         }
-        setOverview(payload);
+        setBaselineOverview(payload);
+        setOverview((current) => current?.mode === "isolated_csv_preview" ? current : payload);
       })
       .catch((reason: Error) => setOverviewError(reason.message));
   }, []);
@@ -196,11 +199,15 @@ export function App() {
         {section === "总览" && (
           <>
             <section className="alert-banner" role="status">
-              <strong>数据接入状态：未完成</strong>
+              <strong>{overview?.mode === "isolated_csv_preview" ? "本次上传 CSV · 临时预览" : "数据接入状态：未完成"}</strong>
               <p>{overview?.notice ?? "账户、持仓、计划与审计必须有可追溯来源；缺失值不会显示为零或通过。"}</p>
               {overviewError && <p role="alert">工作台接口异常：{overviewError}</p>}
             </section>
-            <div className="section-heading"><h2>账户与纪律总览</h2><span>只读 · 未连接券商</span></div>
+            <AccountSnapshotPreview
+              onPreview={(snapshot) => { setOverview(snapshot); setOverviewError(null); }}
+              onReset={() => { setOverview(baselineOverview); setOverviewError(null); }}
+            />
+            <div className="section-heading"><h2>账户与纪律总览</h2><span>{overview?.mode === "isolated_csv_preview" ? "上传 CSV · 非实时 · 未保存" : "只读 · 未连接券商"}</span></div>
             {overview ? (
               <section className="metric-grid" aria-label="账户指标">
                 {overview.metrics.map((metric) => <MetricCard key={metric.key} metric={metric} />)}

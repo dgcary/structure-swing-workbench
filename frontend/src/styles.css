@@ -67,3 +67,6 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
   .metric-value { font-size: 22px; }
 }
 @media (max-width: 380px) { .metric-grid { grid-template-columns: 1fr; } }
+
+/* Keep keyboard focus visible on dark surfaces. */
+.tab:focus-visible, .back-button:focus-visible { outline: 3px solid #f8d47d; outline-offset: 3px; }

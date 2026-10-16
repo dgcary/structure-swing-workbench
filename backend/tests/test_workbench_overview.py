@@ -21,7 +21,7 @@ def test_unconnected_overview_is_not_zero_or_pass() -> None:
 def test_known_facts_retain_provenance() -> None:
     ledger = AccountLedger()
     at = datetime(2026, 10, 16, 9, 30, tzinfo=UTC)
-    correct_account(ledger, equity=Decimal("200000"), cash=Decimal("65000"),
+    correct_account(ledger, equity=Decimal(200000), cash=Decimal(65000),
                     at=at, source_id="manual-001")
     metrics = {item["key"]: item for item in build_overview(ledger)["metrics"]}
     assert metrics["equity"]["value"] == "200000"

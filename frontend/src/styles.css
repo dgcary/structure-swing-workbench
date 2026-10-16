@@ -81,3 +81,16 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
 .plan-result li { margin: 8px 0; line-height: 1.6; }
 .plan-result details { margin-top: 16px; color: #b5c7dd; }
 @media (max-width: 760px) { .plan-form { grid-template-columns: 1fr; } }
+
+
+/* CSV upload preview: always explicit about non-persistence and source scope. */
+.csv-preview-form { display: grid; gap: 14px; max-width: 850px; }
+.csv-preview-form label { display: grid; gap: 7px; color: #afc1d7; font-size: 13px; }
+.csv-preview-form :is(select, textarea, input[type="file"]) {
+  width: 100%; min-width: 0; padding: 12px; color: #edf4fc;
+  background: #0c182a; border: 1px solid #49617e; border-radius: 8px; font: inherit;
+}
+.csv-preview-form textarea { min-height: 170px; resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
+.csv-preview-form button { width: fit-content; padding: 12px 18px; color: #fff;
+  background: #2363ac; border: 0; border-radius: 8px; cursor: pointer; }
+.csv-preview-form :is(select,textarea,input,button):focus-visible { outline: 3px solid #f8d47d; outline-offset: 2px; }

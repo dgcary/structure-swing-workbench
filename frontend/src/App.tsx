@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PlanPreview } from "./PlanPreview";
+import { CSVPreview } from "./CSVPreview";
 
 type Metric = {
   key: string;
@@ -217,8 +218,9 @@ export function App() {
         )}
 
         {section === "计划管理" && <PlanPreview />}
+        {section === "成交导入" && <CSVPreview />}
         {section === "研究样例" && <ResearchDemo />}
-        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && (
+        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "成交导入" && (
           <section className="panel placeholder-panel">
             <h2>{section}</h2>
             <Unavailable

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
+from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
 from app.workbench.overview import build_overview
 from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
 
@@ -47,3 +48,9 @@ def workbench_overview() -> dict[str, object]:
 def workbench_plan_preview(payload: PlanPreviewRequest) -> dict[str, object]:
     """Preview selected rules for explicit user input; never approve execution."""
     return preview_plan(payload)
+
+
+@app.post("/workbench/csv-preview", tags=["workbench"])
+def workbench_csv_preview(payload: CSVPreviewRequest) -> dict[str, object]:
+    """Validate an uploaded CSV in a disposable ledger; never persist it."""
+    return preview_csv(payload)

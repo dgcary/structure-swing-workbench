@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
 from app.workbench.overview import build_overview
+from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
 
 settings = get_settings()
 
@@ -40,3 +41,9 @@ def research_sample() -> dict[str, object]:
 @app.get("/workbench/overview", tags=["workbench"])
 def workbench_overview() -> dict[str, object]:
     return build_overview()
+
+
+@app.post("/workbench/plan-preview", tags=["workbench"])
+def workbench_plan_preview(payload: PlanPreviewRequest) -> dict[str, object]:
+    """Preview selected rules for explicit user input; never approve execution."""
+    return preview_plan(payload)

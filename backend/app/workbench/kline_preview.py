@@ -59,7 +59,10 @@ def preview_kline(payload: KlinePreviewRequest) -> dict[str, object]:
             if None in row or any(row.get(col) is None for col in COLUMNS):
                 raise ValueError("K线列数不正确")
             stamp = _time(row["time"], payload.timeframe)
-            if previous is not None and (\n                stamp <= previous if payload.timeframe == "day" else\n                datetime.fromisoformat(stamp) <= datetime.fromisoformat(previous)\n            ):
+            if previous is not None and (
+                stamp <= previous if payload.timeframe == "day" else
+                datetime.fromisoformat(stamp) <= datetime.fromisoformat(previous)
+            ):
                 raise ValueError("K线时间必须严格递增且不可重复")
             previous = stamp
             values = {key: _number(row[key], positive=key != "volume")

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
-from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
+from app.workbench.account_snapshot_preview import (\n    AccountSnapshotPreviewRequest,\n    preview_account_snapshot,\n)\nfrom app.workbench.csv_preview import CSVPreviewRequest, preview_csv
 from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
 from app.workbench.overview import build_overview
 from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
@@ -60,3 +60,11 @@ def workbench_csv_preview(payload: CSVPreviewRequest) -> dict[str, object]:
 @app.post("/workbench/kline-preview", tags=["workbench"])
 def workbench_kline_preview(payload: KlinePreviewRequest) -> dict[str, object]:
     return preview_kline(payload)
+
+
+@app.post("/workbench/account-snapshot-preview", tags=["workbench"])
+def workbench_account_snapshot_preview(
+    payload: AccountSnapshotPreviewRequest,
+) -> dict[str, object]:
+    """Show uploaded account CSVs only in an isolated request-scoped ledger."""
+    return preview_account_snapshot(payload)

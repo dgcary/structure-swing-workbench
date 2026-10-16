@@ -12,12 +12,24 @@ type Metric = {
   as_of: string | null;
 };
 
+type Holding = {
+  symbol: string;
+  status: "snapshot" | "partial" | "unanchored" | "conflict";
+  quantity: string | null;
+  broker_display_cost: string | null;
+  core_quantity: string | null;
+  t_quantity: string | null;
+  source: string | null;
+  as_of: string | null;
+  warning: string;
+};
+
 type Overview = {
   schema_version: string;
   mode: "read_only";
   notice: string;
   metrics: Metric[];
-  holdings: unknown[] | null;
+  holdings: Holding[] | null;
   effective_plans: unknown[] | null;
   pending_actions: unknown[] | null;
   audit_results: unknown[] | null;
@@ -198,7 +210,22 @@ export function App() {
             <div className="two-column">
               <section className="panel">
                 <h2>当前持仓与核心／T仓</h2>
-                <Unavailable title="持仓数据未接入" detail="需要经核验的账户快照与成交记录；暂不推断空仓或仓位比例。" />
+                {overview?.holdings ? (
+                  <div className="holding-list">
+                    <p className="notice">仅展示已有来源的标的，不代表账户全量持仓。</p>
+                    {overview.holdings.map((item) => (
+                      <article className="holding-card" key={item.symbol}>
+                        <h3>{item.symbol} · {item.status === "conflict" ? "数据冲突" : "部分持仓事实"}</h3>
+                        <p>持仓数量：{item.quantity ?? "未知"} · 券商显示成本：{item.broker_display_cost ?? "未知"}</p>
+                        <p>核心仓：{item.core_quantity ?? "未核实"} · T仓：{item.t_quantity ?? "未核实"}</p>
+                        <p>来源：{item.source ?? "缺少持仓基准"} · {item.as_of ?? "基准时间未知"}</p>
+                        <p role="status">{item.warning}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <Unavailable title="持仓数据未接入" detail="需要经核验的账户快照与成交记录；暂不推断空仓或仓位比例。" />
+                )}
               </section>
               <section className="panel">
                 <h2>有效交易计划</h2>

@@ -1,6 +1,7 @@
 """Read-only workbench overview; missing values are not zero."""
 
 from app.account.ledger import AccountLedger
+from app.workbench.holdings import project_holdings
 
 FIELDS = {
     "equity": ("账户总权益", "account.equity", "元"),
@@ -32,7 +33,7 @@ def build_overview(ledger: AccountLedger | None = None) -> dict[str, object]:
         "mode": "read_only",
         "notice": "未接入的数据不是零、空仓或审计通过；不得据此交易。",
         "metrics": metrics,
-        "holdings": None,
+        "holdings": project_holdings(ledger),
         "effective_plans": None,
         "pending_actions": None,
         "audit_results": None,

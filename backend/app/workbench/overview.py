@@ -25,6 +25,7 @@ def build_overview(ledger: AccountLedger | None = None) -> dict[str, object]:
             "status": "available" if fact else "unavailable",
             "source": f"{fact.source.value}/{fact.source_id}" if fact else None,
             "as_of": fact.observed_at.isoformat() if fact else None,
+            "availability_reason": None if fact else "缺少可追溯的数据来源",
         })
     return {
         "schema_version": "m8.overview.v1",

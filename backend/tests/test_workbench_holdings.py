@@ -13,7 +13,7 @@ AT = datetime(2026, 10, 16, 9, 30, tzinfo=UTC)
 def _fill(side: FillSide, quantity: str, fill_id: str = "f1") -> Fill:
     return Fill(
         fill_id=fill_id, symbol="600000", side=side,
-        quantity=Decimal(quantity), price=Decimal("11"),
+        quantity=Decimal(quantity), price=Decimal(11),
         executed_at=AT + timedelta(minutes=1), source_id="broker-csv",
     )
 
@@ -27,8 +27,8 @@ def test_missing_holdings_are_unknown_not_empty_portfolio() -> None:
 def test_snapshot_holding_keeps_provenance_and_no_invented_core_t() -> None:
     ledger = AccountLedger()
     correct_holding(
-        ledger, symbol="600000", quantity=Decimal("100"),
-        cost=Decimal("10"), at=AT, source_id="manual-1",
+        ledger, symbol="600000", quantity=Decimal(100),
+        cost=Decimal(10), at=AT, source_id="manual-1",
     )
     overview = build_overview(ledger)
     row = overview["holdings"][0]
@@ -44,8 +44,8 @@ def test_snapshot_holding_keeps_provenance_and_no_invented_core_t() -> None:
 def test_later_fill_changes_quantity_but_invalidates_stale_cost() -> None:
     ledger = AccountLedger()
     correct_holding(
-        ledger, symbol="600000", quantity=Decimal("100"),
-        cost=Decimal("10"), at=AT, source_id="manual-1",
+        ledger, symbol="600000", quantity=Decimal(100),
+        cost=Decimal(10), at=AT, source_id="manual-1",
     )
     apply_fill(ledger, _fill(FillSide.BUY, "20"))
     row = build_overview(ledger)["holdings"][0]
@@ -67,8 +67,8 @@ def test_unanchored_fills_never_become_a_position() -> None:
 def test_inconsistent_sell_is_marked_conflict_not_negative_holding() -> None:
     ledger = AccountLedger()
     correct_holding(
-        ledger, symbol="600000", quantity=Decimal("10"),
-        cost=Decimal("10"), at=AT, source_id="manual-1",
+        ledger, symbol="600000", quantity=Decimal(10),
+        cost=Decimal(10), at=AT, source_id="manual-1",
     )
     apply_fill(ledger, _fill(FillSide.SELL, "20"))
     row = build_overview(ledger)["holdings"][0]

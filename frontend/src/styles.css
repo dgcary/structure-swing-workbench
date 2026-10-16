@@ -70,3 +70,14 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
 
 /* Keep keyboard focus visible on dark surfaces. */
 .tab:focus-visible, .back-button:focus-visible { outline: 3px solid #f8d47d; outline-offset: 3px; }
+
+/* M8 manual preview: compact, touch-friendly, no execution controls. */
+.plan-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.plan-form label { display: grid; gap: 7px; color: #afc1d7; font-size: 13px; }
+.plan-form input, .plan-form select { min-width: 0; width: 100%; padding: 12px; color: #edf4fc; background: #0c182a; border: 1px solid #49617e; border-radius: 8px; font: inherit; }
+.plan-form button { align-self: end; padding: 13px; color: #fff; background: #2363ac; border: 0; border-radius: 8px; cursor: pointer; }
+.plan-form :is(input,select,button):focus-visible { outline: 3px solid #f8d47d; outline-offset: 2px; }
+.plan-result { margin-top: 24px; padding: 18px; border: 1px solid #5c718a; border-radius: 10px; background: #0e1a2a; }
+.plan-result li { margin: 8px 0; line-height: 1.6; }
+.plan-result details { margin-top: 16px; color: #b5c7dd; }
+@media (max-width: 760px) { .plan-form { grid-template-columns: 1fr; } }

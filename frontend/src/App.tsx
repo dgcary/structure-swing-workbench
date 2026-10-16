@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PlanPreview } from "./PlanPreview";
+import { AuditPreviewResult, type PartialAuditResult } from "./AuditPreviewResult";
 import { CSVPreview } from "./CSVPreview";
 import { KlinePreview } from "./KlinePreview";
 import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
@@ -145,6 +146,7 @@ export function App() {
   const [baselineOverview, setBaselineOverview] = useState<Overview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState("连接中");
+  const [lastAuditPreview, setLastAuditPreview] = useState<PartialAuditResult | null>(null);
 
   useEffect(() => {
     fetch("/api/health")
@@ -246,17 +248,29 @@ export function App() {
               <section className="panel">
                 <h2>纪律审计与可执行性</h2>
                 <div className="audit-unknown">未审计 · 不可认定可执行</div>
-                <p>硬性失败与可覆盖失败将在接入审计记录后优先展示；普通通过项默认折叠。</p>
+                <p>正式审计记录尚未接入。局部预审不构成交易许可；硬性失败与可覆盖失败将在接入正式审计后优先展示。</p>
+                {lastAuditPreview && <p>最近一次局部预审：{lastAuditPreview.symbol} · {lastAuditPreview.highest_checked_level_zh}（不可执行）</p>}
+                <button className="back-button" type="button" onClick={() => setSection("审计结果")}>查看审计状态</button>
               </section>
             </div>
           </>
         )}
 
-        {section === "计划管理" && <PlanPreview />}
+        {section === "计划管理" && <PlanPreview onResult={setLastAuditPreview} />}
+        {section === "审计结果" && <section className="panel">
+          <h2>纪律审计结果</h2>
+          <div className="audit-unknown">正式审计未完成 · 不可执行</div>
+          <p>当前仅提供手工输入字段的局部预审；未保存正式计划、未生成审计记录，也未授权交易。</p>
+          {lastAuditPreview ? <>
+            <AuditPreviewResult result={lastAuditPreview} />
+            <button className="back-button" type="button" onClick={() => setLastAuditPreview(null)}>清除本次会话预审</button>
+          </> : <Unavailable title="暂无本次会话预审结果" detail="请到计划管理填写计划字段并主动提交局部预审；没有结果不代表审计通过。" />}
+          <button className="back-button" type="button" onClick={() => setSection("计划管理")}>前往计划管理</button>
+        </section>}
         {section === "成交导入" && <CSVPreview />}
         {section === "K线" && <KlinePreview />}
         {section === "研究样例" && <ResearchDemo />}
-        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "成交导入" && section !== "K线" && (
+        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && (
           <section className="panel placeholder-panel">
             <h2>{section}</h2>
             <Unavailable

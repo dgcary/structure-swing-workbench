@@ -40,3 +40,27 @@ def test_minute_bars_require_timezone():
         "data": header + "2026-10-16T09:35:00,10,11,9,10,100\n",
     })
     assert response.status_code == 422
+
+def test_minute_bars_compare_actual_instant_not_offset_text():
+    valid = header + (
+        "2026-10-16T09:35:00+08:00,10,11,9,10,1\n"
+        "2026-10-16T09:30:00+07:00,10,11,9,10,1\n"
+    )
+    assert client.post("/workbench/kline-preview", json={
+        "timeframe": "5m", "data": valid,
+    }).status_code == 200
+    invalid = header + (
+        "2026-10-16T09:35:00+07:00,10,11,9,10,1\n"
+        "2026-10-16T09:40:00+08:00,10,11,9,10,1\n"
+    )
+    assert client.post("/workbench/kline-preview", json={
+        "timeframe": "5m", "data": invalid,
+    }).status_code == 422
+
+
+def test_empty_csv_and_invalid_headers_rejected():
+    for data in ("time,open,high,low,close,volume\n",
+                 "date,open,high,low,close,volume\n2026-10-16,10,11,9,10,1\n"):
+        assert client.post("/workbench/kline-preview", json={
+            "timeframe": "day", "data": data,
+        }).status_code == 422

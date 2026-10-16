@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
+from app.workbench.overview import build_overview
 
 settings = get_settings()
 
@@ -34,3 +35,8 @@ def health() -> dict[str, str]:
 def research_sample() -> dict[str, object]:
     """Display-only synthetic fixture; no remote TradingAgents or trade execution."""
     return parse_research_pack(sample_zip()).to_dict()
+
+
+@app.get("/workbench/overview", tags=["workbench"])
+def workbench_overview() -> dict[str, object]:
+    return build_overview()

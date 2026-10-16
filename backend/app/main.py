@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
 from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
+from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
 from app.workbench.overview import build_overview
 from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
 
@@ -54,3 +55,8 @@ def workbench_plan_preview(payload: PlanPreviewRequest) -> dict[str, object]:
 def workbench_csv_preview(payload: CSVPreviewRequest) -> dict[str, object]:
     """Validate an uploaded CSV in a disposable ledger; never persist it."""
     return preview_csv(payload)
+
+
+@app.post("/workbench/kline-preview", tags=["workbench"])
+def workbench_kline_preview(payload: KlinePreviewRequest) -> dict[str, object]:
+    return preview_kline(payload)

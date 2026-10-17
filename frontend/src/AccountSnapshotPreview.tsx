@@ -62,9 +62,10 @@ export function AccountSnapshotPreview({
   }
 
   async function load(kind: Kind, file?: File) {
-    if (!file) return;
     const activeRead = ++fileReadId.current[kind];
     invalidatePreview();
+    setValues((previous) => ({ ...previous, [kind]: "" }));
+    if (!file) return;
     if (file.size > 500_000) {
       setError("单个 CSV 不得超过 500 KB；文件未读取。");
       return;

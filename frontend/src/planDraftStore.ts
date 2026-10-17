@@ -35,7 +35,8 @@ export function readDrafts(storage: Pick<Store, "getItem">): PlanDraft[] {
   for (const value of parsed) {
     if (!isRecord(value) || typeof value.id !== "string" ||
       !value.id.trim() || value.id.length > 128 ||
-      !Number.isSafeInteger(value.version) || (value.version as number) <= 0 ||
+      typeof value.version !== "number" || !Number.isSafeInteger(value.version) ||
+      value.version <= 0 ||
       typeof value.savedAt !== "string" ||
       !Number.isFinite(Date.parse(value.savedAt)) ||
       typeof value.symbol !== "string" || typeof value.setup !== "string" ||

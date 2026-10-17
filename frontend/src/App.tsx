@@ -25,6 +25,8 @@ type Holding = {
   source: string | null;
   as_of: string | null;
   warning: string;
+  applied_fill_ids?: string[];
+  unanchored_fill_delta?: string | null;
 };
 
 type Overview = {
@@ -225,10 +227,16 @@ export function App() {
                     <p className="notice">仅展示已有来源的标的，不代表账户全量持仓。</p>
                     {overview.holdings.map((item) => (
                       <article className="holding-card" key={item.symbol}>
-                        <h3>{item.symbol} · {item.status === "conflict" ? "数据冲突" : "部分持仓事实"}</h3>
+                        <h3>{item.symbol} · {{ conflict: "数据冲突", unanchored: "仅有成交记录", partial: "数量可追溯／成本待核", snapshot: "持仓快照" }[item.status]}</h3>
                         <p>持仓数量：{item.quantity ?? "未知"} · 券商显示成本：{item.broker_display_cost ?? "未知"}</p>
                         <p>核心仓：{item.core_quantity ?? "未核实"} · T仓：{item.t_quantity ?? "未核实"}</p>
-                        <p>来源：{item.source ?? "缺少持仓基准"} · {item.as_of ?? "基准时间未知"}</p>
+                        {item.status === "unanchored" && (
+                          <p role="status">已确认成交净变化：{item.unanchored_fill_delta ?? "未知"} 股；这是成交差额，<strong>不是当前持仓数量</strong>。</p>
+                        )}
+                        {(item.applied_fill_ids?.length ?? 0) > 0 && (
+                          <p>关联成交：{item.applied_fill_ids?.length} 笔（仅当前来源范围内）</p>
+                        )}
+                        <p>来源：{item.source ?? "缺少来源"} · 数据时间：{item.as_of ?? "未知"}</p>
                         <p role="status">{item.warning}</p>
                       </article>
                     ))}

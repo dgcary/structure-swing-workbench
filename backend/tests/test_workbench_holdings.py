@@ -62,6 +62,9 @@ def test_unanchored_fills_never_become_a_position() -> None:
     assert row["quantity"] is None
     assert row["unanchored_fill_delta"] == "20"
     assert row["status"] == "unanchored"
+    assert row["source"] == "成交记录/broker-csv"
+    assert row["applied_fill_ids"] == ["f1"]
+    assert row["as_of"] == (AT + timedelta(minutes=1)).isoformat()
 
 
 def test_inconsistent_sell_is_marked_conflict_not_negative_holding() -> None:

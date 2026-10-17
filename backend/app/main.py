@@ -12,6 +12,7 @@ from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
 from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
 from app.workbench.overview import build_overview
 from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
+from app.workbench.t_cycle_preview import TCyclePreviewRequest, preview_t_cycle
 
 settings = get_settings()
 
@@ -72,3 +73,9 @@ def workbench_account_snapshot_preview(
 ) -> dict[str, object]:
     """Show uploaded account CSVs only in an isolated request-scoped ledger."""
     return preview_account_snapshot(payload)
+
+
+@app.post("/workbench/t-cycle-preview", tags=["workbench"])
+def workbench_t_cycle_preview(payload: TCyclePreviewRequest) -> dict[str, object]:
+    """Calculate one user-supplied T cycle without broker or execution access."""
+    return preview_t_cycle(payload)

@@ -6,6 +6,7 @@ import { KlinePreview } from "./KlinePreview";
 import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
 import { TCyclePreview } from "./TCyclePreview";
 import { LocalPlanDrafts } from "./LocalPlanDrafts";
+import { LocalReview } from "./LocalReview";
 
 type Metric = {
   key: string;
@@ -281,8 +282,9 @@ export function App() {
         {section === "K线" && <KlinePreview />}
         {section === "T仓" && <TCyclePreview />}
         {section === "历史计划" && <LocalPlanDrafts history />}
+        {section === "复盘" && <LocalReview />}
         {section === "研究样例" && <ResearchDemo />}
-        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && section !== "T仓" && section !== "历史计划" && (
+        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && section !== "T仓" && section !== "历史计划" && section !== "复盘" && (
           <section className="panel placeholder-panel">
             <h2>{section}</h2>
             <Unavailable

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 type TPreview = {
   schema_version: string;
@@ -23,10 +23,13 @@ export function TCyclePreview() {
   const [result, setResult] = useState<TPreview | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const requestVersion = useRef(0);
+  useEffect(() => () => { requestVersion.current++; }, []);
 
-  function invalidate() { setResult(null); setError(""); }
+  function invalidate() { requestVersion.current++; setResult(null); setError(""); setPending(false); }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); invalidate(); setPending(true);
+    const version = requestVersion.current;
     try {
       const response = await fetch("/api/workbench/t-cycle-preview", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -36,6 +39,7 @@ export function TCyclePreview() {
         }),
       });
       const data = await response.json();
+      if (version !== requestVersion.current) return;
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "输入无效");
       const preview = data as TPreview;
       if (preview.schema_version !== "m8.t_cycle_preview.v1" ||
@@ -43,8 +47,9 @@ export function TCyclePreview() {
           preview.daily_cycle_limit_verified !== false ||
           preview.trade_execution_enabled !== false) throw new Error("预览协议异常");
       setResult(preview);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "预览失败"); }
-    finally { setPending(false); }
+    } catch (cause) {
+      if (version === requestVersion.current) setError(cause instanceof Error ? cause.message : "预览失败");
+    } finally { if (version === requestVersion.current) setPending(false); }
   }
   return <section className="panel">
     <h2>T仓 · 单次手工计算</h2>

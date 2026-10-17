@@ -5,6 +5,7 @@ import { CSVPreview } from "./CSVPreview";
 import { KlinePreview } from "./KlinePreview";
 import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
 import { TCyclePreview } from "./TCyclePreview";
+import { LocalPlanDrafts } from "./LocalPlanDrafts";
 
 type Metric = {
   key: string;
@@ -265,7 +266,7 @@ export function App() {
           </>
         )}
 
-        {section === "计划管理" && <PlanPreview onResult={setLastAuditPreview} />}
+        {section === "计划管理" && <><PlanPreview onResult={setLastAuditPreview} /><LocalPlanDrafts /></>}
         {section === "审计结果" && <section className="panel">
           <h2>纪律审计结果</h2>
           <div className="audit-unknown">正式审计未完成 · 不可执行</div>
@@ -279,8 +280,9 @@ export function App() {
         {section === "成交导入" && <CSVPreview />}
         {section === "K线" && <KlinePreview />}
         {section === "T仓" && <TCyclePreview />}
+        {section === "历史计划" && <LocalPlanDrafts history />}
         {section === "研究样例" && <ResearchDemo />}
-        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && section !== "T仓" && (
+        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && section !== "T仓" && section !== "历史计划" && (
           <section className="panel placeholder-panel">
             <h2>{section}</h2>
             <Unavailable

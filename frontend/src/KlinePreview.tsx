@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 type Bar = { time: string; open: string; high: string; low: string; close: string; volume: string };
 type Preview = {
@@ -37,39 +37,43 @@ export function KlinePreview() {
   const [result, setResult] = useState<Preview | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const version = useRef(0);
+  useEffect(() => () => { version.current++; }, []);
+  const invalidate = () => { version.current++; setResult(null); setError(""); setPending(false); };
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setResult(null); setError(""); setPending(true);
+    event.preventDefault(); const current = ++version.current; setResult(null); setError(""); setPending(true);
     try {
       const response = await fetch("/api/workbench/kline-preview", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ timeframe, data }),
       });
       const payload = await response.json();
+      if (current !== version.current) return;
       if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "CSV校验失败");
       const value = payload as Preview;
       if (value.schema_version !== "m8.kline_preview.v1" || value.source !== "user_uploaded_csv" ||
           value.persisted || value.realtime || value.setup_detected || value.trade_execution_enabled ||
           !Array.isArray(value.bars) || !value.bars.length) throw new Error("数据协议不可信");
       setResult(value);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "读取失败"); }
-    finally { setPending(false); }
+    } catch (cause) { if (current === version.current) setError(cause instanceof Error ? cause.message : "读取失败"); }
+    finally { if (current === version.current) setPending(false); }
   }
   return <section className="panel">
     <h2>K线 · 本地历史数据</h2>
     <p className="notice">只显示用户提供的OHLCV；非实时、不保存、不判断Setup或买卖。</p>
     <form className="csv-preview-form" onSubmit={submit}>
-      <label>周期<select value={timeframe} onChange={(e) => { setTimeframe(e.target.value); setResult(null); }}>
+      <label>周期<select value={timeframe} onChange={(e) => { invalidate(); setTimeframe(e.target.value); }}>
         <option value="day">日K</option><option value="5m">5分钟</option><option value="15m">15分钟</option>
       </select></label>
       <p>表头：<code>time,open,high,low,close,volume</code>。分钟K时间须带时区，最多500根。</p>
       <label>选择CSV<input type="file" accept=".csv,text/csv" onChange={async (e) => {
-        const file = e.target.files?.[0]; setResult(null); setError("");
+        const file = e.target.files?.[0]; invalidate(); const current = version.current; setData("");
         if (!file) return;
         if (file.size > 250_000) { setError("文件超过250 KB"); return; }
-        try { setData(await file.text()); } catch { setError("读取文件失败"); }
+        try { const content = await file.text(); if (current === version.current) setData(content); } catch { if (current === version.current) setError("读取文件失败"); }
       }} /></label>
       <label>或粘贴CSV<textarea required maxLength={250_000} value={data}
-        onChange={(e) => { setData(e.target.value); setResult(null); }} /></label>
+        onChange={(e) => { invalidate(); setData(e.target.value); }} /></label>
       <button type="submit" disabled={pending || !data.trim()}>{pending ? "校验中…" : "校验并显示"}</button>
     </form>
     {error && <p role="alert">{error}</p>}

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 type CSVKind = "fills" | "holdings" | "account";
 type Preview = {
@@ -26,21 +26,34 @@ export function CSVPreview() {
   const [result, setResult] = useState<Preview | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-
-  async function loadFile(file?: File) {
+  const requestVersion = useRef(0);
+  const fileVersion = useRef(0);
+  useEffect(() => () => { requestVersion.current++; fileVersion.current++; }, []);
+  function invalidate() {
+    requestVersion.current++;
+    fileVersion.current++;
     setResult(null);
     setError("");
+    setPending(false);
+  }
+
+  async function loadFile(file?: File) {
+    invalidate();
+    setData("");
     if (!file) return;
     if (file.size > 500_000) {
       setError("文件超过 500 KB，未读取。");
       return;
     }
-    try { setData(await file.text()); }
-    catch { setError("读取文件失败，请粘贴 CSV 内容。"); }
+    const activeRead = fileVersion.current;
+    try { const csv = await file.text(); if (activeRead === fileVersion.current) setData(csv); }
+    catch { if (activeRead === fileVersion.current) setError("读取文件失败，请粘贴 CSV 内容。"); }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const activeRequest = ++requestVersion.current;
+    const submittedKind = kind;
     setResult(null);
     setError("");
     setPending(true);
@@ -48,14 +61,16 @@ export function CSVPreview() {
       const response = await fetch("/api/workbench/csv-preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, data }),
+        body: JSON.stringify({ kind: submittedKind, data }),
       });
       const body = await response.json();
+      if (activeRequest !== requestVersion.current) return;
       if (!response.ok) {
         throw new Error(typeof body.detail === "string" ? body.detail : "CSV 格式校验失败");
       }
       const preview = body as Preview;
       if (preview.schema_version !== "m8.csv_preview.v1" ||
+          preview.kind !== submittedKind ||
           preview.persisted !== false ||
           preview.reconciled_with_live_account !== false ||
           preview.trade_execution_enabled !== false) {
@@ -63,8 +78,8 @@ export function CSVPreview() {
       }
       setResult(preview);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "请求失败");
-    } finally { setPending(false); }
+      if (activeRequest === requestVersion.current) setError(cause instanceof Error ? cause.message : "请求失败");
+    } finally { if (activeRequest === requestVersion.current) setPending(false); }
   }
 
   return <section className="panel">
@@ -73,7 +88,7 @@ export function CSVPreview() {
     <form className="csv-preview-form" onSubmit={submit}>
       <label>文件类型
         <select value={kind} onChange={(e) => {
-          setKind(e.target.value as CSVKind); setResult(null); setError("");
+          invalidate(); setKind(e.target.value as CSVKind); setData("");
         }}>
           <option value="fills">确认成交</option>
           <option value="holdings">持仓快照</option>
@@ -88,7 +103,7 @@ export function CSVPreview() {
       </label>
       <label>CSV 内容（可直接粘贴）
         <textarea required maxLength={500_000} value={data} onChange={(e) => {
-          setData(e.target.value); setResult(null); setError("");
+          invalidate(); setData(e.target.value);
         }} />
       </label>
       <button type="submit" disabled={pending || !data.trim()}>

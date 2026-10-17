@@ -48,3 +48,18 @@ test("invalid prices and missing editing ids never create a plan", () => {
   assert.throws(() => saveDraft(store, { ...input, entry: "0" }, null));
   assert.equal(store.getItem(DRAFT_KEY), null);
 });
+
+test("empty stored value is corruption, not permission to overwrite", () => {
+  const store = memoryStore();
+  store.setItem(DRAFT_KEY, "");
+  assert.throws(() => saveDraft(store, input, null));
+  assert.equal(store.getItem(DRAFT_KEY), "");
+});
+
+test("new plan ids work without secure-context crypto APIs", () => {
+  const store = memoryStore();
+  const saved = saveDraft(store, input, null);
+  assert.equal(typeof saved.id, "string");
+  assert.ok(saved.id.length > 0);
+  assert.equal(readDrafts(store).length, 1);
+});

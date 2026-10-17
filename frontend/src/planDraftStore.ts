@@ -25,7 +25,7 @@ function validInput(input: PlanDraftInput): boolean {
 
 export function readDrafts(storage: Pick<Store, "getItem">): PlanDraft[] {
   const raw = storage.getItem(DRAFT_KEY);
-  if (!raw) return [];
+  if (raw === null) return [];
   const parsed: unknown = JSON.parse(raw);
   if (!Array.isArray(parsed) || parsed.length > MAX_VERSIONS) {
     throw new Error("本机草稿记录损坏；已停止写入，避免覆盖原数据。");
@@ -61,7 +61,7 @@ export function saveDraft(
   storage: Store,
   input: PlanDraftInput,
   editingId: string | null,
-  makeId: () => string = () => crypto.randomUUID(),
+  makeId: () => string = () => Date.now().toString(36) + Math.random().toString(36).slice(2),
   now: () => string = () => new Date().toISOString(),
 ): { id: string; drafts: PlanDraft[] } {
   if (!validInput(input)) throw new Error("请核对证券代码、价格和结构失效价。");

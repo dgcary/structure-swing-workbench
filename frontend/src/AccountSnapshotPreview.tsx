@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 type Kind = "account" | "holdings" | "fills";
 type CSVValues = Record<Kind, string>;
@@ -44,22 +44,39 @@ export function AccountSnapshotPreview({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
+  const requestId = useRef(0);
+  const fileReadId = useRef<Record<Kind, number>>({ account: 0, holdings: 0, fills: 0 });
 
-  function change(kind: Kind, value: string) {
-    setValues((previous) => ({ ...previous, [kind]: value }));
+  function invalidatePreview() {
+    requestId.current += 1;
+    setPending(false);
     setError("");
     setNotice("");
     onReset();
   }
 
+  function change(kind: Kind, value: string) {
+    fileReadId.current[kind] += 1;
+    invalidatePreview();
+    setValues((previous) => ({ ...previous, [kind]: value }));
+  }
+
   async function load(kind: Kind, file?: File) {
     if (!file) return;
+    const activeRead = ++fileReadId.current[kind];
+    invalidatePreview();
     if (file.size > 500_000) {
       setError("单个 CSV 不得超过 500 KB；文件未读取。");
       return;
     }
-    try { change(kind, await file.text()); }
-    catch { setError("读取本地 CSV 失败，请粘贴内容。"); }
+    try {
+      const content = await file.text();
+      if (activeRead !== fileReadId.current[kind]) return;
+      invalidatePreview();
+      setValues((previous) => ({ ...previous, [kind]: content }));
+    } catch {
+      if (activeRead === fileReadId.current[kind]) setError("读取本地 CSV 失败，请粘贴内容。");
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -73,6 +90,7 @@ export function AccountSnapshotPreview({
       setError("请至少提供一份 CSV。");
       return;
     }
+    const activeRequest = ++requestId.current;
     setPending(true);
     onReset();
     try {
@@ -97,11 +115,17 @@ export function AccountSnapshotPreview({
           !(result.holdings === null || Array.isArray(result.holdings))) {
         throw new Error("快照协议不匹配，禁止当作真实账户数据。");
       }
-      onPreview(result);
-      setNotice("临时快照已显示在下方总览；不保存、不代表账户全量或实时数据。");
+      if (activeRequest === requestId.current) {
+        onPreview(result);
+        setNotice("临时快照已显示在下方总览；不保存、不代表账户全量或实时数据。");
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "预览失败");
-    } finally { setPending(false); }
+      if (activeRequest === requestId.current) {
+        setError(cause instanceof Error ? cause.message : "预览失败");
+      }
+    } finally {
+      if (activeRequest === requestId.current) setPending(false);
+    }
   }
 
   return <section className="panel">

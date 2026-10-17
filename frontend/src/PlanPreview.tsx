@@ -57,13 +57,13 @@ export function PlanPreview({ onResult }: { onResult?: (result: PartialAuditResu
           pattern={key === "symbol" ? "[0-9]{6}" : undefined} value={values[key]}
           onChange={(e) => { setValues((old) => ({ ...old, [key]: e.target.value })); clearPreview(); setPending(false); }} />
       </label>)}
-      <label>用户计划动作<select required value={action} onChange={(e) => { setAction(e.target.value); setResult(null); onResult?.(null); }}>
+      <label>用户计划动作<select required value={action} onChange={(e) => { setAction(e.target.value); clearPreview(); setPending(false); setError(""); }}>
         <option value="">请选择</option><option value="initial_entry">初始建仓</option>
         <option value="confirmation_add">确认加仓</option><option value="reverse_t_buy">反T先买</option>
         <option value="positive_t_sell">正T先卖</option><option value="take_profit">止盈</option>
         <option value="stop_exit">止损退出</option>
       </select></label>
-      <label>结构是否失效<select required value={invalidated} onChange={(e) => { setInvalidated(e.target.value); setResult(null); onResult?.(null); }}>
+      <label>结构是否失效<select required value={invalidated} onChange={(e) => { setInvalidated(e.target.value); clearPreview(); setPending(false); setError(""); }}>
         <option value="">请明确选择</option><option value="yes">是</option><option value="no">否</option>
       </select></label>
       <button type="submit" disabled={pending}>{pending ? "正在预审…" : "预审已填写字段"}</button>

@@ -41,7 +41,7 @@ export function readDrafts(storage: Pick<Store, "getItem">): PlanDraft[] {
       typeof value.symbol !== "string" || typeof value.setup !== "string" ||
       typeof value.entry !== "string" || typeof value.stop !== "string" ||
       typeof value.target !== "string" || typeof value.notes !== "string" ||
-      !validInput(value as PlanDraftInput)) {
+      !validInput({ symbol: value.symbol, setup: value.setup, entry: value.entry, stop: value.stop, target: value.target, notes: value.notes })) {
       throw new Error("本机草稿记录损坏；已停止写入，避免覆盖原数据。");
     }
     const id = value.id;

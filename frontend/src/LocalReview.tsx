@@ -12,20 +12,27 @@ function readArray(key: string): unknown[] {
   if (!Array.isArray(data) || data.length > 200) throw new Error("本机数据格式错误");
   return data;
 }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 function plans(): Draft[] {
   const data = readArray(PLAN_KEY);
-  if (!data.every((v) => v && typeof v.id === "string" &&
-    Number.isSafeInteger(v.version) && v.version > 0 &&
-    /^[0-9]{6}$/.test(v.symbol) && typeof v.savedAt === "string"))
+  if (!data.every((v) => isRecord(v) && typeof v.id === "string" &&
+    typeof v.version === "number" && Number.isSafeInteger(v.version) && v.version > 0 &&
+    typeof v.symbol === "string" && /^[0-9]{6}$/.test(v.symbol) &&
+    typeof v.savedAt === "string"))
     throw new Error("计划版本数据损坏");
   return data as Draft[];
 }
 function reviews(): Review[] {
   const data = readArray(REVIEW_KEY);
-  if (!data.every((v) => v && typeof v.id === "string" &&
-    typeof v.planId === "string" && Number.isSafeInteger(v.version) &&
-    /^[0-9]{6}$/.test(v.symbol) && typeof v.savedAt === "string" &&
-    typeof v.observation === "string" && typeof v.lesson === "string"))
+  if (!data.every((v) => isRecord(v) && typeof v.id === "string" &&
+    typeof v.planId === "string" && typeof v.version === "number" &&
+    Number.isSafeInteger(v.version) && v.version > 0 &&
+    typeof v.symbol === "string" && /^[0-9]{6}$/.test(v.symbol) &&
+    typeof v.savedAt === "string" && typeof v.observation === "string" &&
+    v.observation.length <= 2000 && typeof v.lesson === "string" &&
+    v.lesson.length <= 2000))
     throw new Error("复盘数据损坏");
   return data as Review[];
 }

@@ -1,13 +1,14 @@
 """Manual T-cycle preview is an isolated calculation, not an execution signal."""
 from fastapi.testclient import TestClient
+
 from app.main import app
 
 client = TestClient(app)
 
 
 def call(**changes):
-    data = dict(symbol="600000", direction="positive", open_quantity="100",
-                open_price="12", close_quantity="100", close_price="10")
+    data = {"symbol": "600000", "direction": "positive", "open_quantity": "100",
+            "open_price": "12", "close_quantity": "100", "close_price": "10"}
     data.update(changes)
     return client.post("/workbench/t-cycle-preview", json=data)
 

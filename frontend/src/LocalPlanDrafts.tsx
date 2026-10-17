@@ -27,6 +27,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
   const [error, setError] = useState(() => {
     try { readDrafts(); return ""; } catch { return "本机草稿读取失败；为保护原数据已禁止保存。"; }
   });
+  const [storageFault] = useState(() => { try { readDrafts(); return false; } catch { return true; } });
   const [symbol, setSymbol] = useState("");
   const [setup, setSetup] = useState("NONE");
   const [entry, setEntry] = useState("");
@@ -37,7 +38,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (error) return;
+    if (storageFault) return;
     if (!/^[0-9]{6}$/.test(symbol) || ![entry, target].every((v) =>
       v.trim() && Number.isFinite(Number(v)) && Number(v) > 0) ||
       !Number.isFinite(Number(stop)) || stop.trim() === "" ||
@@ -57,6 +58,19 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
       setEditing(id);
       setError("");
     } catch { setError("浏览器本机存储失败，草稿未保存。"); }
+  }
+
+  function exportBackup() {
+    const data = JSON.stringify({
+      schema_version: "m8.manual_drafts.v1", exported_at: new Date().toISOString(),
+      records: drafts,
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "structure-swing-plan-drafts.json";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function edit(d: Draft) {
@@ -85,12 +99,16 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
         value={target} onChange={(e) => setTarget(e.target.value)} /></label>
       <label>人工备注<input maxLength={2000}
         value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
-      <button type="submit" disabled={Boolean(error)}>{editing ? "保存新版本" : "保存本机草稿"}</button>
+      <button type="submit" disabled={storageFault}>{editing ? "保存新版本" : "保存本机草稿"}</button>
       <button type="button" onClick={() => {
         setEditing(null); setSymbol(""); setSetup("NONE"); setEntry("");
         setStop(""); setTarget(""); setNotes(""); setError("");
       }}>新建空白草稿</button>
     </form>}
+    {history && <button className="back-button" type="button"
+      disabled={drafts.length === 0 || storageFault} onClick={exportBackup}>
+      导出本机历史备份（JSON）
+    </button>}
     {drafts.length === 0 && <p>尚无本机计划草稿。</p>}
     {drafts.map((d) => <article key={d.id + ":" + d.version} className="draft-card">
       <strong>{d.symbol} · 第{d.version}版 · 未审计</strong>

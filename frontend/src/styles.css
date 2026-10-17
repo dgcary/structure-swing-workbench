@@ -101,3 +101,10 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
 .candle-up { stroke: #e77878; fill: #e77878; }
 .candle-down { stroke: #62bb94; fill: #62bb94; }
 .chart-axis { fill: #9aaec8; font-size: 11px; }
+
+/* Browser-local draft versions: compact, readable on mobile. */
+.draft-card { border: 1px solid #344a65; border-radius: 8px; padding: 14px; margin-top: 12px; overflow-wrap: anywhere; }
+.draft-card strong { color: #d7e7fb; }
+.draft-card p { color: #9eb1c8; font-size: 13px; line-height: 1.65; }
+.draft-card button { border: 1px solid #5578a6; border-radius: 7px; background: #193b66; color: #eaf3ff; padding: 9px 13px; cursor: pointer; }
+.draft-card button:focus-visible { outline: 3px solid #f8d47d; outline-offset: 2px; }

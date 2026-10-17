@@ -1,33 +1,15 @@
 import { useState, type FormEvent } from "react";
-
-type Draft = {
-  id: string; version: number; savedAt: string; symbol: string;
-  setup: string; entry: string; stop: string; target: string; notes: string;
-};
-const KEY = "structure-swing.m8.manual-drafts.v1";
-
-function readDrafts(): Draft[] {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return [];
-  const value: unknown = JSON.parse(raw);
-  if (!Array.isArray(value) || value.length > 200 || !value.every((item) =>
-    item && typeof item.id === "string" && Number.isSafeInteger(item.version) &&
-    item.version > 0 && typeof item.savedAt === "string" &&
-    /^[0-9]{6}$/.test(item.symbol) &&
-    ["C", "A", "B", "NONE"].includes(item.setup) &&
-    ["entry", "stop", "target", "notes"].every((key) => typeof item[key] === "string")
-  )) throw new Error("本机草稿记录损坏；已停止写入，避免覆盖原数据。");
-  return value as Draft[];
-}
+import { readDrafts, saveDraft, type PlanDraft } from "./planDraftStore";
+const loadDrafts = () => readDrafts(localStorage);
 
 export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
-  const [drafts, setDrafts] = useState<Draft[]>(() => {
-    try { return readDrafts(); } catch { return []; }
+  const [drafts, setDrafts] = useState<PlanDraft[]>(() => {
+    try { return loadDrafts(); } catch { return []; }
   });
   const [error, setError] = useState(() => {
-    try { readDrafts(); return ""; } catch { return "本机草稿读取失败；为保护原数据已禁止保存。"; }
+    try { loadDrafts(); return ""; } catch { return "本机草稿读取失败；为保护原数据已禁止保存。"; }
   });
-  const [storageFault] = useState(() => { try { readDrafts(); return false; } catch { return true; } });
+  const [storageFault] = useState(() => { try { loadDrafts(); return false; } catch { return true; } });
   const [symbol, setSymbol] = useState("");
   const [setup, setSetup] = useState("NONE");
   const [entry, setEntry] = useState("");
@@ -39,31 +21,21 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (storageFault) return;
-    if (!/^[0-9]{6}$/.test(symbol) || ![entry, target].every((v) =>
-      v.trim() && Number.isFinite(Number(v)) && Number(v) > 0) ||
-      !Number.isFinite(Number(stop)) || stop.trim() === "" ||
-      Number(stop) < 0 || Number(stop) >= Number(entry)) {
-      setError("请核对证券代码、价格和结构失效价。");
-      return;
-    }
-    if (drafts.length >= 200) { setError("已达200个版本上限，请先备份。"); return; }
-    const id = editing ?? (Date.now().toString(36) + Math.random().toString(36).slice(2));
-    const version = drafts.filter((d) => d.id === id).reduce((v, d) =>
-      Math.max(v, d.version), 0) + 1;
-    const next = [{ id, version, savedAt: new Date().toISOString(),
-      symbol, setup, entry, stop, target, notes }, ...drafts];
     try {
-      localStorage.setItem(KEY, JSON.stringify(next));
-      setDrafts(next);
-      setEditing(id);
+      const saved = saveDraft(localStorage,
+        { symbol, setup, entry, stop, target, notes }, editing);
+      setDrafts(saved.drafts);
+      setEditing(saved.id);
       setError("");
-    } catch { setError("浏览器本机存储失败，草稿未保存。"); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "本机草稿保存失败。");
+    }
   }
 
   function exportBackup() {
     const data = JSON.stringify({
       schema_version: "m8.manual_drafts.v1", exported_at: new Date().toISOString(),
-      records: drafts,
+      records: loadDrafts(),
     }, null, 2);
     const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
     const link = document.createElement("a");
@@ -73,7 +45,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function edit(d: Draft) {
+  function edit(d: PlanDraft) {
     setEditing(d.id); setSymbol(d.symbol); setSetup(d.setup);
     setEntry(d.entry); setStop(d.stop); setTarget(d.target); setNotes(d.notes);
     setError("");
@@ -86,7 +58,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
     {error && <p role="alert">{error}</p>}
     {!history && <form className="plan-form" onSubmit={save}>
       <label>证券代码<input required pattern="[0-9]{6}" maxLength={6}
-        value={symbol} onChange={(e) => setSymbol(e.target.value)} /></label>
+        value={symbol} disabled={editing !== null} onChange={(e) => setSymbol(e.target.value)} /></label>
       <label>人工指定 Setup<select value={setup} onChange={(e) => setSetup(e.target.value)}>
         <option value="NONE">未判断</option><option value="C">C 类</option>
         <option value="A">A 类</option><option value="B">B 类</option>

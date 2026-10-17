@@ -19,8 +19,18 @@ def project_holdings(ledger: AccountLedger | None) -> list[dict[str, object]] | 
     rows: list[dict[str, object]] = []
     for symbol in sorted(symbols):
         baseline = ledger.facts.get(f"position:{symbol}:quantity")
-        source = f"{baseline.source.value}/{baseline.source_id}" if baseline else None
-        at = baseline.observed_at.isoformat() if baseline else None
+        # Without a dated holdings baseline, fills prove only a net change,
+        # not an actual position. Keep their provenance visible separately.
+        symbol_fills = [fill for fill in ledger.fills.values() if fill.symbol == symbol]
+        latest_fill = max(symbol_fills, key=lambda fill: fill.executed_at, default=None)
+        source = (
+            f"{baseline.source.value}/{baseline.source_id}" if baseline else
+            f"成交记录/{latest_fill.source_id}" if latest_fill else None
+        )
+        at = (
+            baseline.observed_at.isoformat() if baseline else
+            latest_fill.executed_at.isoformat() if latest_fill else None
+        )
         try:
             view = position_view(ledger, symbol)
         except ImportConflictError:
@@ -28,6 +38,7 @@ def project_holdings(ledger: AccountLedger | None) -> list[dict[str, object]] | 
                 "symbol": symbol, "status": "conflict", "quantity": None,
                 "broker_display_cost": None, "source": source, "as_of": at,
                 "core_quantity": None, "t_quantity": None,
+                "applied_fill_ids": [], "unanchored_fill_delta": None,
                 "warning": "成交与持仓快照冲突，请人工核对。",
             })
             continue

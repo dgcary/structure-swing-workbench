@@ -4,6 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
+from app.workbench.account_snapshot_preview import (
+    AccountSnapshotPreviewRequest,
+    preview_account_snapshot,
+)
+from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
+from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
+from app.workbench.overview import build_overview
+from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
+from app.workbench.t_cycle_preview import TCyclePreviewRequest, preview_t_cycle
 
 settings = get_settings()
 
@@ -34,3 +43,39 @@ def health() -> dict[str, str]:
 def research_sample() -> dict[str, object]:
     """Display-only synthetic fixture; no remote TradingAgents or trade execution."""
     return parse_research_pack(sample_zip()).to_dict()
+
+
+@app.get("/workbench/overview", tags=["workbench"])
+def workbench_overview() -> dict[str, object]:
+    return build_overview()
+
+
+@app.post("/workbench/plan-preview", tags=["workbench"])
+def workbench_plan_preview(payload: PlanPreviewRequest) -> dict[str, object]:
+    """Preview selected rules for explicit user input; never approve execution."""
+    return preview_plan(payload)
+
+
+@app.post("/workbench/csv-preview", tags=["workbench"])
+def workbench_csv_preview(payload: CSVPreviewRequest) -> dict[str, object]:
+    """Validate an uploaded CSV in a disposable ledger; never persist it."""
+    return preview_csv(payload)
+
+
+@app.post("/workbench/kline-preview", tags=["workbench"])
+def workbench_kline_preview(payload: KlinePreviewRequest) -> dict[str, object]:
+    return preview_kline(payload)
+
+
+@app.post("/workbench/account-snapshot-preview", tags=["workbench"])
+def workbench_account_snapshot_preview(
+    payload: AccountSnapshotPreviewRequest,
+) -> dict[str, object]:
+    """Show uploaded account CSVs only in an isolated request-scoped ledger."""
+    return preview_account_snapshot(payload)
+
+
+@app.post("/workbench/t-cycle-preview", tags=["workbench"])
+def workbench_t_cycle_preview(payload: TCyclePreviewRequest) -> dict[str, object]:
+    """Calculate one user-supplied T cycle without broker or execution access."""
+    return preview_t_cycle(payload)

@@ -78,3 +78,34 @@ def test_inconsistent_sell_is_marked_conflict_not_negative_holding() -> None:
     assert row["status"] == "conflict"
     assert row["quantity"] is None
     assert row["broker_display_cost"] is None
+
+
+def test_applied_fill_updates_as_of_and_provenance() -> None:
+    ledger = AccountLedger()
+    correct_holding(
+        ledger, symbol="600000", quantity=Decimal(100),
+        cost=Decimal(10), at=AT, source_id="manual-1",
+    )
+    apply_fill(ledger, _fill(FillSide.BUY, "20"))
+    row = build_overview(ledger)["holdings"][0]
+    assert row["quantity"] == "120"
+    assert row["as_of"] == (AT + timedelta(minutes=1)).isoformat()
+    assert row["source"] == "manual/manual-1 + 成交记录/broker-csv"
+
+
+def test_fill_older_than_snapshot_does_not_change_provenance() -> None:
+    ledger = AccountLedger()
+    correct_holding(
+        ledger, symbol="600000", quantity=Decimal(100),
+        cost=Decimal(10), at=AT, source_id="manual-1",
+    )
+    apply_fill(ledger, Fill(
+        fill_id="older", symbol="600000", side=FillSide.BUY,
+        quantity=Decimal(20), price=Decimal(9),
+        executed_at=AT - timedelta(minutes=1), source_id="broker-csv",
+    ))
+    row = build_overview(ledger)["holdings"][0]
+    assert row["quantity"] == "100"
+    assert row["as_of"] == AT.isoformat()
+    assert row["source"] == "manual/manual-1"
+    assert row["applied_fill_ids"] == []

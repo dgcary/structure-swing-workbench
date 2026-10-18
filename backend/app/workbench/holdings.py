@@ -21,15 +21,21 @@ def project_holdings(ledger: AccountLedger | None) -> list[dict[str, object]] | 
         baseline = ledger.facts.get(f"position:{symbol}:quantity")
         # Without a dated holdings baseline, fills prove only a net change,
         # not an actual position. Keep their provenance visible separately.
-        symbol_fills = [fill for fill in ledger.fills.values() if fill.symbol == symbol]
+        symbol_fills = [
+            fill for fill in ledger.fills.values()
+            if fill.symbol == symbol
+            and (baseline is None or fill.executed_at > baseline.observed_at)
+        ]
         latest_fill = max(symbol_fills, key=lambda fill: fill.executed_at, default=None)
         source = (
-            f"{baseline.source.value}/{baseline.source_id}" if baseline else
-            f"成交记录/{latest_fill.source_id}" if latest_fill else None
+            " + ".join(filter(None, (
+                f"{baseline.source.value}/{baseline.source_id}" if baseline else None,
+                f"成交记录/{latest_fill.source_id}" if latest_fill else None,
+            ))) or None
         )
         at = (
-            baseline.observed_at.isoformat() if baseline else
-            latest_fill.executed_at.isoformat() if latest_fill else None
+            latest_fill.executed_at.isoformat() if latest_fill else
+            baseline.observed_at.isoformat() if baseline else None
         )
         try:
             view = position_view(ledger, symbol)

@@ -1,5 +1,5 @@
 /** Browser-only draft summary for the dashboard; never an effective plan. */
-import { readDrafts, type PlanDraft } from "./planDraftStore";
+import { readDrafts, type PlanDraft } from "./planDraftStore.ts";
 
 export type LocalDraftSummary = { versionCount: number; latest: PlanDraft[] };
 

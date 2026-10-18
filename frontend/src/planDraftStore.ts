@@ -32,6 +32,7 @@ export function readDrafts(storage: Pick<Store, "getItem">): PlanDraft[] {
   }
   const seen = new Set<string>();
   const symbols = new Map<string, string>();
+  const versionCounts = new Map<string, number>();
   for (const value of parsed) {
     if (!isRecord(value) || typeof value.id !== "string" ||
       !value.id.trim() || value.id.length > 128 ||
@@ -53,6 +54,11 @@ export function readDrafts(storage: Pick<Store, "getItem">): PlanDraft[] {
     }
     seen.add(key);
     symbols.set(id, symbol);
+    versionCounts.set(id, (versionCounts.get(id) ?? 0) + 1);
+  }
+  for (const [id, count] of versionCounts) {
+    const highest = Math.max(...(parsed as PlanDraft[]).filter((item) => item.id === id).map((item) => item.version));
+    if (highest !== count) throw new Error("本机计划版本链不完整；已停止写入。");
   }
   return parsed as PlanDraft[];
 }

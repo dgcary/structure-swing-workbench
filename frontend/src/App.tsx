@@ -7,6 +7,7 @@ import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
 import { TCyclePreview } from "./TCyclePreview";
 import { LocalPlanDrafts } from "./LocalPlanDrafts";
 import { LocalReview } from "./LocalReview";
+import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummary";
 
 type Metric = {
   key: string;
@@ -152,6 +153,18 @@ export function App() {
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState("连接中");
   const [lastAuditPreview, setLastAuditPreview] = useState<PartialAuditResult | null>(null);
+  const [localDraftSummary, setLocalDraftSummary] = useState<LocalDraftSummary | null>(null);
+  const [localDraftError, setLocalDraftError] = useState(false);
+  useEffect(() => {
+    if (section !== "总览") return;
+    try {
+      setLocalDraftSummary(summarizeLocalDrafts(localStorage));
+      setLocalDraftError(false);
+    } catch {
+      setLocalDraftSummary(null);
+      setLocalDraftError(true);
+    }
+  }, [section]);
 
   useEffect(() => {
     fetch("/api/health")
@@ -250,7 +263,17 @@ export function App() {
               </section>
               <section className="panel">
                 <h2>有效交易计划</h2>
-                <Unavailable title="计划数据未接入" detail="结构失效价、第一目标、初始／当前风险及计划状态待持久化服务接入。" />
+                <Unavailable title="正式有效计划未接入" detail="持久化计划与审计未接入；本机草稿不能替代正式有效计划。" />
+                <h3>本机人工计划草稿（未审计）</h3>
+                {localDraftError ? <p role="alert">本机草稿读取异常，已停止展示；请核对原数据。</p> :
+                  localDraftSummary && localDraftSummary.latest.length > 0 ? <>
+                    <p className="notice">本机保存 {localDraftSummary.latest.length} 个计划、{localDraftSummary.versionCount} 个版本；均未审计，不可据此执行。</p>
+                    {localDraftSummary.latest.slice(0, 3).map((draft) => <article className="draft-card" key={draft.id}>
+                      <strong>{draft.symbol} · 第{draft.version}版 · 未审计</strong>
+                      <p>人工分类：{draft.setup === "NONE" ? "未判断" : draft.setup} · 入场：{draft.entry} · 失效：{draft.stop} · 第一目标：{draft.target}</p>
+                    </article>)}
+                  </> : <p>本机暂无人工草稿；不代表没有正式持仓或计划。</p>}
+                <button className="back-button" type="button" onClick={() => setSection("计划管理")}>查看本机草稿</button>
               </section>
               <section className="panel">
                 <h2>今日待执行动作</h2>

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { readDrafts, saveDraft, type PlanDraft } from "./planDraftStore";
+import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummary";
 const loadDrafts = () => readDrafts(localStorage);
 
 export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
@@ -10,6 +11,9 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
     try { loadDrafts(); return ""; } catch { return "本机草稿读取失败；为保护原数据已禁止保存。"; }
   });
   const [storageFault] = useState(() => { try { loadDrafts(); return false; } catch { return true; } });
+  const [summary, setSummary] = useState<LocalDraftSummary | null>(() => {
+    try { return summarizeLocalDrafts(localStorage); } catch { return null; }
+  });
   const [symbol, setSymbol] = useState("");
   const [setup, setSetup] = useState("NONE");
   const [entry, setEntry] = useState("");
@@ -25,6 +29,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
       const saved = saveDraft(localStorage,
         { symbol, setup, entry, stop, target, notes }, editing);
       setDrafts(saved.drafts);
+      setSummary(summarizeLocalDrafts(localStorage));
       setEditing(saved.id);
       setError("");
     } catch (cause) {
@@ -81,6 +86,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
       disabled={drafts.length === 0 || storageFault} onClick={exportBackup}>
       导出本机历史备份（JSON）
     </button>}
+    {summary && <p className="notice">本机共有 {summary.latest.length} 个独立人工计划、{summary.versionCount} 个草稿版本；均未审计，不代表有效计划。</p>}
     {drafts.length === 0 && <p>尚无本机计划草稿。</p>}
     {drafts.map((d) => <article key={d.id + ":" + d.version} className="draft-card">
       <strong>{d.symbol} · 第{d.version}版 · 未审计</strong>

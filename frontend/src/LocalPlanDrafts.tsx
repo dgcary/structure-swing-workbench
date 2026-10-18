@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { readDrafts, saveDraft, type PlanDraft } from "./planDraftStore";
+import { serializeDraftBackup } from "./planDraftBackup";
 import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummary";
 const loadDrafts = () => readDrafts(localStorage);
 
@@ -38,16 +39,25 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
   }
 
   function exportBackup() {
-    const data = JSON.stringify({
-      schema_version: "m8.manual_drafts.v1", exported_at: new Date().toISOString(),
-      records: loadDrafts(),
-    }, null, 2);
-    const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "structure-swing-plan-drafts.json";
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    let url: string | null = null;
+    try {
+      const data = serializeDraftBackup(localStorage);
+      url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "structure-swing-plan-drafts.json";
+      link.click();
+      const downloadUrl = url;
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      url = null;
+      setError("");
+    } catch (cause) {
+      if (url !== null) {
+        try { URL.revokeObjectURL(url); } catch { /* browser cleanup failed */ }
+      }
+      setError(cause instanceof Error ? "备份导出失败：" + cause.message :
+        "备份导出失败，请检查本机存储与浏览器下载权限。");
+    }
   }
 
   function edit(d: PlanDraft) {

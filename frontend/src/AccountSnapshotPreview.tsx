@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 type Kind = "account" | "holdings" | "fills";
 type CSVValues = Record<Kind, string>;
@@ -46,6 +46,14 @@ export function AccountSnapshotPreview({
   const [pending, setPending] = useState(false);
   const requestId = useRef(0);
   const fileReadId = useRef<Record<Kind, number>>({ account: 0, holdings: 0, fills: 0 });
+
+  // Discard responses and file reads from a form that has been unmounted.
+  useEffect(() => () => {
+    requestId.current += 1;
+    fileReadId.current.account += 1;
+    fileReadId.current.holdings += 1;
+    fileReadId.current.fills += 1;
+  }, []);
 
   function invalidatePreview() {
     requestId.current += 1;

@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AuditPreviewResult, type PartialAuditResult } from "./AuditPreviewResult";
 
 const labels = {
@@ -20,6 +20,8 @@ export function PlanPreview({ onResult }: { onResult?: (result: PartialAuditResu
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const requestId = useRef(0);
+  // A preview started before navigation must not update the shared audit panel.
+  useEffect(() => () => { requestId.current += 1; }, []);
   function clearPreview() {
     requestId.current += 1;
     setResult(null);

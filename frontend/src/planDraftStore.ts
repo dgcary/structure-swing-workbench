@@ -69,6 +69,7 @@ export function saveDraft(
   editingId: string | null,
   makeId: () => string = () => Date.now().toString(36) + Math.random().toString(36).slice(2),
   now: () => string = () => new Date().toISOString(),
+  expectedLatestVersion?: number,
 ): { id: string; drafts: PlanDraft[] } {
   if (!validInput(input)) throw new Error("请核对证券代码、价格和结构失效价。");
   // Re-read on every save: never build a new version from stale React state.
@@ -78,6 +79,12 @@ export function saveDraft(
   if (!id.trim() || id.length > 128) throw new Error("计划标识无效。");
   const versions = current.filter((item) => item.id === id);
   if (editingId && !versions.length) throw new Error("原计划版本不存在，已停止写入。");
+  // Prevent stale editor forms from silently superseding another tab\'s update.
+  if (editingId && expectedLatestVersion !== undefined &&
+      (!Number.isSafeInteger(expectedLatestVersion) || expectedLatestVersion <= 0 ||
+       versions.reduce((max, item) => Math.max(max, item.version), 0) !== expectedLatestVersion)) {
+    throw new Error("计划已在其他页面更新；请刷新后基于最新版本修订。");
+  }
   if (versions.some((item) => item.symbol !== input.symbol)) {
     throw new Error("同一计划不可更换证券代码，请新建独立计划。");
   }

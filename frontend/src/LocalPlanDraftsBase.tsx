@@ -22,16 +22,19 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
   const [target, setTarget] = useState("");
   const [notes, setNotes] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (storageFault) return;
     try {
       const saved = saveDraft(localStorage,
-        { symbol, setup, entry, stop, target, notes }, editing);
+        { symbol, setup, entry, stop, target, notes }, editing,
+        undefined, undefined, editingVersion ?? undefined);
       setDrafts(saved.drafts);
       setSummary(summarizeLocalDrafts(localStorage));
       setEditing(saved.id);
+      setEditingVersion(saved.drafts[0].version);
       setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "本机草稿保存失败。");
@@ -61,7 +64,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
   }
 
   function edit(d: PlanDraft) {
-    setEditing(d.id); setSymbol(d.symbol); setSetup(d.setup);
+    setEditing(d.id); setEditingVersion(d.version); setSymbol(d.symbol); setSetup(d.setup);
     setEntry(d.entry); setStop(d.stop); setTarget(d.target); setNotes(d.notes);
     setError("");
   }
@@ -88,7 +91,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
         value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
       <button type="submit" disabled={storageFault}>{editing ? "保存新版本" : "保存本机草稿"}</button>
       <button type="button" onClick={() => {
-        setEditing(null); setSymbol(""); setSetup("NONE"); setEntry("");
+        setEditing(null); setEditingVersion(null); setSymbol(""); setSetup("NONE"); setEntry("");
         setStop(""); setTarget(""); setNotes(""); setError("");
       }}>新建空白草稿</button>
     </form>}

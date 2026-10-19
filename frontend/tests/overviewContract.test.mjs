@@ -42,6 +42,7 @@ test("a verified metric must have a traceable source and observation time", () =
     { ...data.metrics[0], source: null },
     { ...data.metrics[0], as_of: null },
     { ...data.metrics[0], as_of: "invalid-date" },
+    { ...data.metrics[0], as_of: "2026-10-19" },
     { ...data.metrics[0], value: null },
   ]) {
     const broken = baseline();

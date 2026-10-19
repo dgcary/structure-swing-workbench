@@ -25,7 +25,7 @@ function validMetric(value: unknown): boolean {
       (value.key === "rotation_status" || value.key === "highest_audit" ||
         (Number.isFinite(Number(value.value)) && value.value.trim() !== "")) &&
       typeof value.source === "string" && value.source.trim().length > 0 &&
-      typeof value.as_of === "string" && value.as_of.trim().length > 0;
+      typeof value.as_of === "string" && Number.isFinite(Date.parse(value.as_of)) && value.as_of.includes("T");
   }
   return value.status === "unavailable" && value.value === null;
 }

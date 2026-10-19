@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { assertReadOnlyOverview } from "./overviewContract";
 
 type Kind = "account" | "holdings" | "fills";
 type CSVValues = Record<Kind, string>;
@@ -114,6 +115,7 @@ export function AccountSnapshotPreview({
           ? (body as { detail: unknown }).detail : null;
         throw new Error(typeof detail === "string" ? detail : "账户快照校验失败");
       }
+      assertReadOnlyOverview(body, "isolated_csv_preview");
       const result = body as SnapshotOverview;
       if (result.schema_version !== "m8.account_snapshot_preview.v1" ||
           result.mode !== "isolated_csv_preview" ||

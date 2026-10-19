@@ -92,6 +92,7 @@ test("sourced holdings must have a finite nonnegative quantity and a dated origi
     { quantity: "NaN" }, { quantity: "Infinity" }, { quantity: "-100" },
     { quantity: "" }, { source: null }, { source: " " },
     { as_of: null }, { as_of: "not-a-date" },
+    { as_of: "2026-10-19" }, { as_of: "2026-10-19T09:30:00" },
   ]) {
     assert.throws(() => assertReadOnlyOverview(
       { ...baseline(), holdings: [{ ...holding, ...change }] }, "read_only",
@@ -135,5 +136,27 @@ test("optional core and T quantities reject negative, non-finite and empty value
     assert.doesNotThrow(() => assertReadOnlyOverview(
       { ...baseline(), holdings: [{ ...holding, [field]: null }] }, "read_only",
     ));
+  }
+});
+
+test("unanchored and conflicting holdings require sourced, timezone-aware observations", () => {
+  for (const status of ["unanchored", "conflict"]) {
+    const holding = {
+      symbol: "600000", status, quantity: null,
+      broker_display_cost: null, core_quantity: null, t_quantity: null,
+      source: "成交记录/broker-csv", as_of: "2026-10-19T09:30:00+08:00",
+      warning: "持仓尚未核实",
+    };
+    assert.doesNotThrow(() => assertReadOnlyOverview(
+      { ...baseline(), holdings: [holding] }, "read_only",
+    ));
+    for (const change of [
+      { source: null }, { source: " " }, { as_of: null },
+      { as_of: "2026-10-19" }, { as_of: "2026-10-19T09:30:00" },
+    ]) {
+      assert.throws(() => assertReadOnlyOverview(
+        { ...baseline(), holdings: [{ ...holding, ...change }] }, "read_only",
+      ), /协议异常/);
+    }
   }
 });

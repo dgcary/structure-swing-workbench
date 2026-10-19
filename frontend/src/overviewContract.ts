@@ -48,6 +48,10 @@ function validHolding(value: unknown): boolean {
       (typeof value.broker_display_cost !== "string" ||
        !value.broker_display_cost.trim() ||
        !Number.isFinite(Number(value.broker_display_cost)))) return false;
+  if (typeof value.source !== "string" || !value.source.trim() ||
+      typeof value.as_of !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.as_of) ||
+      !Number.isFinite(Date.parse(value.as_of))) return false;
   if (value.status === "conflict" || value.status === "unanchored") {
     return value.quantity === null;
   }

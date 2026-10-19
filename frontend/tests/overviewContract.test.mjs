@@ -75,3 +75,24 @@ test("CSV preview must never claim live, persistent, verified or executable stat
       "isolated_csv_preview"), /协议异常/);
   }
 });
+
+test("sourced holdings must have a finite nonnegative quantity and a dated origin", () => {
+  const holding = {
+    symbol: "600000", status: "snapshot", quantity: "100",
+    broker_display_cost: "12.30", core_quantity: null, t_quantity: null,
+    source: "CSV/upload", as_of: "2026-10-19T09:30:00+08:00",
+    warning: "仅来源范围内的持仓，尚未核验核心仓",
+  };
+  assert.doesNotThrow(() => assertReadOnlyOverview(
+    { ...baseline(), holdings: [holding] }, "read_only",
+  ));
+  for (const change of [
+    { quantity: "NaN" }, { quantity: "Infinity" }, { quantity: "-100" },
+    { quantity: "" }, { source: null }, { source: " " },
+    { as_of: null }, { as_of: "not-a-date" },
+  ]) {
+    assert.throws(() => assertReadOnlyOverview(
+      { ...baseline(), holdings: [{ ...holding, ...change }] }, "read_only",
+    ), /协议异常/);
+  }
+});

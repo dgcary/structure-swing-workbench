@@ -41,7 +41,10 @@ function validHolding(value: unknown): boolean {
   if (value.status === "conflict" || value.status === "unanchored") {
     return value.quantity === null;
   }
-  return typeof value.quantity === "string" && value.quantity.trim().length > 0;
+  return typeof value.quantity === "string" && value.quantity.trim() !== "" &&
+    Number.isFinite(Number(value.quantity)) && Number(value.quantity) >= 0 &&
+    typeof value.source === "string" && value.source.trim() !== "" &&
+    typeof value.as_of === "string" && Number.isFinite(Date.parse(value.as_of));
 }
 
 /** Both live and uploaded CSV overviews are read-only; neither authorizes trading. */

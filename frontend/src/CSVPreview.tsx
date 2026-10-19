@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { csvPreviewVerdict } from "./csvPreviewVerdict";
 
 type CSVKind = "fills" | "holdings" | "account";
 type Preview = {
@@ -8,6 +9,7 @@ type Preview = {
   new_facts_in_isolated_preview: number;
   duplicates_in_isolated_preview: number;
   conflicts_in_isolated_preview: number;
+  valid_csv_structure: boolean;
   persisted: false;
   reconciled_with_live_account: false;
   trade_execution_enabled: false;
@@ -76,12 +78,15 @@ export function CSVPreview() {
           preview.trade_execution_enabled !== false) {
         throw new Error("校验结果协议异常；禁止当作正式导入。");
       }
+      // Invalid counters and conflicting facts must never be displayed as a clean import.
+      csvPreviewVerdict(preview);
       setResult(preview);
     } catch (cause) {
       if (activeRequest === requestVersion.current) setError(cause instanceof Error ? cause.message : "请求失败");
     } finally { if (activeRequest === requestVersion.current) setPending(false); }
   }
 
+  const verdict = result === null ? null : csvPreviewVerdict(result);
   return <section className="panel">
     <h2>成交与账户 CSV · 导入前校验</h2>
     <p className="notice">仅在临时空白账本检查格式及内部冲突。不保存、不导入、不核对真实账户；校验成功不代表账户数据已更新。</p>
@@ -111,10 +116,11 @@ export function CSVPreview() {
       </button>
     </form>
     {error && <p role="alert">校验失败：{error}</p>}
-    {result && <section className="plan-result" role="status">
-      <strong>隔离校验完成（未保存）</strong>
+    {result && verdict && <section className="plan-result" role={verdict.level === "ok" ? "status" : "alert"}>
+      <strong>{verdict.heading}</strong>
       <p>输入行数：{result.row_count}；临时账本新增事实：{result.new_facts_in_isolated_preview}；
         重复：{result.duplicates_in_isolated_preview}；冲突：{result.conflicts_in_isolated_preview}</p>
+      <p>{verdict.explanation}</p>
       <p>{result.notice}</p>
     </section>}
   </section>;

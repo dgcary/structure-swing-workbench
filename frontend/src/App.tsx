@@ -8,6 +8,7 @@ import { TCyclePreview } from "./TCyclePreview";
 import { LocalPlanDrafts } from "./LocalPlanDrafts";
 import { LocalReview } from "./LocalReview";
 import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummary";
+import { assertReadOnlyOverview } from "./overviewContract";
 
 type Metric = {
   key: string;
@@ -181,9 +182,7 @@ export function App() {
         return response.json() as Promise<Overview>;
       })
       .then((payload) => {
-        if (payload.schema_version !== "m8.overview.v1" || payload.mode !== "read_only") {
-          throw new Error("工作台数据协议不匹配");
-        }
+        assertReadOnlyOverview(payload, "read_only");
         setBaselineOverview(payload);
         setOverview((current) => current?.mode === "isolated_csv_preview" ? current : payload);
       })

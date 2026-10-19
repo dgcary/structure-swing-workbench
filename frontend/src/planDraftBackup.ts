@@ -1,4 +1,5 @@
 import { DRAFT_KEY, readDrafts, type PlanDraft } from "./planDraftStore.ts";
+import { REVIEW_KEY, readReviews } from "./reviewStore.ts";
 
 /** Build a backup only after validating every stored draft version. */
 export function serializeDraftBackup(
@@ -52,9 +53,18 @@ export function restoreDraftBackup(
   const records = readDrafts({
     getItem: (key: string) => key === DRAFT_KEY ? serialized : null,
   });
+  const reviewSnapshot = storage.getItem(REVIEW_KEY);
+  const reviews = readReviews(storage);
+  const plans = new Map(records.map((item) => [item.id + ":" + item.version, item.symbol]));
+  if (reviews.some((review) => plans.get(review.planId + ":" + review.version) !== review.symbol)) {
+    throw new Error("复盘与待恢复的计划版本或证券不匹配，禁止导入。");
+  }
   // Refuse an intervening write from another tab rather than silently overwriting it.
   if (storage.getItem(DRAFT_KEY) !== null) {
     throw new Error("导入期间出现新的本机草稿；已停止以避免覆盖。");
+  }
+  if (storage.getItem(REVIEW_KEY) !== reviewSnapshot) {
+    throw new Error("导入期间复盘发生变化，请刷新后重试。");
   }
   storage.setItem(DRAFT_KEY, serialized);
   return records;

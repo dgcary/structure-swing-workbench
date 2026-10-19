@@ -46,16 +46,18 @@ function validHolding(value: unknown): boolean {
 export function assertReadOnlyOverview(
   payload: unknown, mode: "read_only" | "isolated_csv_preview",
 ): void {
-  const fail = () => { throw new Error("工作台数据协议异常；不可认定账户已核实或允许交易。"); };
-  if (!record(payload) || payload.mode !== mode ||
+  const fail = (): never => { throw new Error("工作台数据协议异常；不可认定账户已核实或允许交易。"); };
+  if (!record(payload)) fail();
+  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+  if (payload.mode !== mode ||
       payload.schema_version !== (mode === "read_only"
         ? "m8.overview.v1" : "m8.account_snapshot_preview.v1") ||
       payload.trade_execution_enabled !== false ||
       typeof payload.notice !== "string" || !payload.notice.trim() ||
-      !Array.isArray(payload.metrics) || payload.metrics.length !== METRIC_KEYS.length ||
-      !payload.metrics.every(validMetric) ||
-      new Set(payload.metrics.map((item: Record<string, unknown>) => item.key)).size !== METRIC_KEYS.length ||
-      !METRIC_KEYS.every((key) => payload.metrics.some(
+      !Array.isArray(payload.metrics) || metrics.length !== METRIC_KEYS.length ||
+      !metrics.every(validMetric) ||
+      new Set(metrics.map((item: Record<string, unknown>) => item.key)).size !== METRIC_KEYS.length ||
+      !METRIC_KEYS.every((key) => metrics.some(
         (item: Record<string, unknown>) => item.key === key,
       )) ||
       !(payload.holdings === null ||

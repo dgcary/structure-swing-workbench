@@ -22,6 +22,8 @@ function validMetric(value: unknown): boolean {
       !optionalText(value.source) || !optionalText(value.as_of)) return false;
   if (value.status === "available") {
     return typeof value.value === "string" && value.value.trim().length > 0 &&
+      (value.key === "rotation_status" || value.key === "highest_audit" ||
+        (Number.isFinite(Number(value.value)) && value.value.trim() !== "")) &&
       typeof value.source === "string" && value.source.trim().length > 0 &&
       typeof value.as_of === "string" && value.as_of.trim().length > 0;
   }

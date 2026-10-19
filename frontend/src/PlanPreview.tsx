@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AuditPreviewResult, type PartialAuditResult } from "./AuditPreviewResult";
+import { planPreviewError } from "./planPreviewError";
 
 const labels = {
   symbol: "证券代码", account_equity: "账户权益", planned_quantity: "计划数量",
@@ -36,7 +37,10 @@ export function PlanPreview({ onResult }: { onResult?: (result: PartialAuditResu
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...values, action_type: action, structure_invalidated: invalidated === "yes" }),
       });
-      if (!response.ok) throw new Error("输入校验或预审接口失败");
+      if (!response.ok) {
+        const payload: unknown = await response.json().catch(() => null);
+        throw new Error(planPreviewError(response.status, payload));
+      }
       const data = await response.json() as PartialAuditResult;
       if (data.schema_version !== "m8.plan_preview.v1" || data.mode !== "partial_preview" ||
           data.input_source !== "user" || data.persisted !== false ||

@@ -24,7 +24,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function describe(item: ValidationItem): string {
   const loc = Array.isArray(item.loc) ? item.loc : [];
-  const key = loc.findLast((part): part is string =>
+  const key = loc.find((part): part is string =>
     typeof part === "string" && Object.hasOwn(fieldNames, part));
   const label = key ? fieldNames[key] : "计划字段";
   if (item.type === "value_error" && typeof item.msg === "string") {

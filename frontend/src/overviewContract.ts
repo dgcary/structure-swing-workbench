@@ -48,29 +48,31 @@ export function assertReadOnlyOverview(
 ): void {
   const fail = (): never => { throw new Error("工作台数据协议异常；不可认定账户已核实或允许交易。"); };
   if (!record(payload)) fail();
-  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
-  if (payload.mode !== mode ||
-      payload.schema_version !== (mode === "read_only"
+  const data = payload as Record<string, unknown>;
+  const metrics = Array.isArray(data.metrics) ? data.metrics : [];
+  const kinds = Array.isArray(data.imported_kinds) ? data.imported_kinds : [];
+  if (data.mode !== mode ||
+      data.schema_version !== (mode === "read_only"
         ? "m8.overview.v1" : "m8.account_snapshot_preview.v1") ||
-      payload.trade_execution_enabled !== false ||
-      typeof payload.notice !== "string" || !payload.notice.trim() ||
-      !Array.isArray(payload.metrics) || metrics.length !== METRIC_KEYS.length ||
+      data.trade_execution_enabled !== false ||
+      typeof data.notice !== "string" || !data.notice.trim() ||
+      !Array.isArray(data.metrics) || metrics.length !== METRIC_KEYS.length ||
       !metrics.every(validMetric) ||
       new Set(metrics.map((item: Record<string, unknown>) => item.key)).size !== METRIC_KEYS.length ||
       !METRIC_KEYS.every((key) => metrics.some(
         (item: Record<string, unknown>) => item.key === key,
       )) ||
-      !(payload.holdings === null ||
-        (Array.isArray(payload.holdings) && payload.holdings.every(validHolding))) ||
-      payload.effective_plans !== null ||
-      payload.pending_actions !== null ||
-      payload.audit_results !== null) fail();
+      !(data.holdings === null ||
+        (Array.isArray(data.holdings) && data.holdings.every(validHolding))) ||
+      data.effective_plans !== null ||
+      data.pending_actions !== null ||
+      data.audit_results !== null) fail();
 
   if (mode === "isolated_csv_preview" &&
-      (payload.persisted !== false || payload.realtime !== false ||
-       payload.full_account_verified !== false ||
-       payload.input_source !== "user_uploaded_csv" ||
-       !Array.isArray(payload.imported_kinds) || !payload.imported_kinds.length ||
-       payload.imported_kinds.some((kind: unknown) => !CSV_KINDS.has(String(kind))) ||
-       new Set(payload.imported_kinds).size !== payload.imported_kinds.length)) fail();
+      (data.persisted !== false || data.realtime !== false ||
+       data.full_account_verified !== false ||
+       data.input_source !== "user_uploaded_csv" ||
+       !Array.isArray(data.imported_kinds) || !kinds.length ||
+       kinds.some((kind: unknown) => !CSV_KINDS.has(String(kind))) ||
+       new Set(kinds).size !== kinds.length)) fail();
 }

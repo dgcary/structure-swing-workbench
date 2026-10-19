@@ -96,3 +96,20 @@ test("sourced holdings must have a finite nonnegative quantity and a dated origi
     ), /协议异常/);
   }
 });
+
+test("sourced broker cost must be a finite numeric value, including valid negative cost", () => {
+  const holding = {
+    symbol: "600000", status: "snapshot", quantity: "100",
+    broker_display_cost: "-1.20", core_quantity: null, t_quantity: null,
+    source: "CSV/upload", as_of: "2026-10-19T09:30:00+08:00",
+    warning: "券商显示成本可因已实现收益为负，仍需保留来源",
+  };
+  assert.doesNotThrow(() => assertReadOnlyOverview(
+    { ...baseline(), holdings: [holding] }, "read_only",
+  ));
+  for (const broker_display_cost of ["NaN", "Infinity", "-Infinity", "", " ", "invalid"]) {
+    assert.throws(() => assertReadOnlyOverview(
+      { ...baseline(), holdings: [{ ...holding, broker_display_cost }] }, "read_only",
+    ), /协议异常/);
+  }
+});

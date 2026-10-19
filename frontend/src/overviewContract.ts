@@ -38,6 +38,10 @@ function validHolding(value: unknown): boolean {
     "t_quantity", "source", "as_of"]) {
     if (!optionalText(value[key])) return false;
   }
+  if (value.broker_display_cost !== null &&
+      (typeof value.broker_display_cost !== "string" ||
+       !value.broker_display_cost.trim() ||
+       !Number.isFinite(Number(value.broker_display_cost)))) return false;
   if (value.status === "conflict" || value.status === "unanchored") {
     return value.quantity === null;
   }

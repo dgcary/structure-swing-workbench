@@ -113,3 +113,25 @@ test("sourced broker cost must be a finite numeric value, including valid negati
     ), /协议异常/);
   }
 });
+
+test("optional core and T quantities reject negative, non-finite and empty values", () => {
+  const holding = {
+    symbol: "600000", status: "snapshot", quantity: "100",
+    broker_display_cost: "-1.20", core_quantity: "70", t_quantity: "30",
+    source: "CSV/upload", as_of: "2026-10-19T09:30:00+08:00",
+    warning: "仅为有来源的持仓快照，不构成交易指令",
+  };
+  assert.doesNotThrow(() => assertReadOnlyOverview(
+    { ...baseline(), holdings: [holding] }, "read_only",
+  ));
+  for (const field of ["core_quantity", "t_quantity"]) {
+    for (const bad of ["NaN", "Infinity", "-Infinity", "-1", "", " ", "unknown"]) {
+      assert.throws(() => assertReadOnlyOverview(
+        { ...baseline(), holdings: [{ ...holding, [field]: bad }] }, "read_only",
+      ), /协议异常/);
+    }
+    assert.doesNotThrow(() => assertReadOnlyOverview(
+      { ...baseline(), holdings: [{ ...holding, [field]: null }] }, "read_only",
+    ));
+  }
+});

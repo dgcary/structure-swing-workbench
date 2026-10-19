@@ -38,6 +38,12 @@ function validHolding(value: unknown): boolean {
     "t_quantity", "source", "as_of"]) {
     if (!optionalText(value[key])) return false;
   }
+  for (const key of ["core_quantity", "t_quantity"]) {
+    const quantity = value[key];
+    if (quantity !== null &&
+        (typeof quantity !== "string" || !quantity.trim() ||
+         !Number.isFinite(Number(quantity)) || Number(quantity) < 0)) return false;
+  }
   if (value.broker_display_cost !== null &&
       (typeof value.broker_display_cost !== "string" ||
        !value.broker_display_cost.trim() ||

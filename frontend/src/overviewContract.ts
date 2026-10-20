@@ -1,3 +1,5 @@
+import { validObservedAt } from "./validObservedAt.ts";
+
 /** Reject incomplete or execution-capable payloads before showing account facts. */
 const METRIC_KEYS = [
   "equity", "available_cash", "position_ratio", "position_count",
@@ -26,8 +28,7 @@ function validMetric(value: unknown): boolean {
     if (typeof value.value !== "string" || !value.value.trim() ||
         typeof value.source !== "string" || !value.source.trim() ||
         typeof value.as_of !== "string" ||
-        !Number.isFinite(Date.parse(value.as_of)) ||
-        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.as_of)) return false;
+        !validObservedAt(value.as_of)) return false;
     if (TEXT_METRICS.has(value.key)) return true;
     const numeric = Number(value.value);
     // Do not render impossible negative balances, risks or T counts as verified facts.
@@ -75,8 +76,7 @@ function validHolding(value: unknown): boolean {
       value.unanchored_fill_delta != null) return false;
   if (typeof value.source !== "string" || !value.source.trim() ||
       typeof value.as_of !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.as_of) ||
-      !Number.isFinite(Date.parse(value.as_of))) return false;
+      !validObservedAt(value.as_of)) return false;
   if (value.status === "conflict" || value.status === "unanchored") {
     // A fill delta or contradictory snapshot cannot establish cost or core/T allocations.
     return value.quantity === null && value.broker_display_cost === null &&

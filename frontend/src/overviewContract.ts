@@ -53,12 +53,19 @@ function validHolding(value: unknown): boolean {
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.as_of) ||
       !Number.isFinite(Date.parse(value.as_of))) return false;
   if (value.status === "conflict" || value.status === "unanchored") {
-    return value.quantity === null;
+    // A fill delta or contradictory snapshot cannot establish cost or core/T allocations.
+    return value.quantity === null && value.broker_display_cost === null &&
+      value.core_quantity === null && value.t_quantity === null;
   }
-  return typeof value.quantity === "string" && value.quantity.trim() !== "" &&
-    Number.isFinite(Number(value.quantity)) && Number(value.quantity) >= 0 &&
-    typeof value.source === "string" && value.source.trim() !== "" &&
-    typeof value.as_of === "string" && Number.isFinite(Date.parse(value.as_of));
+  if (typeof value.quantity !== "string" || !value.quantity.trim() ||
+      !Number.isFinite(Number(value.quantity)) || Number(value.quantity) < 0) return false;
+  if (value.status === "partial" && value.broker_display_cost !== null) return false;
+  // Prevent presenting allocations larger than the sourced, anchored holding.
+  const core = value.core_quantity === null ? 0 : Number(value.core_quantity);
+  const t = value.t_quantity === null ? 0 : Number(value.t_quantity);
+  const total = Number(value.quantity);
+  if (core + t > total + Math.max(1, total) * Number.EPSILON * 4) return false;
+  return true;
 }
 
 /** Both live and uploaded CSV overviews are read-only; neither authorizes trading. */
@@ -82,7 +89,9 @@ export function assertReadOnlyOverview(
         (item: Record<string, unknown>) => item.key === key,
       )) ||
       !(data.holdings === null ||
-        (Array.isArray(data.holdings) && data.holdings.every(validHolding))) ||
+        (Array.isArray(data.holdings) && data.holdings.every(validHolding) &&
+         new Set(data.holdings.map((holding: Record<string, unknown>) =>
+           String(holding.symbol).trim())).size === data.holdings.length)) ||
       data.effective_plans !== null ||
       data.pending_actions !== null ||
       data.audit_results !== null) fail();

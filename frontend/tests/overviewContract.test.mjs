@@ -160,3 +160,37 @@ test("unanchored and conflicting holdings require sourced, timezone-aware observ
     }
   }
 });
+
+
+test("available numeric metrics reject negative, fractional counts and impossible exposure", () => {
+  const sourced = (key, value) => ({
+    ...metric(key), status: "available", value,
+    source: "CSV/upload", as_of: "2026-10-20T09:30:00+08:00",
+  });
+  for (const [key, value] of [
+    ["equity", "-1"], ["available_cash", "-0.01"],
+    ["position_ratio", "-1"], ["position_ratio", "100.01"],
+    ["account_risk", "-0.1"], ["position_count", "1.5"],
+    ["t_cycles_today", "-1"], ["t_cycles_today", "0.5"],
+    ["open_t_cycles", "-1"], ["open_t_cycles", "2.2"],
+  ]) {
+    const broken = baseline();
+    broken.metrics[keys.indexOf(key)] = sourced(key, value);
+    assert.throws(() => assertReadOnlyOverview(broken, "read_only"),
+      /协议异常/, `${key}=${value} must not be presented as verified`);
+  }
+  const valid = baseline();
+  valid.metrics[keys.indexOf("position_count")] = sourced("position_count", "2");
+  valid.metrics[keys.indexOf("position_ratio")] = sourced("position_ratio", "100");
+  assert.doesNotThrow(() => assertReadOnlyOverview(valid, "read_only"));
+});
+
+test("unavailable metric cannot retain a verified source or observation time", () => {
+  for (const change of [
+    { source: "CSV/upload" }, { as_of: "2026-10-20T09:30:00+08:00" },
+  ]) {
+    const broken = baseline();
+    broken.metrics[0] = { ...broken.metrics[0], ...change };
+    assert.throws(() => assertReadOnlyOverview(broken, "read_only"), /协议异常/);
+  }
+});

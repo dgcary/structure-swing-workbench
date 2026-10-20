@@ -35,3 +35,50 @@ test("sourced snapshot requires a broker display cost", () => {
   assert.doesNotThrow(() => check(holding));
   assert.throws(() => check({ ...holding, broker_display_cost: null }), /协议异常/);
 });
+
+
+test("confirmed fill identifiers are traceable, unique, and nonblank", () => {
+  const partial = {
+    ...holding, status: "partial", quantity: "120",
+    broker_display_cost: null,
+    applied_fill_ids: ["broker-001", "broker-002"],
+  };
+  assert.doesNotThrow(() => check(partial));
+  for (const invalid of [
+    ["broker-001", "broker-001"], ["broker-001", ""],
+    ["broker-001", "   "], [42], "broker-001", null,
+  ]) {
+    assert.throws(() => check({ ...partial, applied_fill_ids: invalid }),
+      /协议异常/);
+  }
+});
+
+test("unanchored net fill changes remain deltas, never invented holdings", () => {
+  const unanchored = {
+    ...holding, status: "unanchored", quantity: null,
+    broker_display_cost: null, applied_fill_ids: ["broker-001"],
+    unanchored_fill_delta: "-30",
+  };
+  assert.doesNotThrow(() => check(unanchored));
+  for (const invalid of ["NaN", "Infinity", "-Infinity", "", " ", "not-a-number", 30]) {
+    assert.throws(() => check({ ...unanchored, unanchored_fill_delta: invalid }),
+      /协议异常/);
+  }
+  for (const field of ["quantity", "broker_display_cost", "core_quantity", "t_quantity"]) {
+    assert.throws(() => check({ ...unanchored, [field]: "1" }), /协议异常/);
+  }
+  assert.throws(() => check({ ...holding, unanchored_fill_delta: "10" }),
+    /协议异常/);
+});
+
+test("conflicting snapshots cannot acquire a fictitious cost or allocation", () => {
+  const conflict = {
+    ...holding, status: "conflict", quantity: null,
+    broker_display_cost: null, applied_fill_ids: [],
+    unanchored_fill_delta: null,
+  };
+  assert.doesNotThrow(() => check(conflict));
+  for (const field of ["quantity", "broker_display_cost", "core_quantity", "t_quantity"]) {
+    assert.throws(() => check({ ...conflict, [field]: "1" }), /协议异常/);
+  }
+});

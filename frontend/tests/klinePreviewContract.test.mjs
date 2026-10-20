@@ -15,6 +15,7 @@ test("chronological timezone-aware candles are accepted", () => {
 test("duplicate or unzoned observations are rejected", () => {
   assert.equal(validBars([candle("2026-10-19"), candle("2026-10-19")], "day"), false);
   assert.equal(validBars([candle("2026-02-30")], "day"), false);
+  assert.equal(validBars([candle("2026-02-30T09:30:00+08:00")], "5m"), false);
   assert.equal(validBars([candle("2026-10-19T09:30:00")], "5m"), false);
   assert.equal(validBars([candle("2026-10-19T09:30:00+08:00"),
     candle("2026-10-19T01:30:00Z")], "5m"), false);

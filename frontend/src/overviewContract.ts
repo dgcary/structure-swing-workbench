@@ -48,6 +48,20 @@ function validHolding(value: unknown): boolean {
       (typeof value.broker_display_cost !== "string" ||
        !value.broker_display_cost.trim() ||
        !Number.isFinite(Number(value.broker_display_cost)))) return false;
+  // These optional details are displayed as confirmed fills and net changes.
+  // Validate them before rendering; never present malformed data as verified.
+  if (value.applied_fill_ids !== undefined &&
+      (!Array.isArray(value.applied_fill_ids) ||
+       !value.applied_fill_ids.every((id: unknown) =>
+         typeof id === "string" && id.trim().length > 0) ||
+       new Set(value.applied_fill_ids).size !== value.applied_fill_ids.length)) return false;
+  if (value.unanchored_fill_delta !== undefined &&
+      value.unanchored_fill_delta !== null &&
+      (typeof value.unanchored_fill_delta !== "string" ||
+       !value.unanchored_fill_delta.trim() ||
+       !Number.isFinite(Number(value.unanchored_fill_delta)))) return false;
+  if (value.status !== "unanchored" &&
+      value.unanchored_fill_delta != null) return false;
   if (typeof value.source !== "string" || !value.source.trim() ||
       typeof value.as_of !== "string" ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.as_of) ||

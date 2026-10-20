@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { validBars } from "./klinePreviewContract";
 
 type Bar = { time: string; open: string; high: string; low: string; close: string; volume: string };
 type Preview = {
@@ -53,13 +54,10 @@ export function KlinePreview() {
       const value = payload as Preview;
       if (value.schema_version !== "m8.kline_preview.v1" || value.source !== "user_uploaded_csv" ||
           value.persisted || value.realtime || value.setup_detected || value.trade_execution_enabled ||
-          !Array.isArray(value.bars) || !value.bars.length ||
+          !Array.isArray(value.bars) || !validBars(value.bars, timeframe) ||
           value.bar_count !== value.bars.length || value.timeframe !== timeframe ||
           value.last_observation !== value.bars[value.bars.length - 1].time ||
-          !value.bars.every((bar) => [bar.open, bar.high, bar.low, bar.close, bar.volume]
-            .every((raw) => raw.trim() !== "" && Number.isFinite(Number(raw))) &&
-            [bar.open, bar.high, bar.low, bar.close].every((raw) => Number(raw) > 0) &&
-            Number(bar.volume) >= 0)) throw new Error("K线数据协议异常或超出浏览器可绘制范围");
+          typeof value.notice !== "string" || !value.notice.trim()) throw new Error("K线数据协议异常或超出浏览器可绘制范围");
       setResult(value);
     } catch (cause) { if (current === version.current) setError(cause instanceof Error ? cause.message : "读取失败"); }
     finally { if (current === version.current) setPending(false); }

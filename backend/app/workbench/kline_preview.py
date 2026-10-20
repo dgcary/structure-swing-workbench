@@ -48,7 +48,7 @@ def _time(raw: str | None, timeframe: str) -> str:
 def preview_kline(payload: KlinePreviewRequest) -> dict[str, object]:
     """Validate uploaded bars and preserve their provenance as user input only."""
     try:
-        reader = csv.DictReader(io.StringIO(payload.data, newline=""))
+        reader = csv.DictReader(io.StringIO(payload.data, newline=""), strict=True)
         if reader.fieldnames is None or tuple(reader.fieldnames) != COLUMNS:
             raise ValueError("CSV表头必须依次为 time,open,high,low,close,volume")
         bars: list[dict[str, str]] = []

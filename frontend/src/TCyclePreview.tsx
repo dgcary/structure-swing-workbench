@@ -1,17 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-
-type TPreview = {
-  schema_version: string;
-  cycle_status: "open" | "closed";
-  remaining_quantity: string;
-  realized_gross_pnl: string | null;
-  pending_matched_gross_pnl: string | null;
-  notice: string;
-  persisted: boolean;
-  broker_reconciled: boolean;
-  daily_cycle_limit_verified: boolean;
-  trade_execution_enabled: boolean;
-};
+import { assertTCyclePreview, type TCyclePreviewResult } from "./tCyclePreviewContract";
 
 export function TCyclePreview() {
   const [symbol, setSymbol] = useState("");
@@ -20,7 +8,7 @@ export function TCyclePreview() {
   const [price, setPrice] = useState("");
   const [closedQuantity, setClosedQuantity] = useState("");
   const [closedPrice, setClosedPrice] = useState("");
-  const [result, setResult] = useState<TPreview | null>(null);
+  const [result, setResult] = useState<TCyclePreviewResult | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const requestVersion = useRef(0);
@@ -41,12 +29,8 @@ export function TCyclePreview() {
       const data = await response.json();
       if (version !== requestVersion.current) return;
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "输入无效");
-      const preview = data as TPreview;
-      if (preview.schema_version !== "m8.t_cycle_preview.v1" ||
-          preview.persisted !== false || preview.broker_reconciled !== false ||
-          preview.daily_cycle_limit_verified !== false ||
-          preview.trade_execution_enabled !== false) throw new Error("预览协议异常");
-      setResult(preview);
+      assertTCyclePreview(data, { symbol, direction: direction as "positive" | "reverse" });
+      setResult(data);
     } catch (cause) {
       if (version === requestVersion.current) setError(cause instanceof Error ? cause.message : "预览失败");
     } finally { if (version === requestVersion.current) setPending(false); }

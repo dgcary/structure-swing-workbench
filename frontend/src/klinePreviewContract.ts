@@ -12,6 +12,10 @@ export function validBars(bars: Candle[], timeframe: string): boolean {
     const day = /^\d{4}-\d{2}-\d{2}$/.test(b.time);
     const minute = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(b.time);
     if (timeframe === "day" ? !day : !minute) return false;
+    const calendar = b.time.slice(0, 10);
+    const calendarInstant = Date.parse(calendar + "T00:00:00Z");
+    if (!Number.isFinite(calendarInstant) ||
+        new Date(calendarInstant).toISOString().slice(0, 10) !== calendar) return false;
     const t = Date.parse(day ? b.time + "T00:00:00Z" : b.time);
     if (!Number.isFinite(t) || t <= last || (day &&
       new Date(t).toISOString().slice(0, 10) !== b.time)) return false;

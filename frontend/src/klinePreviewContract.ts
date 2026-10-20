@@ -5,6 +5,7 @@ export function validCandle(open: number, high: number, low: number, close: numb
 }
 export function validBars(bars: Candle[], timeframe: string): boolean {
   if (!Array.isArray(bars) || !bars.length || bars.length > 500) return false;
+  if (!["day", "5m", "15m"].includes(timeframe)) return false;
   let last = -Infinity;
   for (const b of bars) {
     if (!b || typeof b.time !== "string") return false;

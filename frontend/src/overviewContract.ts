@@ -6,6 +6,8 @@ const METRIC_KEYS = [
 ] as const;
 const HOLDING_STATES = new Set(["snapshot", "partial", "unanchored", "conflict"]);
 const CSV_KINDS = new Set(["account", "holdings", "fills"]);
+const COUNT_METRICS = new Set(["position_count", "t_cycles_today", "open_t_cycles"]);
+const TEXT_METRICS = new Set(["rotation_status", "highest_audit"]);
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -21,13 +23,22 @@ function validMetric(value: unknown): boolean {
       typeof value.unit !== "string" || !optionalText(value.value) ||
       !optionalText(value.source) || !optionalText(value.as_of)) return false;
   if (value.status === "available") {
-    return typeof value.value === "string" && value.value.trim().length > 0 &&
-      (value.key === "rotation_status" || value.key === "highest_audit" ||
-        (Number.isFinite(Number(value.value)) && value.value.trim() !== "")) &&
-      typeof value.source === "string" && value.source.trim().length > 0 &&
-      typeof value.as_of === "string" && Number.isFinite(Date.parse(value.as_of)) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.as_of);
+    if (typeof value.value !== "string" || !value.value.trim() ||
+        typeof value.source !== "string" || !value.source.trim() ||
+        typeof value.as_of !== "string" ||
+        !Number.isFinite(Date.parse(value.as_of)) ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.as_of)) return false;
+    if (TEXT_METRICS.has(value.key)) return true;
+    const numeric = Number(value.value);
+    // Do not render impossible negative balances, risks or T counts as verified facts.
+    if (!Number.isFinite(numeric) || numeric < 0) return false;
+    if (COUNT_METRICS.has(value.key) && !Number.isSafeInteger(numeric)) return false;
+    if (value.key === "position_ratio" && numeric > 100) return false;
+    return true;
   }
-  return value.status === "unavailable" && value.value === null;
+  // Missing values must not carry a supposedly verified source or timestamp.
+  return value.status === "unavailable" && value.value === null &&
+    value.source === null && value.as_of === null;
 }
 
 function validHolding(value: unknown): boolean {

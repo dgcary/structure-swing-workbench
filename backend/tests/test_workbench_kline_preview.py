@@ -65,3 +65,13 @@ def test_empty_csv_and_invalid_headers_rejected():
         assert client.post("/workbench/kline-preview", json={
             "timeframe": "day", "data": data,
         }).status_code == 422
+
+
+def test_unclosed_quoted_csv_field_is_rejected():
+    # A permissive CSV parser treats this malformed quoted volume as "100".
+    # It must not be displayed as a verified historical bar.
+    malformed = header + '2026-10-16,10,11,9,10,"100\n'
+    response = client.post("/workbench/kline-preview", json={
+        "timeframe": "day", "data": malformed,
+    })
+    assert response.status_code == 422

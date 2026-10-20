@@ -60,6 +60,7 @@ function validHolding(value: unknown): boolean {
   if (typeof value.quantity !== "string" || !value.quantity.trim() ||
       !Number.isFinite(Number(value.quantity)) || Number(value.quantity) < 0) return false;
   if (value.status === "partial" && value.broker_display_cost !== null) return false;
+  if (value.status === "snapshot" && value.broker_display_cost === null) return false;
   // Prevent presenting allocations larger than the sourced, anchored holding.
   const core = value.core_quantity === null ? 0 : Number(value.core_quantity);
   const t = value.t_quantity === null ? 0 : Number(value.t_quantity);

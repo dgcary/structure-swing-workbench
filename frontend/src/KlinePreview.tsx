@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { validBars } from "./klinePreviewContract";
+import { assertHistoricalKlinePreview, type HistoricalKlinePreview } from "./klineResponseContract";
 
-type Bar = { time: string; open: string; high: string; low: string; close: string; volume: string };
-type Preview = {
-  schema_version: string; source: string; timeframe: string; last_observation: string;
-  bars: Bar[]; bar_count: number; persisted: boolean; realtime: boolean;
-  setup_detected: boolean; trade_execution_enabled: boolean; notice: string;
-};
-
-function Chart({ bars }: { bars: Bar[] }) {
+function Chart({ bars }: { bars: HistoricalKlinePreview["bars"] }) {
   const shown = bars.slice(-100);
   const high = Math.max(...shown.map((bar) => Number(bar.high)));
   const low = Math.min(...shown.map((bar) => Number(bar.low)));
@@ -33,9 +26,9 @@ function Chart({ bars }: { bars: Bar[] }) {
 }
 
 export function KlinePreview() {
-  const [timeframe, setTimeframe] = useState("day");
+  const [timeframe, setTimeframe] = useState<"day" | "5m" | "15m">("day");
   const [data, setData] = useState("");
-  const [result, setResult] = useState<Preview | null>(null);
+  const [result, setResult] = useState<HistoricalKlinePreview | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const version = useRef(0);
@@ -51,14 +44,8 @@ export function KlinePreview() {
       const payload = await response.json();
       if (current !== version.current) return;
       if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "CSV校验失败");
-      const value = payload as Preview;
-      if (value.schema_version !== "m8.kline_preview.v1" || value.source !== "user_uploaded_csv" ||
-          value.persisted || value.realtime || value.setup_detected || value.trade_execution_enabled ||
-          !Array.isArray(value.bars) || !validBars(value.bars, timeframe) ||
-          value.bar_count !== value.bars.length || value.timeframe !== timeframe ||
-          value.last_observation !== value.bars[value.bars.length - 1].time ||
-          typeof value.notice !== "string" || !value.notice.trim()) throw new Error("K线数据协议异常或超出浏览器可绘制范围");
-      setResult(value);
+      assertHistoricalKlinePreview(payload, timeframe);
+      setResult(payload);
     } catch (cause) { if (current === version.current) setError(cause instanceof Error ? cause.message : "读取失败"); }
     finally { if (current === version.current) setPending(false); }
   }
@@ -66,7 +53,7 @@ export function KlinePreview() {
     <h2>K线 · 本地历史数据</h2>
     <p className="notice">只显示用户提供的OHLCV；非实时、不保存、不判断Setup或买卖。</p>
     <form className="csv-preview-form" onSubmit={submit}>
-      <label>周期<select value={timeframe} onChange={(e) => { invalidate(); setTimeframe(e.target.value); }}>
+      <label>周期<select value={timeframe} onChange={(e) => { invalidate(); setTimeframe(e.target.value as "day" | "5m" | "15m"); }}>
         <option value="day">日K</option><option value="5m">5分钟</option><option value="15m">15分钟</option>
       </select></label>
       <p>表头：<code>time,open,high,low,close,volume</code>。分钟K时间须带时区，最多500根。</p>

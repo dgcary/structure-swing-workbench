@@ -73,7 +73,8 @@ export function saveDraft(
 ): { id: string; drafts: PlanDraft[] } {
   if (!validInput(input)) throw new Error("请核对证券代码、价格和结构失效价。");
   // Re-read on every save: never build a new version from stale React state.
-  const current = readDrafts(storage);
+  const snapshot = storage.getItem(DRAFT_KEY);
+  const current = readDrafts({ getItem: (key) => key === DRAFT_KEY ? snapshot : null });
   if (current.length >= MAX_VERSIONS) throw new Error("已达200个版本上限，请先备份。");
   const id = editingId ?? makeId();
   if (!id.trim() || id.length > 128) throw new Error("计划标识无效。");
@@ -93,6 +94,10 @@ export function saveDraft(
   const savedAt = now();
   if (!Number.isFinite(Date.parse(savedAt))) throw new Error("保存时间无效。");
   const next: PlanDraft[] = [{ ...input, id, version, savedAt }, ...current];
+  // Reject an intervening edit from another tab before writing this version.
+  if (storage.getItem(DRAFT_KEY) !== snapshot) {
+    throw new Error("保存期间本机计划已变化；请刷新后基于最新版本修订。");
+  }
   storage.setItem(DRAFT_KEY, JSON.stringify(next));
   return { id, drafts: next };
 }

@@ -1,4 +1,4 @@
-import { readDrafts } from "./planDraftStore.ts";
+import { DRAFT_KEY, readDrafts } from "./planDraftStore.ts";
 import { REVIEW_KEY, readReviews, type ManualReview } from "./reviewStore.ts";
 
 type ReadableStore = Pick<Storage, "getItem">;
@@ -67,7 +67,8 @@ export function restoreReviewBackup(
   const records = readReviews({
     getItem: (key: string) => key === REVIEW_KEY ? serialized : null,
   });
-  const plans = readDrafts(storage);
+  const draftSnapshot = storage.getItem(DRAFT_KEY);
+  const plans = readDrafts({ getItem: (key: string) => key === DRAFT_KEY ? draftSnapshot : null });
   const known = new Map(plans.map((plan) => [plan.id + ":" + plan.version, plan.symbol]));
   for (const review of records) {
     if (known.get(review.planId + ":" + review.version) !== review.symbol) {
@@ -77,6 +78,9 @@ export function restoreReviewBackup(
   // Re-check before writing; another tab may have added reviews meanwhile.
   if (storage.getItem(REVIEW_KEY) !== null) {
     throw new Error("导入期间发现新的复盘记录，已停止以避免覆盖。");
+  }
+  if (storage.getItem(DRAFT_KEY) !== draftSnapshot) {
+    throw new Error("导入期间计划发生变化，已停止恢复。");
   }
   storage.setItem(REVIEW_KEY, serialized);
   return records;

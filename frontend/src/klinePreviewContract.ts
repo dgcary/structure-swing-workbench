@@ -25,5 +25,11 @@ export function validBars(bars: Candle[], timeframe: string): boolean {
     const [o, h, l, c, v] = raw.map(Number);
     if (!validCandle(o, h, l, c) || !Number.isFinite(v) || v < 0) return false;
   }
+  const recent = bars.slice(-100);
+  const highest = Math.max(...recent.map((bar) => Number(bar.high)));
+  const lowest = Math.min(...recent.map((bar) => Number(bar.low)));
+  const padding = Math.max((highest - lowest) * 0.05, highest * 0.005);
+  const span = highest - lowest + 2 * padding;
+  if (!Number.isFinite(highest + padding) || !Number.isFinite(span) || span <= 0) return false;
   return true;
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DRAFT_KEY, saveDraft } from "../src/planDraftStore.ts";
-import { refreshLocalDrafts } from "../src/localDraftRefresh.ts";
+import { refreshLocalDrafts, shouldRefreshLocalDrafts } from "../src/localDraftRefresh.ts";
 
 const plan = { symbol: "600000", setup: "C", entry: "10", stop: "9", target: "12", notes: "" };
 
@@ -49,4 +49,11 @@ test("corrupted browser history is not silently presented as an empty plan list"
   const storage = memoryStore();
   storage.setItem(DRAFT_KEY, "not-json");
   assert.throws(() => refreshLocalDrafts(storage, null, null));
+});
+
+test("storage event key filtering refreshes drafts and clear only", () => {
+  assert.equal(shouldRefreshLocalDrafts(DRAFT_KEY), true);
+  assert.equal(shouldRefreshLocalDrafts(null), true);
+  assert.equal(shouldRefreshLocalDrafts("unrelated"), false);
+  assert.equal(shouldRefreshLocalDrafts(""), false);
 });

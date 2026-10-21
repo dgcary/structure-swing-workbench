@@ -8,6 +8,7 @@ import { TCyclePreview } from "./TCyclePreview";
 import { LocalPlanDrafts } from "./LocalPlanDrafts";
 import { LocalReview } from "./LocalReview";
 import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummary";
+import { shouldRefreshLocalDrafts } from "./localDraftRefresh";
 import { assertReadOnlyOverview } from "./overviewContract";
 
 type Metric = {
@@ -158,13 +159,23 @@ export function App() {
   const [localDraftError, setLocalDraftError] = useState(false);
   useEffect(() => {
     if (section !== "总览") return;
-    try {
-      setLocalDraftSummary(summarizeLocalDrafts(localStorage));
-      setLocalDraftError(false);
-    } catch {
-      setLocalDraftSummary(null);
-      setLocalDraftError(true);
-    }
+    const refresh = () => {
+      try {
+        setLocalDraftSummary(summarizeLocalDrafts(localStorage));
+        setLocalDraftError(false);
+      } catch {
+        setLocalDraftSummary(null);
+        setLocalDraftError(true);
+      }
+    };
+    refresh();
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea === localStorage && shouldRefreshLocalDrafts(event.key)) {
+        refresh();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, [section]);
 
   useEffect(() => {

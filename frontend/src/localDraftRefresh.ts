@@ -25,3 +25,8 @@ export function refreshLocalDrafts(
     editingStale: editingId !== null && editingVersion !== latest,
   };
 }
+
+/** Storage events from other tabs: a null key means storage.clear(). */
+export function shouldRefreshLocalDrafts(storageKey: string | null): boolean {
+  return storageKey === DRAFT_KEY || storageKey === null;
+}

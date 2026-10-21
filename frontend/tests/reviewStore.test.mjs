@@ -107,3 +107,23 @@ test("manual review save detects cross-tab changes to either store before writin
       changingKey === DRAFT_KEY ? beforeReview : beforeDraft);
   }
 });
+
+test("manual review history refuses timezone-free and impossible timestamps", () => {
+  const storage = memoryStore();
+  seedPlan(storage);
+  const original = saveReview(storage, plan, "观察", "结论", () => "review-1",
+    () => "2026-10-21T08:00:00+08:00")[0];
+  const snapshot = storage.getItem(REVIEW_KEY);
+  for (const invalid of [
+    "2026-10-21", "2026-10-21T08:00:00",
+    "2026-02-30T08:00:00Z", "2026-10-21T25:00:00+08:00",
+  ]) {
+    storage.setItem(REVIEW_KEY, JSON.stringify([{ ...original, savedAt: invalid }]));
+    assert.throws(() => readReviews(storage), /记录损坏/);
+  }
+  storage.setItem(REVIEW_KEY, snapshot);
+  assert.equal(readReviews(storage)[0].savedAt, original.savedAt);
+  assert.throws(() => saveReview(storage, plan, "观察", "结论", () => "review-2",
+    () => "2026-10-21T08:00:00"), /保存时间无效/);
+  assert.equal(storage.getItem(REVIEW_KEY), snapshot);
+});

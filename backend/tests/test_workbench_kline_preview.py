@@ -101,3 +101,13 @@ def test_canonical_minute_timestamp_with_zulu_timezone_is_accepted():
     })
     assert response.status_code == 200
     assert response.json()["bars"][0]["time"] == "2026-10-21T01:30:00+00:00"
+
+
+def test_utf8_bom_header_is_accepted_without_changing_csv_contract():
+    response = client.post("/workbench/kline-preview", json={
+        "timeframe": "day",
+        "data": "\ufeff" + header + "2026-10-16,10,11,9,10,100\n",
+    })
+    assert response.status_code == 200
+    assert response.json()["bar_count"] == 1
+    assert response.json()["source"] == "user_uploaded_csv"

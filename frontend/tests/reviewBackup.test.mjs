@@ -104,3 +104,26 @@ test("intervening cross-tab write during restore cannot be overwritten", () => {
   assert.throws(() => restoreReviewBackup(guarded, backup), /导入期间/);
   assert.equal(target.getItem(REVIEW_KEY), "new-tab-data");
 });
+
+test("review restore refuses a concurrent plan change before committing reviews", () => {
+  const source = store();
+  withReview(source);
+  const backup = serializeReviewBackup(source);
+  const target = store();
+  withPlan(target);
+  let draftReads = 0;
+  const racingStore = {
+    getItem: (key) => {
+      if (key === DRAFT_KEY && ++draftReads === 2) {
+        const plans = JSON.parse(target.getItem(DRAFT_KEY));
+        target.setItem(DRAFT_KEY, JSON.stringify(plans.map((plan) =>
+          ({ ...plan, symbol: "000001" }))));
+      }
+      return target.getItem(key);
+    },
+    setItem: (key, value) => target.setItem(key, value),
+  };
+  assert.throws(() => restoreReviewBackup(racingStore, backup), /计划发生变化/);
+  assert.equal(target.getItem(REVIEW_KEY), null);
+  assert.equal(JSON.parse(target.getItem(DRAFT_KEY))[0].symbol, "000001");
+});

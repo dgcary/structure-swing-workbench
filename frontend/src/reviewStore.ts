@@ -1,4 +1,4 @@
-import { readDrafts } from "./planDraftStore.ts";
+import { DRAFT_KEY, readDrafts } from "./planDraftStore.ts";
 
 /** Browser-only manual reviews; never a verified fill, P&L or formal audit. */
 export type ManualReview = {
@@ -62,13 +62,15 @@ export function saveReview(
     throw new Error("请选择有效计划版本并填写不超过2000字的复盘内容。");
   }
   // Always re-read the latest history; never overwrite changes from another tab.
-  const drafts = readDrafts(storage);
+  const draftSnapshot = storage.getItem(DRAFT_KEY);
+  const reviewSnapshot = storage.getItem(REVIEW_KEY);
+  const drafts = readDrafts({ getItem: () => draftSnapshot });
   if (!drafts.some((item) =>
     item.id === plan.id && item.version === plan.version &&
     item.symbol === plan.symbol)) {
     throw new Error("关联的人工计划版本不存在或证券不匹配；未保存复盘。");
   }
-  const current = readReviews(storage);
+  const current = readReviews({ getItem: () => reviewSnapshot });
   if (current.length >= MAX_REVIEWS) throw new Error("复盘已达200条上限，请先备份。");
   const id = makeId(), savedAt = now();
   if (!id.trim() || id.length > 128 || current.some((item) => item.id === id) ||
@@ -79,6 +81,10 @@ export function saveReview(
     id, planId: plan.id, version: plan.version, symbol: plan.symbol,
     savedAt, observation: observation.trim(), lesson: lesson.trim(),
   }, ...current];
+  if (storage.getItem(DRAFT_KEY) !== draftSnapshot ||
+      storage.getItem(REVIEW_KEY) !== reviewSnapshot) {
+    throw new Error("保存期间计划或复盘记录已变化，请刷新后重试。");
+  }
   storage.setItem(REVIEW_KEY, JSON.stringify(next));
   return next;
 }

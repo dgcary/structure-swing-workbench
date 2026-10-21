@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { REVIEW_KEY, readReviews, saveReview } from "../src/reviewStore.ts";
-import { saveDraft } from "../src/planDraftStore.ts";
+import { DRAFT_KEY, saveDraft } from "../src/planDraftStore.ts";
 
 function memoryStore() {
   const data = new Map();
@@ -71,5 +71,39 @@ test("orphan, wrong-version and cross-symbol manual reviews cannot be saved", ()
   ]) {
     assert.throws(() => saveReview(store, invalid, "观察", "结论"), /版本不存在|证券不匹配/);
     assert.equal(store.getItem(REVIEW_KEY), null);
+  }
+});
+
+test("manual review save detects cross-tab changes to either store before writing", () => {
+  for (const changingKey of [DRAFT_KEY, REVIEW_KEY]) {
+    const store = memoryStore();
+    seedPlan(store);
+    saveReview(store, plan, "原观察", "原结论", () => "review-1");
+    const beforeDraft = store.getItem(DRAFT_KEY);
+    const beforeReview = store.getItem(REVIEW_KEY);
+    const concurrent = changingKey === DRAFT_KEY
+      ? JSON.stringify(JSON.parse(beforeDraft).map((item, index) =>
+        index === 0 ? { ...item, notes: "其他页面修改" } : item))
+      : JSON.stringify([
+        { ...JSON.parse(beforeReview)[0], id: "another-tab" },
+        ...JSON.parse(beforeReview),
+      ]);
+    const reads = new Map();
+    const racingStore = {
+      getItem: (key) => {
+        const count = (reads.get(key) ?? 0) + 1;
+        reads.set(key, count);
+        if (key === changingKey && count === 2) store.setItem(key, concurrent);
+        return store.getItem(key);
+      },
+      setItem: (key, value) => store.setItem(key, value),
+    };
+    assert.throws(
+      () => saveReview(racingStore, plan, "新观察", "新结论", () => "review-2"),
+      /其他页面更新/,
+    );
+    assert.equal(store.getItem(changingKey), concurrent);
+    assert.equal(store.getItem(changingKey === DRAFT_KEY ? REVIEW_KEY : DRAFT_KEY),
+      changingKey === DRAFT_KEY ? beforeReview : beforeDraft);
   }
 });

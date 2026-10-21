@@ -83,7 +83,7 @@ export function saveReview(
   }, ...current];
   if (storage.getItem(DRAFT_KEY) !== draftSnapshot ||
       storage.getItem(REVIEW_KEY) !== reviewSnapshot) {
-    throw new Error("保存期间计划或复盘记录已变化，请刷新后重试。");
+    throw new Error("保存期间计划或复盘记录已被其他页面更新，请刷新后重试。");
   }
   storage.setItem(REVIEW_KEY, JSON.stringify(next));
   return next;

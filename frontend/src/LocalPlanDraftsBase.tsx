@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
-import { readDrafts, saveDraft, type PlanDraft } from "./planDraftStore";
+import { useEffect, useState, type FormEvent } from "react";
+import { DRAFT_KEY, readDrafts, saveDraft, type PlanDraft } from "./planDraftStore";
+import { refreshLocalDrafts } from "./localDraftRefresh";
 import { serializeDraftBackup } from "./planDraftBackup";
 import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummary";
 const loadDrafts = () => readDrafts(localStorage);
@@ -41,6 +42,30 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
     }
   }
 
+  function refresh() {
+    try {
+      const updated = refreshLocalDrafts(localStorage, editing, editingVersion);
+      setDrafts(updated.drafts);
+      setSummary(updated.summary);
+      setError(updated.editingStale
+        ? "本机计划已有新版本；当前表单未被覆盖。请从列表选择最新版本后再修订。"
+        : "");
+    } catch {
+      setError("本机草稿读取失败；已停止更新列表以保护原数据。");
+    }
+  }
+
+  // Storage events come from other tabs. Never overwrite unsaved form fields.
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.storageArea !== localStorage ||
+          (event.key !== DRAFT_KEY && event.key !== null)) return;
+      refresh();
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [editing, editingVersion]);
+
   function exportBackup() {
     let url: string | null = null;
     try {
@@ -74,6 +99,7 @@ export function LocalPlanDrafts({ history = false }: { history?: boolean }) {
     <p className="notice">仅保存在此浏览器，未同步服务器或券商；不是有效交易计划，
       未完成正式纪律审计，不能据此执行交易。清除浏览器数据会丢失记录。</p>
     {error && <p role="alert">{error}</p>}
+    <button className="back-button" type="button" onClick={refresh}>刷新本机计划列表</button>
     {!history && <form className="plan-form" onSubmit={save}>
       <label>证券代码<input required pattern="[0-9]{6}" maxLength={6}
         value={symbol} disabled={editing !== null} onChange={(e) => setSymbol(e.target.value)} /></label>

@@ -1,3 +1,4 @@
+import { validObservedAt } from "./validObservedAt.ts";
 import { DRAFT_KEY, readDrafts } from "./planDraftStore.ts";
 import { REVIEW_KEY, readReviews, type ManualReview } from "./reviewStore.ts";
 
@@ -10,8 +11,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function validExportTime(value: unknown): value is string {
-  return typeof value === "string" && Number.isFinite(Date.parse(value)) &&
-    /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+  return validObservedAt(value);
 }
 
 /** Export only validated, browser-local manual reviews; no trade fills or P&L. */

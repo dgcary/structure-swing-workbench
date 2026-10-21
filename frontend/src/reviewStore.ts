@@ -1,3 +1,4 @@
+import { validObservedAt } from "./validObservedAt.ts";
 import { DRAFT_KEY, readDrafts } from "./planDraftStore.ts";
 
 /** Browser-only manual reviews; never a verified fill, P&L or formal audit. */
@@ -25,7 +26,7 @@ function validReview(value: unknown): value is ManualReview {
     value.version > 0 && typeof value.symbol === "string" &&
     /^[0-9]{6}$/.test(value.symbol) &&
     typeof value.savedAt === "string" &&
-    Number.isFinite(Date.parse(value.savedAt)) &&
+    validObservedAt(value.savedAt) &&
     validText(value.observation) && validText(value.lesson);
 }
 
@@ -74,7 +75,7 @@ export function saveReview(
   if (current.length >= MAX_REVIEWS) throw new Error("复盘已达200条上限，请先备份。");
   const id = makeId(), savedAt = now();
   if (!id.trim() || id.length > 128 || current.some((item) => item.id === id) ||
-      !Number.isFinite(Date.parse(savedAt))) {
+      !validObservedAt(savedAt)) {
     throw new Error("复盘编号重复或保存时间无效，未覆盖原记录。");
   }
   const next = [{

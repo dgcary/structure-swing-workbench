@@ -45,3 +45,17 @@ test("restore keeps linked local reviews but rejects mismatched symbols", () => 
   assert.throws(() => restoreDraftBackup(invalid, backup), /不匹配/);
   assert.equal(invalid.getItem(DRAFT_KEY), null);
 });
+
+test("draft backup restore rejects timezone-free or impossible export timestamps", () => {
+  const source = store();
+  saveDraft(source, input, null, () => "plan-1");
+  const backup = JSON.parse(serializeDraftBackup(source));
+  const target = store();
+  for (const invalid of [
+    "2026-10-21T08:00:00", "2026-02-30T08:00:00Z",
+  ]) {
+    assert.throws(() => restoreDraftBackup(target,
+      JSON.stringify({ ...backup, exported_at: invalid })), /备份版本/);
+    assert.equal(target.getItem(DRAFT_KEY), null);
+  }
+});

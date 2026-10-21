@@ -127,3 +127,18 @@ test("review restore refuses a concurrent plan change before committing reviews"
   assert.equal(target.getItem(REVIEW_KEY), null);
   assert.equal(JSON.parse(target.getItem(DRAFT_KEY))[0].symbol, "000001");
 });
+
+test("review backup rejects calendar-invalid export times even with timezone", () => {
+  const source = store();
+  withReview(source);
+  const backup = JSON.parse(serializeReviewBackup(source));
+  const target = store();
+  withPlan(target);
+  for (const invalid of ["2026-02-30T08:00:00Z", "2026-10-21T08:00:00"]) {
+    assert.throws(() => restoreReviewBackup(target,
+      JSON.stringify({ ...backup, exported_at: invalid })), /备份版本/);
+    assert.equal(target.getItem(REVIEW_KEY), null);
+  }
+  assert.throws(() => serializeReviewBackup(source,
+    () => "2026-02-30T08:00:00Z"), /时间无效/);
+});

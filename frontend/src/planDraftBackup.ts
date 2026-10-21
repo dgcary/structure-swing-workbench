@@ -1,3 +1,4 @@
+import { validObservedAt } from "./validObservedAt.ts";
 import { DRAFT_KEY, readDrafts, type PlanDraft } from "./planDraftStore.ts";
 import { REVIEW_KEY, readReviews } from "./reviewStore.ts";
 
@@ -8,7 +9,7 @@ export function serializeDraftBackup(
 ): string {
   const records = readDrafts(storage);
   const exportedAt = now();
-  if (!Number.isFinite(Date.parse(exportedAt)) || !/(?:Z|[+-]\d{2}:\d{2})$/.test(exportedAt)) {
+  if (!validObservedAt(exportedAt)) {
     throw new Error("备份时间无效，未生成导出文件。");
   }
   return JSON.stringify({
@@ -44,8 +45,7 @@ export function restoreDraftBackup(
   const data = backup as Record<string, unknown>;
   if (data.schema_version !== "m8.manual_drafts.v1" ||
       typeof data.exported_at !== "string" ||
-      !Number.isFinite(Date.parse(data.exported_at)) ||
-      !/(?:Z|[+-]\d{2}:\d{2})$/.test(data.exported_at) ||
+      !validObservedAt(data.exported_at) ||
       !Array.isArray(data.records) || data.records.length === 0) {
     throw new Error("备份版本、时间或记录不符合要求。");
   }

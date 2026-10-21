@@ -1,3 +1,5 @@
+import { validObservedAt } from "./validObservedAt.ts";
+
 /** Append-only, browser-local manual plans; no formal audit or server sync. */
 export type PlanDraft = {
   id: string; version: number; savedAt: string; symbol: string;
@@ -39,7 +41,7 @@ export function readDrafts(storage: Pick<Store, "getItem">): PlanDraft[] {
       typeof value.version !== "number" || !Number.isSafeInteger(value.version) ||
       value.version <= 0 ||
       typeof value.savedAt !== "string" ||
-      !Number.isFinite(Date.parse(value.savedAt)) ||
+      !validObservedAt(value.savedAt) ||
       typeof value.symbol !== "string" || typeof value.setup !== "string" ||
       typeof value.entry !== "string" || typeof value.stop !== "string" ||
       typeof value.target !== "string" || typeof value.notes !== "string" ||
@@ -92,7 +94,7 @@ export function saveDraft(
   if (!editingId && versions.length) throw new Error("新计划标识重复，已停止写入。");
   const version = versions.reduce((max, item) => Math.max(max, item.version), 0) + 1;
   const savedAt = now();
-  if (!Number.isFinite(Date.parse(savedAt))) throw new Error("保存时间无效。");
+  if (!validObservedAt(savedAt)) throw new Error("保存时间无效。");
   const next: PlanDraft[] = [{ ...input, id, version, savedAt }, ...current];
   // Reject an intervening edit from another tab before writing this version.
   if (storage.getItem(DRAFT_KEY) !== snapshot) {

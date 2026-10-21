@@ -2,6 +2,7 @@
 
 import csv
 import io
+import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Literal
@@ -11,6 +12,10 @@ from pydantic import BaseModel, Field
 
 COLUMNS = ("time", "open", "high", "low", "close", "volume")
 MAX_BARS = 500
+DAY_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
+MINUTE_STAMP = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\Z"
+)
 
 
 class KlinePreviewRequest(BaseModel):
@@ -34,9 +39,11 @@ def _time(raw: str | None, timeframe: str) -> str:
     value = raw.strip()
     try:
         if timeframe == "day":
-            if len(value) != 10:
+            if not DAY_STAMP.fullmatch(value):
                 raise ValueError("日K必须使用 YYYY-MM-DD")
             return date.fromisoformat(value).isoformat()
+        if not MINUTE_STAMP.fullmatch(value):
+            raise ValueError("分钟K必须使用带时区的 ISO 时间")
         parsed = datetime.fromisoformat(value)
         if parsed.tzinfo is None or parsed.utcoffset() is None:
             raise ValueError("分钟K必须带时区")

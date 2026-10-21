@@ -8,6 +8,8 @@ const METRIC_KEYS = [
 ] as const;
 const HOLDING_STATES = new Set(["snapshot", "partial", "unanchored", "conflict"]);
 const CSV_KINDS = new Set(["account", "holdings", "fills"]);
+// A-share symbols must be six digits, optionally with an explicit exchange.
+const A_SHARE_SYMBOL = /^(?:\d{6}(?:\.(?:SH|SZ|BJ))?|(?:SH|SZ|BJ)\d{6})$/;
 const COUNT_METRICS = new Set(["position_count", "t_cycles_today", "open_t_cycles"]);
 const TEXT_METRICS = new Set(["rotation_status", "highest_audit"]);
 
@@ -43,7 +45,7 @@ function validMetric(value: unknown): boolean {
 }
 
 function validHolding(value: unknown): boolean {
-  if (!record(value) || typeof value.symbol !== "string" || !value.symbol.trim() ||
+  if (!record(value) || typeof value.symbol !== "string" || !A_SHARE_SYMBOL.test(value.symbol) ||
       !HOLDING_STATES.has(String(value.status)) ||
       typeof value.warning !== "string" || !value.warning.trim()) return false;
   for (const key of ["quantity", "broker_display_cost", "core_quantity",
@@ -115,7 +117,8 @@ export function assertReadOnlyOverview(
         (item: Record<string, unknown>) => item.key === key,
       )) ||
       !(data.holdings === null ||
-        (Array.isArray(data.holdings) && data.holdings.every(validHolding) &&
+        (Array.isArray(data.holdings) && data.holdings.length > 0 &&
+         data.holdings.every(validHolding) &&
          new Set(data.holdings.map((holding: Record<string, unknown>) =>
            String(holding.symbol).trim())).size === data.holdings.length)) ||
       data.effective_plans !== null ||

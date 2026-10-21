@@ -194,3 +194,35 @@ test("unavailable metric cannot retain a verified source or observation time", (
     assert.throws(() => assertReadOnlyOverview(broken, "read_only"), /协议异常/);
   }
 });
+
+test("empty holdings are not a verified zero-position account", () => {
+  assert.doesNotThrow(() => assertReadOnlyOverview(baseline(), "read_only"));
+  for (const [data, mode] of [
+    [baseline(), "read_only"],
+    [snapshot(), "isolated_csv_preview"],
+  ]) {
+    assert.throws(() => assertReadOnlyOverview(
+      { ...data, holdings: [] }, mode,
+    ), /协议异常/);
+  }
+});
+
+test("sourced holdings require well-formed A-share symbols", () => {
+  const holding = {
+    symbol: "600000", status: "snapshot", quantity: "100",
+    broker_display_cost: "12.30", core_quantity: null, t_quantity: null,
+    source: "CSV/upload", as_of: "2026-10-20T09:30:00+08:00",
+    warning: "仅为来源范围内的持仓，尚未核验核心仓",
+  };
+  for (const symbol of ["600000", "600000.SH", "000001.SZ", "830000.BJ", "SH600000"]) {
+    assert.doesNotThrow(() => assertReadOnlyOverview(
+      { ...baseline(), holdings: [{ ...holding, symbol }] }, "read_only",
+    ), symbol);
+  }
+  for (const symbol of ["abc", "12345", "600000x", "600000;DROP", " 600000",
+    "600000 ", "600000.XX", "000001.SZ extra"]) {
+    assert.throws(() => assertReadOnlyOverview(
+      { ...baseline(), holdings: [{ ...holding, symbol }] }, "read_only",
+    ), /协议异常/, symbol);
+  }
+});

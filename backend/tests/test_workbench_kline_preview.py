@@ -75,3 +75,29 @@ def test_unclosed_quoted_csv_field_is_rejected():
         "timeframe": "day", "data": malformed,
     })
     assert response.status_code == 422
+
+
+
+def test_noncanonical_but_parseable_iso_timestamps_are_rejected():
+    # datetime/date.fromisoformat accepts ISO week dates and alternative
+    # separators, but the frontend contract requires calendar-date ISO.
+    for timeframe, stamp in (
+        ("day", "2026-W43-3"),
+        ("5m", "2026-W43-3T09:30:00+08:00"),
+        ("5m", "2026-10-21 09:30:00+08:00"),
+        ("15m", "2026-10-21T09:30+08:00"),
+    ):
+        response = client.post("/workbench/kline-preview", json={
+            "timeframe": timeframe,
+            "data": header + f"{stamp},10,11,9,10,100\n",
+        })
+        assert response.status_code == 422, (timeframe, stamp, response.json())
+
+
+def test_canonical_minute_timestamp_with_zulu_timezone_is_accepted():
+    response = client.post("/workbench/kline-preview", json={
+        "timeframe": "5m",
+        "data": header + "2026-10-21T01:30:00Z,10,11,9,10,100\n",
+    })
+    assert response.status_code == 200
+    assert response.json()["bars"][0]["time"] == "2026-10-21T01:30:00+00:00"

@@ -1,3 +1,5 @@
+import { readDrafts } from "./planDraftStore.ts";
+
 /** Browser-only manual reviews; never a verified fill, P&L or formal audit. */
 export type ManualReview = {
   id: string; planId: string; version: number; symbol: string;
@@ -60,6 +62,12 @@ export function saveReview(
     throw new Error("请选择有效计划版本并填写不超过2000字的复盘内容。");
   }
   // Always re-read the latest history; never overwrite changes from another tab.
+  const drafts = readDrafts(storage);
+  if (!drafts.some((item) =>
+    item.id === plan.id && item.version === plan.version &&
+    item.symbol === plan.symbol)) {
+    throw new Error("关联的人工计划版本不存在或证券不匹配；未保存复盘。");
+  }
   const current = readReviews(storage);
   if (current.length >= MAX_REVIEWS) throw new Error("复盘已达200条上限，请先备份。");
   const id = makeId(), savedAt = now();

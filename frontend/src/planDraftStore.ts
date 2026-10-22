@@ -13,15 +13,18 @@ const MAX_VERSIONS = 200;
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function validPrice(value: string): boolean {
-  return value.trim() !== "" && Number.isFinite(Number(value)) && Number(value) > 0;
+/** Only decimal price lexemes are accepted; Number() also accepts 0x/0b/0o. */
+function validPrice(value: string, allowZero = false): boolean {
+  const raw = value.trim();
+  if (!/^(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/.test(raw)) return false;
+  const price = Number(raw);
+  return Number.isFinite(price) && (allowZero ? price >= 0 : price > 0);
 }
 function validInput(input: PlanDraftInput): boolean {
   return /^[0-9]{6}$/.test(input.symbol) &&
     ["C", "A", "B", "NONE"].includes(input.setup) &&
     validPrice(input.entry) && validPrice(input.target) &&
-    input.stop.trim() !== "" && Number.isFinite(Number(input.stop)) &&
-    Number(input.stop) >= 0 && Number(input.stop) < Number(input.entry) &&
+    validPrice(input.stop, true) && Number(input.stop) < Number(input.entry) &&
     input.notes.length <= 2000;
 }
 

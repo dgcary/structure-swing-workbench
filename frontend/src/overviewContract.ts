@@ -169,4 +169,3 @@ export function assertReadOnlyOverview(
        kinds.some((kind: unknown) => !CSV_KINDS.has(String(kind))) ||
        new Set(kinds).size !== kinds.length)) fail();
 }
-

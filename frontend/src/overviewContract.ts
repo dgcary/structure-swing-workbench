@@ -21,6 +21,14 @@ function optionalText(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
+/** Accept finite decimal/scientific quantities only; JS Number also parses hex/binary. */
+function decimalText(value: unknown, allowNegative = false): value is string {
+  if (typeof value !== "string" ||
+      !/^-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/.test(value)) return false;
+  const number = Number(value);
+  return Number.isFinite(number) && (allowNegative || number >= 0);
+}
+
 function validMetric(value: unknown): boolean {
   if (!record(value) || typeof value.key !== "string" ||
       typeof value.label !== "string" || !value.label.trim() ||
@@ -32,9 +40,9 @@ function validMetric(value: unknown): boolean {
         typeof value.as_of !== "string" ||
         !validObservedAt(value.as_of)) return false;
     if (TEXT_METRICS.has(value.key)) return true;
+    // A string like "0x10" is accepted by Number(), but is not a broker decimal.
+    if (!decimalText(value.value)) return false;
     const numeric = Number(value.value);
-    // Do not render impossible negative balances, risks or T counts as verified facts.
-    if (!Number.isFinite(numeric) || numeric < 0) return false;
     if (COUNT_METRICS.has(value.key) && !Number.isSafeInteger(numeric)) return false;
     if (value.key === "position_ratio" && numeric > 100) return false;
     return true;
@@ -55,13 +63,10 @@ function validHolding(value: unknown): boolean {
   for (const key of ["core_quantity", "t_quantity"]) {
     const quantity = value[key];
     if (quantity !== null &&
-        (typeof quantity !== "string" || !quantity.trim() ||
-         !Number.isFinite(Number(quantity)) || Number(quantity) < 0)) return false;
+        (!decimalText(quantity))) return false;
   }
   if (value.broker_display_cost !== null &&
-      (typeof value.broker_display_cost !== "string" ||
-       !value.broker_display_cost.trim() ||
-       !Number.isFinite(Number(value.broker_display_cost)))) return false;
+      (!decimalText(value.broker_display_cost, true))) return false;
   // These optional details are displayed as confirmed fills and net changes.
   // Validate them before rendering; never present malformed data as verified.
   if (value.applied_fill_ids !== undefined &&
@@ -71,9 +76,7 @@ function validHolding(value: unknown): boolean {
        new Set(value.applied_fill_ids).size !== value.applied_fill_ids.length)) return false;
   if (value.unanchored_fill_delta !== undefined &&
       value.unanchored_fill_delta !== null &&
-      (typeof value.unanchored_fill_delta !== "string" ||
-       !value.unanchored_fill_delta.trim() ||
-       !Number.isFinite(Number(value.unanchored_fill_delta)))) return false;
+      (!decimalText(value.unanchored_fill_delta, true))) return false;
   if (value.status !== "unanchored" &&
       value.unanchored_fill_delta != null) return false;
   if (typeof value.source !== "string" || !value.source.trim() ||
@@ -84,8 +87,7 @@ function validHolding(value: unknown): boolean {
     return value.quantity === null && value.broker_display_cost === null &&
       value.core_quantity === null && value.t_quantity === null;
   }
-  if (typeof value.quantity !== "string" || !value.quantity.trim() ||
-      !Number.isFinite(Number(value.quantity)) || Number(value.quantity) < 0) return false;
+  if (!decimalText(value.quantity)) return false;
   if (value.status === "partial" && value.broker_display_cost !== null) return false;
   if (value.status === "snapshot" && value.broker_display_cost === null) return false;
   // Prevent presenting allocations larger than the sourced, anchored holding.

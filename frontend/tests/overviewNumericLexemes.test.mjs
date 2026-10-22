@@ -53,3 +53,9 @@ test("finite scientific notation from Python Decimal stays valid", () => {
     core_quantity: "7E1", t_quantity: "3E1" }];
   assert.doesNotThrow(() => assertReadOnlyOverview(data, "read_only"));
 });
+
+test("reject fractional count values", () => {
+  const data = base();
+  data.metrics[3] = { ...data.metrics[3], value: "1.0000000000000001", status: "available", source: "CSV", as_of: "2026-10-22T08:00:00+08:00" };
+  assert.throws(() => assertReadOnlyOverview(data, "read_only"), /协议异常/);
+});

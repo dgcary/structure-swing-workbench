@@ -24,7 +24,7 @@ function optionalText(value: unknown): value is string | null {
 /** Accept finite decimal/scientific quantities only; JS Number also parses hex/binary. */
 function decimalText(value: unknown, allowNegative = false): value is string {
   if (typeof value !== "string" ||
-      !/^-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/.test(value)) return false;
+      !/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) return false;
   const number = Number(value);
   return Number.isFinite(number) && (allowNegative || number >= 0);
 }

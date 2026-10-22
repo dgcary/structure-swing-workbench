@@ -59,3 +59,14 @@ test("reject fractional count values", () => {
   data.metrics[3] = { ...data.metrics[3], value: "1.0000000000000001", status: "available", source: "CSV", as_of: "2026-10-22T08:00:00+08:00" };
   assert.throws(() => assertReadOnlyOverview(data, "read_only"), /协议异常/);
 });
+
+test("reject sourced decimal underflow to zero", () => {
+  assert.throws(() => assertReadOnlyOverview(metric("1e-999"), "read_only"), /协议异常/);
+});
+
+test("reject exact over-allocation even when floating point loses the excess", () => {
+  const data = base();
+  data.holdings = [{ ...holding(), quantity: "9007199254740992",
+    core_quantity: "9007199254740992", t_quantity: "1" }];
+  assert.throws(() => assertReadOnlyOverview(data, "read_only"), /协议异常/);
+});

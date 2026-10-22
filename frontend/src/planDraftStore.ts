@@ -18,7 +18,9 @@ function validPrice(value: string, allowZero = false): boolean {
   const raw = value.trim();
   if (!/^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw)) return false;
   const price = Number(raw);
-  return Number.isFinite(price) && (allowZero ? price >= 0 : price > 0);
+  // Reject nonzero decimals that underflow to 0; a stop price of literal 0 is allowed.
+  if (!Number.isFinite(price) || (price === 0 && /[1-9]/.test(raw.split(/[eE]/, 1)[0]))) return false;
+  return allowZero ? price >= 0 : price > 0;
 }
 function validInput(input: PlanDraftInput): boolean {
   return /^[0-9]{6}$/.test(input.symbol) &&

@@ -21,12 +21,43 @@ function optionalText(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-/** Accept finite decimal/scientific quantities only; JS Number also parses hex/binary. */
+/** Accept finite decimal/scientific quantities, rejecting nonzero underflow. */
 function decimalText(value: unknown, allowNegative = false): value is string {
-  if (typeof value !== "string" ||
+  if (typeof value !== "string" || value.length > 128 ||
       !/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) return false;
+  const exponent = Number(value.split(/[eE]/)[1] ?? "0");
+  if (!Number.isFinite(exponent) || Math.abs(exponent) > 308) return false;
   const number = Number(value);
-  return Number.isFinite(number) && (allowNegative || number >= 0);
+  const mantissa = value.split(/[eE]/)[0];
+  // Number("1e-999") is zero; never let a nonzero sourced fact become zero.
+  return Number.isFinite(number) &&
+    (number !== 0 || !/[1-9]/.test(mantissa)) &&
+    (allowNegative || number >= 0);
+}
+
+/** Exact decimal arithmetic for inventory and integer-count checks. */
+function decimalParts(value: string): { digits: bigint; power: number } {
+  const match = /^(-?)(?:(\d+)(?:\.(\d+))?|\.(\d+))(?:[eE]([+-]?\d+))?$/.exec(value);
+  if (!match) throw new Error("无效十进制数值");
+  const fraction = match[3] ?? match[4] ?? "";
+  const digits = BigInt((match[2] ?? "0") + fraction);
+  return {
+    digits: match[1] === "-" ? -digits : digits,
+    power: Number(match[5] ?? "0") - fraction.length,
+  };
+}
+
+function exactInteger(value: string): boolean {
+  const { digits, power } = decimalParts(value);
+  return power >= 0 || digits % (10n ** BigInt(-power)) === 0n;
+}
+
+function allocationWithinHolding(core: string, t: string, total: string): boolean {
+  const parts = [core, t, total].map(decimalParts);
+  const minPower = Math.min(...parts.map((part) => part.power));
+  const scaled = parts.map(({ digits, power }) =>
+    digits * (10n ** BigInt(power - minPower)));
+  return scaled[0] + scaled[1] <= scaled[2];
 }
 
 function validMetric(value: unknown): boolean {
@@ -43,7 +74,8 @@ function validMetric(value: unknown): boolean {
     // A string like "0x10" is accepted by Number(), but is not a broker decimal.
     if (!decimalText(value.value)) return false;
     const numeric = Number(value.value);
-    if (COUNT_METRICS.has(value.key) && !Number.isSafeInteger(numeric)) return false;
+    if (COUNT_METRICS.has(value.key) &&
+        (!Number.isSafeInteger(numeric) || !exactInteger(value.value))) return false;
     if (value.key === "position_ratio" && numeric > 100) return false;
     return true;
   }
@@ -90,11 +122,11 @@ function validHolding(value: unknown): boolean {
   if (!decimalText(value.quantity)) return false;
   if (value.status === "partial" && value.broker_display_cost !== null) return false;
   if (value.status === "snapshot" && value.broker_display_cost === null) return false;
-  // Prevent presenting allocations larger than the sourced, anchored holding.
-  const core = value.core_quantity === null ? 0 : Number(value.core_quantity);
-  const t = value.t_quantity === null ? 0 : Number(value.t_quantity);
-  const total = Number(value.quantity);
-  if (core + t > total + Math.max(1, total) * Number.EPSILON * 4) return false;
+  // Never use floating-point tolerance for sourced share allocations:
+  // tiny quantities and values above 2^53 can otherwise hide an over-allocation.
+  if (!allocationWithinHolding(
+    value.core_quantity ?? "0", value.t_quantity ?? "0", value.quantity,
+  )) return false;
   return true;
 }
 

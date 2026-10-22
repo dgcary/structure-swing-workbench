@@ -16,7 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Only decimal price lexemes are accepted; Number() also accepts 0x/0b/0o. */
 function validPrice(value: string, allowZero = false): boolean {
   const raw = value.trim();
-  if (!/^(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/.test(raw)) return false;
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw)) return false;
   const price = Number(raw);
   return Number.isFinite(price) && (allowZero ? price >= 0 : price > 0);
 }

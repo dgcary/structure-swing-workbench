@@ -63,3 +63,65 @@ test("new plan ids work without secure-context crypto APIs", () => {
   assert.ok(saved.id.length > 0);
   assert.equal(readDrafts(store).length, 1);
 });
+
+
+test("decimal prices are accepted without normalizing the user's original text", () => {
+  for (const [entry, stop, target] of [
+    ["10.50", "9.25", "12.75"],
+    [".5", "0", "1.25"],
+    ["1e1", "9e0", "1.2e1"],
+    ["1E+1", "9.00", "1.20E+1"],
+    [" 10.25 ", " 9.50 ", " 12.00 "],
+    ["0.0001", "0.00001", "0.0002"],
+  ]) {
+    const store = memoryStore();
+    const data = { ...input, entry, stop, target };
+    const result = saveDraft(store, data, null, () => "decimal");
+    assert.equal(result.drafts.length, 1);
+    assert.equal(result.drafts[0].entry, entry);
+    assert.equal(result.drafts[0].stop, stop);
+    assert.equal(result.drafts[0].target, target);
+    assert.equal(readDrafts(store)[0].entry, entry);
+  }
+});
+
+test("non-decimal, non-finite and overflow price lexemes fail closed on save", () => {
+  const invalid = [
+    "0x10", "0X10", "0b1010", "0B1010", "0o12", "0O12",
+    "NaN", "Infinity", "+Infinity", "-Infinity", "1e309", "1E9999",
+    "1e-9999", "0", "-1", "1.", "1_000", "10px", "",
+  ];
+  const store = memoryStore();
+  saveDraft(store, input, null, () => "original");
+  for (const price of invalid) {
+    for (const field of ["entry", "target"]) {
+      const before = store.getItem(DRAFT_KEY);
+      assert.throws(() => saveDraft(store, { ...input, [field]: price }, "original"),
+        undefined, `${field}=${JSON.stringify(price)}`);
+      assert.equal(store.getItem(DRAFT_KEY), before);
+    }
+  }
+  for (const stop of ["0x0", "0b0", "0o0", "NaN", "Infinity", "1e309", "-1", "10"]) {
+    const before = store.getItem(DRAFT_KEY);
+    assert.throws(() => saveDraft(store, { ...input, stop }, "original"),
+      undefined, `stop=${JSON.stringify(stop)}`);
+    assert.equal(store.getItem(DRAFT_KEY), before);
+  }
+});
+
+test("legacy stored drafts with non-decimal prices cannot be read or overwritten", () => {
+  const store = memoryStore();
+  const original = saveDraft(store, input, null, () => "legacy").drafts[0];
+  const invalid = ["0x10", "0b1010", "0o12", "NaN", "Infinity", "1e309", "1e-9999"];
+  for (const price of invalid) {
+    for (const field of ["entry", "stop", "target"]) {
+      store.setItem(DRAFT_KEY, JSON.stringify([{ ...original, [field]: price }]));
+      const before = store.getItem(DRAFT_KEY);
+      assert.throws(() => readDrafts(store), undefined, `legacy ${field}=${price}`);
+      assert.throws(() => saveDraft(store, input, "legacy"), undefined, `edit ${field}=${price}`);
+      assert.throws(() => saveDraft(store, input, null, () => "new"), undefined,
+        `new ${field}=${price}`);
+      assert.equal(store.getItem(DRAFT_KEY), before);
+    }
+  }
+});

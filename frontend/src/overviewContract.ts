@@ -125,7 +125,9 @@ function validHolding(value: unknown): boolean {
   // Never use floating-point tolerance for sourced share allocations:
   // tiny quantities and values above 2^53 can otherwise hide an over-allocation.
   if (!allocationWithinHolding(
-    value.core_quantity ?? "0", value.t_quantity ?? "0", value.quantity as string,
+    (value.core_quantity as string | null) ?? "0",
+    (value.t_quantity as string | null) ?? "0",
+    value.quantity as string,
   )) return false;
   return true;
 }
@@ -167,3 +169,4 @@ export function assertReadOnlyOverview(
        kinds.some((kind: unknown) => !CSV_KINDS.has(String(kind))) ||
        new Set(kinds).size !== kinds.length)) fail();
 }
+

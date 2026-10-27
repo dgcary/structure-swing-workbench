@@ -209,6 +209,24 @@ def recorded_t_cycles(
                 "日内总T次数及T+1可卖数量，不授权交易。"
             ),
         })
+    # The broker ledger is incomplete, so fewer than three recorded cycles
+    # cannot establish compliance. Three *distinct, internally consistent*
+    # closed cycles do establish a lower-bound warning for the same symbol/day,
+    # even across plan versions. Never promote this to a verified daily count.
+    recorded_closed_by_symbol: dict[str, int] = defaultdict(int)
+    for cycle in result:
+        if cycle["state"] == "closed":
+            recorded_closed_by_symbol[str(cycle["symbol"])] += 1
+    for cycle in result:
+        over_limit = recorded_closed_by_symbol[str(cycle["symbol"])] > 2
+        # null means "not proven from incomplete records", NOT "rule passed".
+        cycle["recorded_daily_limit_alert"] = True if over_limit else None
+        if over_limit:
+            cycle["warning"] = (
+                "该证券本交易日已记录至少3个独立完整T配对，疑似超过单票单日最多2次；"
+                "券商全量成交尚未对账，必须人工复核，不授权交易。"
+                + str(cycle["warning"])
+            )
     return result
 
 

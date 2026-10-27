@@ -106,3 +106,12 @@
 - `frontend/src/dateWriteTransport.ts` 与 `App.tsx`：日期表单在发出包含 Bearer 令牌的请求**之前**校验页面来源，远程 HTTP 页面直接拒绝发送；仅 HTTPS 页面或本机回环 HTTP 页面允许提交，避免服务端 HTTP 403 已发生但令牌仍先经明文网络泄露。
 - `frontend/tests/dateWriteTransport.test.mjs`：覆盖 HTTPS、localhost/127.0.0.1/IPv6 回环、局域网明文、伪造本地域名和非 HTTP 协议。
 - **验收边界**：该措施与后端传输门禁共同防护日期编辑令牌，不等于完成生产反向代理/TLS 部署、身份系统或移动端实机验收；全部交易动作仍不可执行。M8 Gate 仍 FAIL。
+
+
+### 2026-10-27 增量证据：T 成交逐周期来源审查（不等于当日总次数）
+
+- `backend/app/workbench/t_cycle_evidence.py`：读取数据库中正式 `TradeAction.t_cycle_key` 与 `ExecutionFill` 的**实际记录**，按证券/周期键关联正 T 先卖/买回、反 T 先买/卖出，聚合拆单成交；输出每周期 `closed/open/conflict`、开闭腿数量、成交来源及时间。计划草稿和未成交动作不能冒充成交。
+- 反例：无周期键、方向与成交买卖不符、关闭数量超过开仓、闭腿早于开腿、同一时刻缺乏先后顺序、跨上海市场日期、未来/无时区时间戳、缺少成交来源均不能成为有效闭环。非完整周期只作为已记录的未闭环证据，不得计为已完成 T。
+- `backend/app/workbench/persisted.py` → `overview.py`：在只读 API 附加 `t_cycle_evidence`。所有条目 `broker_reconciled=false`、`trade_execution_enabled=false`。**首页 `t_cycles_today` 与 `open_t_cycles` 仍为 unavailable**：M1 当前没有券商成交全量水位、清算确认或每日对账完成标记，不能以数据库部分记录声称完整日内次数，也不能以未录入视为零。
+- 自动化证据：`backend/tests/test_workbench_t_cycle_evidence.py` 覆盖拆单、部分闭环、跨日、来源冲突、时间逆序和未来记录；`backend/tests/test_workbench_postgres_integration.py::test_postgres_recorded_t_cycle_fills_are_dated_but_not_broker_complete` 在迁移后 PostgreSQL 16 中核对实际成交记录往返、重复超额冲突与首页计数保持 unavailable。测试均使用合成数据和事务回滚，不代表真实券商账户已对账。
+- **剩余 FAIL**：缺少完整券商成交来源/每日对账水位、日终未闭环正式转仓事实、日内换仓、T+1 可卖数量、含 T 仓风险、脱敏真实格式 CSV→PG 对账及移动 Safari/可信 TLS 实机证据；仍需独立审核。CI 以本轮最新 HEAD 实际运行结果为准。

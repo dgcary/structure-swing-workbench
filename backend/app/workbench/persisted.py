@@ -6,6 +6,7 @@ A database row is not proof of a live broker connection.
 
 from datetime import datetime
 from decimal import Decimal
+import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -58,7 +59,11 @@ def project_persisted(session: Session) -> dict[str, object]:
                 PositionSnapshot.account_snapshot_id == snapshot.id
             ).order_by(PositionSnapshot.instrument_code)
         ))
-        if positions:
+        # A timestamp without timezone or an unrecognized symbol is not display-grade evidence.
+        if positions and at is not None and all(
+            re.fullmatch(r"(?:\\d{6}(?:\\.(?:SH|SZ|BJ))?|(?:SH|SZ|BJ)\\d{6})",
+                         row.instrument_code) for row in positions
+        ):
             holdings = []
             valid = all(row.total_quantity >= 0 for row in positions)
             for position in positions:

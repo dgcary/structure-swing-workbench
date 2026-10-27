@@ -258,6 +258,16 @@ def project_persisted(session: Session) -> dict[str, object]:
                 ]),
             )
         ):
+            # An action dated in the future is not a recorded current fact.
+            # Keep timezone-naive legacy rows display-only, but reject
+            # explicitly future-dated rows rather than showing them as pending.
+            action_time = action.updated_at
+            if (
+                action_time is not None and action_time.tzinfo is not None
+                and action_time.utcoffset() is not None
+                and _observed_at(action_time) is None
+            ):
+                continue
             actions.append({
                 "id": action.id, "symbol": plan.instrument_code,
                 "action_zh": action.action_type.label_zh,
@@ -291,6 +301,14 @@ def project_persisted(session: Session) -> dict[str, object]:
 
     audits = []
     for row in sorted(audit_rows, key=lambda item: (item.created_at, item.id)):
+        # Future-dated audit records must not appear as completed historical
+        # checks, nor influence the highest audit severity metric.
+        if (
+            row.created_at is not None and row.created_at.tzinfo is not None
+            and row.created_at.utcoffset() is not None
+            and _observed_at(row.created_at) is None
+        ):
+            continue
         audits.append({
             "id": row.id,
             "level": row.level.value,

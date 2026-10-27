@@ -429,7 +429,7 @@ export function App() {
                 <p className="notice">未填写日期、日期不可信或计划日期不是今天的动作，不得冒充今日待办。</p>
                 {otherActions.length > 0 ? (
                   <div className="holding-list">
-                    {otherActions.map((action) => <ActionCard key={action.id} action={action} />)}
+                    {otherActions.map((action) => <ActionCard key={action.id} action={action} onSaved={refreshAfterDateEdit} />)}
                   </div>
                 ) : <p>暂无其他可展示的历史动作；不代表已完成审计。</p>}
               </section>

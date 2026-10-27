@@ -68,6 +68,10 @@ def _preview_daily_fill_coverage(
     market_close = datetime.combine(claim.market_date, time(15), tzinfo=MARKET_TZ)
     claimed_full_day = (
         claim.declared_full_day
+        # A-share exchanges do not have regular weekend trading sessions.
+        # Without an authenticated exchange calendar, a weekend self-claim
+        # cannot be labelled as a complete market day.
+        and claim.market_date.weekday() < 5
         # A watermark for a later market day cannot certify this day's
         # self-reported manifest, even when its IDs happen to match.
         and claim.complete_through.astimezone(MARKET_TZ).date() == claim.market_date

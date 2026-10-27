@@ -25,9 +25,9 @@ def _market_session_status(market_date: date) -> str:
     """Return session/closed/unknown; calendar errors must fail closed."""
     try:
         return "session" if _xshg_calendar().is_session(market_date.isoformat()) else "closed"
-    except (ImportError, ValueError, TypeError, OverflowError):
-        # Missing package, stale/out-of-range calendar, or provider failure:
-        # never accept an unverified weekday as a complete trading session.
+    except (ImportError, ValueError, TypeError, OverflowError, LookupError, RuntimeError, OSError):
+        # Calendar cache/lookup/provider failures must never become a session.
+        # Third-party sessions do not authenticate official temporary closures.
         return "unknown"
 
 

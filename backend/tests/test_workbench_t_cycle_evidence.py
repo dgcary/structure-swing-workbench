@@ -11,9 +11,10 @@ NOW = datetime(2026, 10, 27, 12, tzinfo=UTC)
 DAY = date(2026, 10, 27)
 
 
-def _fill(identifier, side, qty, hour, *, source="manual", at=None):
+def _fill(identifier, side, qty, hour, *, source="manual", at=None, price="10"):
     return SimpleNamespace(
         id=identifier, side=side, quantity=Decimal(qty), source=source,
+        price=Decimal(price) if price is not None else None,
         executed_at=at if at is not None else NOW.replace(hour=hour),
     )
 
@@ -180,3 +181,30 @@ def test_missing_fill_source_fails_closed_without_crashing():
     cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
     assert cycle["state"] == "conflict"
     assert cycle["trade_execution_enabled"] is False
+
+
+def test_invalid_execution_price_never_certifies_a_completed_t_cycle():
+    """NUMERIC NaN, infinity, zero, negative or missing prices are not fill evidence."""
+    for invalid in ("NaN", "Infinity", "-Infinity", "0", "-1", None):
+        rows = [
+            _record(ActionType.POSITIVE_T_SELL,
+                    _fill("open", OrderSide.SELL, "10", 1, price=invalid)),
+            _record(ActionType.POSITIVE_T_BUYBACK,
+                    _fill("close", OrderSide.BUY, "10", 2)),
+        ]
+        cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+        assert cycle["state"] == "conflict"
+        assert cycle["opening_quantity"] is None
+        assert cycle["closing_quantity"] is None
+        assert cycle["broker_reconciled"] is False
+        assert cycle["trade_execution_enabled"] is False
+
+        # Invalid closing-leg prices must fail closed as well.
+        rows[0] = _record(
+            ActionType.POSITIVE_T_SELL, _fill("open", OrderSide.SELL, "10", 1)
+        )
+        rows[1] = _record(
+            ActionType.POSITIVE_T_BUYBACK,
+            _fill("close", OrderSide.BUY, "10", 2, price=invalid),
+        )
+        assert recorded_t_cycles(rows, DAY, now=NOW)[0]["state"] == "conflict"

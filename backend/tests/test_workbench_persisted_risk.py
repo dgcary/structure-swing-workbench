@@ -1,6 +1,6 @@
 """M8 historical risk projections require dated, complete CORE-only evidence."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -56,7 +56,8 @@ class _ReadOnlySession:
 def _projection(*, core="100", t="0", cost="10", stop="9",
                 quantity="100", equity="200000",
                 snapshot_at=AT, version_at=AT - timedelta(hours=1),
-                with_plan=True, buckets_complete=True, zero_conflict=False):
+                with_plan=True, buckets_complete=True, zero_conflict=False,
+                valid_until=None):
     snapshot = SimpleNamespace(
         id="snapshot-1", captured_at=snapshot_at, source="manual",
         total_equity=Decimal(equity), available_cash=Decimal(100000),
@@ -80,7 +81,7 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
         ))
     version = SimpleNamespace(
         id="version-1", version_number=1, state=PlanVersionState.EFFECTIVE,
-        updated_at=version_at,
+        updated_at=version_at, valid_until=valid_until,
         structure_invalidation_price=Decimal(stop) if stop is not None else None,
         first_target_price=Decimal(12),
     ) if with_plan else None
@@ -162,3 +163,18 @@ def test_zero_quantity_with_conflicting_buckets_blocks_total_risk():
     assert risk["status"] == "unavailable"
     assert risk["value"] is None
     assert overview["trade_execution_enabled"] is False
+
+
+def test_expired_effective_flag_does_not_publish_an_active_plan_or_risk():
+    # The plan's explicit validity date wins over a stale is_effective flag.
+    market_today = datetime.now(timezone(timedelta(hours=8))).date()
+    expired = _projection(valid_until=market_today - timedelta(days=1))
+    assert expired["effective_plans"] == []
+    assert expired["pending_actions"] == []
+    assert expired["audit_results"] == []
+    assert _metric(expired, "account_risk")["status"] == "unavailable"
+    assert expired["trade_execution_enabled"] is False
+
+    still_valid = _projection(valid_until=market_today)
+    assert len(still_valid["effective_plans"]) == 1
+    assert _metric(still_valid, "account_risk")["status"] == "available"

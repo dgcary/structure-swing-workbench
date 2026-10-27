@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from secrets import compare_digest
+
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -7,6 +9,7 @@ from app.core.config import get_settings
 from app.db.session import build_engine
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
+from app.workbench.action_date import ActionDateRequest, update_action_planned_date
 from app.workbench.account_snapshot_preview import (
     AccountSnapshotPreviewRequest,
     preview_account_snapshot,
@@ -97,3 +100,36 @@ def workbench_account_snapshot_preview(
 def workbench_t_cycle_preview(payload: TCyclePreviewRequest) -> dict[str, object]:
     """Calculate one user-supplied T cycle without broker or execution access."""
     return preview_t_cycle(payload)
+
+
+@app.put("/workbench/actions/{action_id}/planned-date", tags=["workbench"])
+def workbench_update_action_date(
+    action_id: str, payload: ActionDateRequest,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    """Opt-in, bearer-protected date-only correction; never execute an action."""
+    if not (settings.workbench_persisted_read_enabled
+            and settings.workbench_action_date_write_enabled):
+        raise HTTPException(status_code=404, detail="正式动作日期修改功能未启用")
+    secret = settings.workbench_action_date_write_token
+    if len(secret) < 32:
+        raise HTTPException(status_code=503, detail="管理员令牌未安全配置")
+    supplied = authorization.removeprefix("Bearer ") if authorization else ""
+    if not authorization or not authorization.startswith("Bearer ") or not compare_digest(
+        supplied, secret
+    ):
+        raise HTTPException(
+            status_code=401, detail="管理员令牌无效",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        engine = build_engine()
+        try:
+            with Session(engine) as session:
+                result = update_action_planned_date(session, action_id, payload)
+                session.commit()
+                return result
+        finally:
+            engine.dispose()
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="正式动作数据库暂不可用") from exc

@@ -35,6 +35,7 @@ const closed = {
   residual_quantity: null,
   ordinary_effect: null,
   requires_reaudit: false,
+  recorded_daily_limit_alert: null,
   as_of: "2026-10-27T14:30:00+08:00",
   sources: ["成交记录/fill-1/manual", "成交记录/fill-2/manual"],
   broker_reconciled: false,
@@ -99,4 +100,33 @@ test("temporary CSV preview cannot borrow persisted T-cycle evidence", () => {
   assert.doesNotThrow(() => assertReadOnlyOverview({
     ...csv, t_cycle_evidence: null,
   }, "isolated_csv_preview"));
+});
+
+
+test("daily T limit warning is mandatory for three recorded closed pairs", () => {
+  const rows = ["a", "b", "c"].map((key) => ({
+    ...closed, cycle_key: key,
+    sources: ["成交记录/" + key + "-open/manual", "成交记录/" + key + "-close/manual"],
+    recorded_daily_limit_alert: true,
+    warning: "已记录至少3个完整配对，疑似超限；未核验券商全量成交",
+  }));
+  assert.doesNotThrow(() => assertReadOnlyOverview(overview(rows), "read_only"));
+  assert.throws(() => assertReadOnlyOverview(
+    overview(rows.map((row, index) => ({
+      ...row, recorded_daily_limit_alert: index === 2 ? null : true,
+    }))), "read_only",
+  ), /协议异常/);
+  assert.throws(() => assertReadOnlyOverview(
+    overview([closed, { ...closed, cycle_key: "b", recorded_daily_limit_alert: true }]),
+    "read_only",
+  ), /协议异常/);
+  assert.throws(() => assertReadOnlyOverview(
+    overview([{ ...closed, recorded_daily_limit_alert: false }]), "read_only",
+  ), /协议异常/);
+  assert.doesNotThrow(() => assertReadOnlyOverview(
+    overview(rows.map((row, index) => ({
+      ...row, symbol: index === 2 ? "000001" : "600000",
+      recorded_daily_limit_alert: null,
+    }))), "read_only",
+  ));
 });

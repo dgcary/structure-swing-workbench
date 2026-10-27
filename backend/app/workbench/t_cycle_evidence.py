@@ -13,7 +13,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import ExecutionFill, TradeAction, TradePlan, TradePlanVersion
+from app.db.models import ExecutionFill, TradeAction
 from app.domain.enums import ActionType, OrderSide
 
 MARKET_TZ = timezone(timedelta(hours=8))
@@ -45,7 +45,7 @@ def recorded_t_cycles(
         if action_type in T_LEGS:
             # Do not combine unrelated unkeyed fills into a fictitious cycle.
             group_key = key.strip() if key and key.strip() else None
-            grouped[(symbol, group_key if group_key else f"unkeyed:{fill.id}")] .append(
+            grouped[(symbol, group_key if group_key else f"unkeyed:{fill.id}")].append(
                 (action_type, fill)
             )
     result = []
@@ -117,12 +117,13 @@ def recorded_t_cycles(
 
 def project_recorded_t_cycles(session: Session, market_day: date) -> list[dict[str, object]]:
     """Query recorded execution fills only; drafts and unfilled actions are not facts."""
-    rows = session.execute(
-        select(TradePlan.instrument_code, TradeAction.t_cycle_key,
-               TradeAction.action_type, ExecutionFill)
-        .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
-        .join(TradePlan, TradePlanVersion.plan_id == TradePlan.id)
-        .join(ExecutionFill, ExecutionFill.action_id == TradeAction.id)
+    fills = session.scalars(
+        select(ExecutionFill).join(TradeAction, ExecutionFill.action_id == TradeAction.id)
         .where(TradeAction.action_type.in_(list(T_LEGS)))
     )
-    return recorded_t_cycles(list(rows), market_day)
+    records = [
+        (fill.action.plan_version.plan.instrument_code, fill.action.t_cycle_key,
+         fill.action.action_type, fill)
+        for fill in fills
+    ]
+    return recorded_t_cycles(records, market_day)

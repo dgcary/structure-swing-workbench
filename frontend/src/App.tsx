@@ -10,6 +10,7 @@ import { LocalReview } from "./LocalReview";
 import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummary";
 import { shouldRefreshLocalDrafts } from "./localDraftRefresh";
 import { assertReadOnlyOverview } from "./overviewContract";
+import { canSendDateWriteToken } from "./dateWriteTransport";
 
 type Metric = {
   key: string;
@@ -136,6 +137,9 @@ function ActionDateEditor({
     setPending(true);
     setMessage("");
     try {
+      if (!canSendDateWriteToken(window.location.protocol, window.location.hostname)) {
+        throw new Error("远程明文 HTTP 页面禁止发送管理员令牌，请使用 HTTPS 或本机回环地址。");
+      }
       const response = await fetch(
         "/api/workbench/actions/" + encodeURIComponent(action.id) + "/planned-date",
         {

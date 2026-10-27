@@ -8,6 +8,20 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: swing_test
+          POSTGRES_PASSWORD: swing_test
+          POSTGRES_DB: swing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U swing_test -d swing_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -18,7 +32,14 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install ".[dev]"
-      - run: pytest
+      - name: 验证 PostgreSQL 迁移
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://swing_test:swing_test@127.0.0.1:5432/swing_test
+      - name: 后端测试（含真实 PostgreSQL 只读投影）
+        run: pytest
+        env:
+          WORKBENCH_PG_TEST_URL: postgresql+psycopg://swing_test:swing_test@127.0.0.1:5432/swing_test
       - run: ruff check .
 
   frontend:

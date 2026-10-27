@@ -4,16 +4,21 @@ This module never authorizes a trade or treats local drafts as effective plans.
 A database row is not proof of a live broker connection.
 """
 
+import re
 from datetime import datetime
 from decimal import Decimal
-import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    AccountSnapshot, AuditResult, PositionBucketSnapshot, PositionSnapshot,
-    TradeAction, TradePlan, TradePlanVersion,
+    AccountSnapshot,
+    AuditResult,
+    PositionBucketSnapshot,
+    PositionSnapshot,
+    TradeAction,
+    TradePlan,
+    TradePlanVersion,
 )
 from app.domain.enums import ActionStatus, AuditLevel, PlanVersionState, PositionBucketType
 

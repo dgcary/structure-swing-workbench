@@ -4,12 +4,22 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.db.models import (
-    AccountSnapshot, AuditResult, PositionBucketSnapshot, PositionSnapshot,
-    TradeAction, TradePlan, TradePlanVersion,
+    AccountSnapshot,
+    AuditResult,
+    PositionBucketSnapshot,
+    PositionSnapshot,
+    TradeAction,
+    TradePlan,
+    TradePlanVersion,
 )
 from app.domain.enums import (
-    ActionStatus, ActionType, AuditLevel, OrderSide, PlanStatus,
-    PlanVersionState, PositionBucketType,
+    ActionStatus,
+    ActionType,
+    AuditLevel,
+    OrderSide,
+    PlanStatus,
+    PlanVersionState,
+    PositionBucketType,
 )
 from app.workbench.overview import build_overview
 from app.workbench.persisted import _observed_at, project_persisted

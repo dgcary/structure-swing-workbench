@@ -1,6 +1,7 @@
+from ipaddress import ip_address
 from secrets import compare_digest
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -102,15 +103,38 @@ def workbench_t_cycle_preview(payload: TCyclePreviewRequest) -> dict[str, object
     return preview_t_cycle(payload)
 
 
+def _trusted_date_write_transport(request: Request) -> bool:
+    """Never accept a privileged bearer date edit over remote plaintext HTTP.
+
+    The ASGI scheme must already reflect a trusted TLS terminator. Do not
+    trust a caller-supplied X-Forwarded-Proto header inside this handler.
+    """
+    if request.url.scheme == "https":
+        return True
+    if request.url.scheme != "http" or request.client is None:
+        return False
+    try:
+        peer = ip_address(request.client.host)
+        host = request.url.hostname
+        local_host = host == "localhost" or (
+            host is not None and ip_address(host).is_loopback
+        )
+    except ValueError:
+        return False
+    return peer.is_loopback and local_host
+
+
 @app.put("/workbench/actions/{action_id}/planned-date", tags=["workbench"])
 def workbench_update_action_date(
-    action_id: str, payload: ActionDateRequest,
+    action_id: str, payload: ActionDateRequest, request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
     """Opt-in, bearer-protected date-only correction; never execute an action."""
     if not (settings.workbench_persisted_read_enabled
             and settings.workbench_action_date_write_enabled):
         raise HTTPException(status_code=404, detail="正式动作日期修改功能未启用")
+    if not _trusted_date_write_transport(request):
+        raise HTTPException(status_code=403, detail="正式动作日期修改仅允许 HTTPS 或本机回环访问")
     secret = settings.workbench_action_date_write_token
     if len(secret) < 32:
         raise HTTPException(status_code=503, detail="管理员令牌未安全配置")

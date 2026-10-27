@@ -28,6 +28,7 @@ from app.domain.enums import (
     PlanVersionState,
     PositionBucketType,
 )
+from app.workbench.action_date import ActionDateRequest, update_action_planned_date
 from app.workbench.overview import build_overview
 from app.workbench.persisted import project_persisted
 
@@ -187,6 +188,29 @@ def test_postgres_explicit_manual_action_date_roundtrip_never_enables_trading():
                     assert stored is not None
                     assert stored.planned_for_date == market_today
                     assert stored.updated_at.utcoffset() is not None
+
+                    # A user-entered date must be written and read back from
+                    # the migrated PostgreSQL table, not only from a fixture.
+                    changed = update_action_planned_date(
+                        session, action_id,
+                        ActionDateRequest(
+                            planned_for_date=market_today + timedelta(days=1),
+                            expected_as_of=stored.updated_at,
+                        ),
+                    )
+                    assert changed["trade_execution_enabled"] is False
+                    session.expire_all()
+                    other_day = build_overview(persisted=project_persisted(session))
+                    assert other_day["pending_actions"][0]["date_status"] == "other_day"
+                    refreshed = session.get(TradeAction, action_id)
+                    update_action_planned_date(
+                        session, action_id,
+                        ActionDateRequest(
+                            planned_for_date=market_today,
+                            expected_as_of=refreshed.updated_at,
+                        ),
+                    )
+                    session.expire_all()
 
                     overview = build_overview(persisted=project_persisted(session))
                     assert len(overview["pending_actions"]) == 1

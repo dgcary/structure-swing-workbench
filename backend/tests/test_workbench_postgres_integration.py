@@ -109,7 +109,7 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                     assert metrics["account_risk"]["status"] == "available"
                     assert overview["holdings"][0]["core_quantity"] == "100.0000"
                     assert overview["holdings"][0]["t_quantity"] == "0.0000"
-                    assert overview["effective_plans"][0]["current_risk"] == "100.0000"
+                    assert Decimal(overview["effective_plans"][0]["current_risk"]) == Decimal("100")
                     assert overview["trade_execution_enabled"] is False
 
                     # A future timestamp cannot certify a real account fact.

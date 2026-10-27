@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from starlette.requests import Request
 
 from app import main as api
 from app.core.config import Settings
@@ -134,14 +135,58 @@ def test_date_write_requires_strong_secret_and_bearer(monkeypatch):
         workbench_action_date_write_enabled=True,
         workbench_action_date_write_token="short",
     ))
-    assert TestClient(api.app).put(url, json=payload).status_code == 503
+    assert TestClient(api.app, base_url="https://testserver").put(
+        url, json=payload
+    ).status_code == 503
     monkeypatch.setattr(api, "settings", Settings(
         workbench_persisted_read_enabled=True,
         workbench_action_date_write_enabled=True,
         workbench_action_date_write_token="x" * 40,
     ))
-    client = TestClient(api.app)
+    client = TestClient(api.app, base_url="https://testserver")
     assert client.put(url, json=payload).status_code == 401
     assert client.put(
         url, json=payload, headers={"Authorization": "Bearer incorrect"},
     ).status_code == 401
+
+
+def _transport_request(scheme: str, host: str, peer: str) -> Request:
+    return Request({
+        "type": "http", "scheme": scheme, "method": "PUT",
+        "path": "/", "query_string": b"",
+        "headers": [(b"host", host.encode("ascii"))],
+        "server": (host, 8000), "client": (peer, 12345),
+    })
+
+
+def test_date_write_transport_requires_https_or_both_loopback_addresses():
+    trusted = api._trusted_date_write_transport
+    assert trusted(_transport_request("https", "workbench.example", "203.0.113.9"))
+    assert trusted(_transport_request("http", "127.0.0.1", "127.0.0.1"))
+    assert trusted(_transport_request("http", "localhost", "::1"))
+    assert not trusted(_transport_request("http", "workbench.example", "203.0.113.9"))
+    assert not trusted(_transport_request("http", "localhost", "203.0.113.9"))
+    assert not trusted(_transport_request("http", "workbench.example", "127.0.0.1"))
+    assert not trusted(_transport_request("http", "localhost", "proxy.example"))
+
+
+def test_privileged_date_write_rejects_remote_http_even_with_valid_token(monkeypatch):
+    token = "x" * 40
+    monkeypatch.setattr(api, "settings", Settings(
+        workbench_persisted_read_enabled=True,
+        workbench_action_date_write_enabled=True,
+        workbench_action_date_write_token=token,
+    ))
+    url = "/workbench/actions/" + str(uuid4()) + "/planned-date"
+    payload = {
+        "planned_for_date": "2026-10-28",
+        "expected_as_of": datetime.now(UTC).isoformat(),
+    }
+    client = TestClient(api.app)
+    for headers in (
+        {"Authorization": f"Bearer {token}"},
+        {"Authorization": f"Bearer {token}", "X-Forwarded-Proto": "https"},
+    ):
+        response = client.put(url, json=payload, headers=headers)
+        assert response.status_code == 403
+        assert "HTTPS" in response.json()["detail"]

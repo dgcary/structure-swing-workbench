@@ -1,6 +1,7 @@
 """Isolated, user-supplied CSV overview. No account data is retained between requests."""
 
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from functools import lru_cache
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -10,6 +11,24 @@ from app.account.ledger import AccountLedger
 from app.workbench.overview import build_overview
 
 MARKET_TZ = timezone(timedelta(hours=8))
+
+
+@lru_cache(maxsize=1)
+def _xshg_calendar():
+    """Third-party exchange session data, not an authenticated broker feed."""
+    import exchange_calendars
+
+    return exchange_calendars.get_calendar("XSHG")
+
+
+def _market_session_status(market_date: date) -> str:
+    """Return session/closed/unknown; calendar errors must fail closed."""
+    try:
+        return "session" if _xshg_calendar().is_session(market_date.isoformat()) else "closed"
+    except Exception:
+        # Missing package, stale/out-of-range calendar, or provider failure:
+        # never accept an unverified weekday as a complete trading session.
+        return "unknown"
 
 
 class DailyFillCoverageClaim(BaseModel):
@@ -66,12 +85,12 @@ def _preview_daily_fill_coverage(
     missing = expected - recorded
     unexpected = recorded - expected
     market_close = datetime.combine(claim.market_date, time(15), tzinfo=MARKET_TZ)
+    market_session_status = _market_session_status(claim.market_date)
     claimed_full_day = (
         claim.declared_full_day
-        # A-share exchanges do not have regular weekend trading sessions.
-        # Without an authenticated exchange calendar, a weekend self-claim
-        # cannot be labelled as a complete market day.
-        and claim.market_date.weekday() < 5
+        # A third-party exchange calendar can reject holidays/weekends, but
+        # cannot authenticate broker export completeness or exchange changes.
+        and market_session_status == "session"
         # A watermark for a later market day cannot certify this day's
         # self-reported manifest, even when its IDs happen to match.
         and claim.complete_through.astimezone(MARKET_TZ).date() == claim.market_date
@@ -92,7 +111,7 @@ def _preview_daily_fill_coverage(
         "上传成交与自报清单编号不一致、CSV 重复，或存在晚于自报水位的成交；"
         "必须核对原始券商流水。"
         if mismatch else
-        "上传成交与自报清单编号一致，但日期可能非交易日、未到实际收盘、导出/覆盖时间尚未发生，或缺少完整覆盖声明/有效成交；不能认证当日T次数。"
+        "上传成交与自报清单编号一致，但交易日历可能为休市/不可核验、未到实际收盘、导出/覆盖时间尚未发生，或缺少完整覆盖声明/有效成交；不能认证当日T次数。"
         if not claimed_full_day else
         "仅与用户自报成交清单逐笔编号一致；没有独立券商来源认证，"
         "不能证明全量成交、当日T次数、未闭环T或T+1可卖数量。"
@@ -100,6 +119,8 @@ def _preview_daily_fill_coverage(
     return {
         "status": status,
         "market_date": claim.market_date.isoformat(),
+        "market_calendar_status": market_session_status,
+        "market_calendar_source": "exchange_calendars:XSHG (第三方日历，非券商认证)",
         "export_reference": claim.export_reference,
         "claimed_complete_through": claim.complete_through.isoformat(),
         "recorded_fill_count": len(recorded),

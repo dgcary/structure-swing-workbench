@@ -200,7 +200,8 @@ def project_persisted(session: Session) -> dict[str, object]:
     # Use the A-share market calendar date, not the server's UTC date.
     market_today = datetime.now(timezone(timedelta(hours=8))).date()
     for version, plan in versions:
-        if version.valid_until is not None and version.valid_until < market_today:
+        valid_until = getattr(version, "valid_until", None)
+        if valid_until is not None and valid_until < market_today:
             continue
         source = f"正式计划版本/{version.id}"
         current_risk = None

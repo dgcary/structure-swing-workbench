@@ -159,3 +159,12 @@
 - `backend/app/workbench/t_cycle_evidence.py`：对**同一市场日、方向/成交时间/数量/来源无冲突**且仍有剩余第一腿的已记录 T 周期，在上海市场当日 15:00 及之后或后续日期，标注 `end_of_day_unclosed=true`、`residual_quantity`、`ordinary_effect`（正 T 剩余为「普通减仓待核验」，反 T 剩余为「普通加仓待核验」）和 `requires_reaudit=true`。收盘前不标注；已闭环和冲突数据不标注。只读状态仍为 `open`，不得把它冒充已完成数据库状态迁移。
 - `backend/tests/test_workbench_t_cycle_evidence.py::test_unclosed_t_at_day_end_only_exposes_unverified_ordinary_effect` 和 `test_closed_or_conflicting_t_never_claims_end_of_day_ordinary_conversion`：覆盖收盘前后、隔日、正反 T、部分闭环、已闭环与冲突反例，断言不启用交易。
 - **验收结论：部分实现，M8 Gate 仍 FAIL。** 这只是已记录成交的日终复核线索，未证明券商成交全量、真实 T+1 可卖数量、自动持仓桶转移、主计划风险重审、持久化 BROKEN 状态及手机端展示；不得以此作为已完成转仓或交易授权。
+
+
+### 2026-10-28 增量证据：已记录 T 周期中文页面与前端来源门禁
+
+- `frontend/src/App.tsx`：在「T仓」页面新增正式数据库中**已记录成交的逐周期只读复核**。优先展示证据冲突，其次展示收盘未闭环及普通加减仓待核验提示，再展示未闭环与已记录买卖配对；明确交易日、周期键、第一/第二腿数量、剩余数量、成交来源条数及时间。仅称「已记录买卖配对（未对账）」，绝不称券商已完成核验。
+- `frontend/src/overviewContract.ts`：严格校验周期状态、正/反 T、市场日期、数量与剩余量的**精确十进制守恒**、收盘待重审分类、成交来源、来源时间；强制 `broker_reconciled=false` 和 `trade_execution_enabled=false`。隔离 CSV 预览不得携带正式数据库 T 周期证据。
+- `frontend/tests/tCycleEvidenceContract.test.mjs`：新增正常闭环、日终未闭环、数量/分类冲突、伪造券商已对账或交易许可、非法时间及 CSV 跨来源混入的协议反例。
+- **CI 证据（代码 HEAD `df2f1c3d`）**：推送 [#40560916516](https://github.com/dgcary/structure-swing-workbench/actions/runs/40560916516) 和 PR [#40560921864](https://github.com/dgcary/structure-swing-workbench/actions/runs/40560921864) 均 completed/success；后端 453 passed、Ruff PASS、PostgreSQL 16/Alembic PASS，前端 TypeScript/Vite 构建及 94 项测试通过。文档提交后的最新 HEAD 须另行核验。
+- **边界**：仅使已有的后端 T 成交证据可见并防止前端将其误当成交易许可。**首页当日 T 总次数与未完成 T 总数仍为 `unavailable`**，没有券商全量成交水位、日终持久化转仓、日内换仓、T+1 可卖数量、含 T 仓独立风险、真实 CSV→PG 对账或手机 Safari/TLS 实机证据。M8 Gate 仍 FAIL，PR #19 保持 Draft，不合并、不部署、不启动 M9。

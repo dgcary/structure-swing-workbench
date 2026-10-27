@@ -187,6 +187,63 @@ function validAuditRow(value: unknown): boolean {
     typeof value.warning === "string" && value.warning.trim().length > 0;
 }
 
+/** Recorded T legs are partial evidence, never a broker-complete daily count. */
+function validRecordedTCycle(value: unknown): boolean {
+  if (!record(value) || typeof value.symbol !== "string" ||
+      !A_SHARE_SYMBOL.test(value.symbol) ||
+      !optionalText(value.cycle_key) || !optionalText(value.plan_version_id) ||
+      !validCalendarDate(value.market_date) ||
+      !["open", "closed", "conflict"].includes(String(value.state)) ||
+      !(value.direction === null || value.direction === "positive" ||
+        value.direction === "reverse") ||
+      !optionalText(value.opening_quantity) ||
+      !optionalText(value.closing_quantity) ||
+      !optionalText(value.residual_quantity) ||
+      !optionalText(value.ordinary_effect) ||
+      !optionalText(value.as_of) ||
+      typeof value.end_of_day_unclosed !== "boolean" ||
+      typeof value.requires_reaudit !== "boolean" ||
+      value.broker_reconciled !== false ||
+      value.trade_execution_enabled !== false ||
+      typeof value.warning !== "string" || !value.warning.trim() ||
+      !Array.isArray(value.sources) || value.sources.length === 0 ||
+      !value.sources.every((source: unknown) =>
+        typeof source === "string" && source.startsWith("成交记录/") &&
+        source.length > "成交记录/".length)) return false;
+  if (value.as_of !== null && !validObservedAt(value.as_of)) return false;
+  if (value.state === "conflict") {
+    if (value.opening_quantity !== null || value.closing_quantity !== null ||
+        value.end_of_day_unclosed || value.requires_reaudit) return false;
+  } else {
+    if (value.direction === null || value.as_of === null ||
+        !decimalText(value.opening_quantity) ||
+        !decimalText(value.closing_quantity)) return false;
+    const opening = decimalParts(value.opening_quantity);
+    const closing = decimalParts(value.closing_quantity);
+    const minPower = Math.min(opening.power, closing.power);
+    const openUnits = opening.digits * 10n ** BigInt(opening.power - minPower);
+    const closeUnits = closing.digits * 10n ** BigInt(closing.power - minPower);
+    if (openUnits <= 0n || closeUnits < 0n ||
+        (value.state === "closed" && closeUnits !== openUnits) ||
+        (value.state === "open" && closeUnits >= openUnits)) return false;
+    if (value.end_of_day_unclosed) {
+      if (value.state !== "open" || !value.requires_reaudit ||
+          !decimalText(value.residual_quantity) ||
+          value.ordinary_effect !== (value.direction === "positive"
+            ? "普通减仓待核验" : "普通加仓待核验")) return false;
+      const residual = decimalParts(value.residual_quantity);
+      const p = Math.min(opening.power, closing.power, residual.power);
+      if (residual.digits * 10n ** BigInt(residual.power - p) !==
+          openUnits * 10n ** BigInt(minPower - p) -
+          closeUnits * 10n ** BigInt(minPower - p)) return false;
+    }
+  }
+  if (!value.end_of_day_unclosed &&
+      (value.requires_reaudit || value.residual_quantity !== null ||
+       value.ordinary_effect !== null)) return false;
+  return true;
+}
+
 function validPersistedSections(
   data: Record<string, unknown>, mode: "read_only" | "isolated_csv_preview",
 ): boolean {
@@ -226,7 +283,13 @@ export function assertReadOnlyOverview(
          data.holdings.every(validHolding) &&
          new Set(data.holdings.map((holding: Record<string, unknown>) =>
            String(holding.symbol).trim())).size === data.holdings.length)) ||
-      !validPersistedSections(data, mode)) fail();
+      !validPersistedSections(data, mode) ||
+      (data.t_cycle_evidence !== undefined &&
+        !(mode === "isolated_csv_preview"
+          ? data.t_cycle_evidence === null
+          : data.t_cycle_evidence === null ||
+            (Array.isArray(data.t_cycle_evidence) &&
+             data.t_cycle_evidence.every(validRecordedTCycle))))) fail();
 
   if (mode === "isolated_csv_preview" &&
       (data.persisted !== false || data.realtime !== false ||

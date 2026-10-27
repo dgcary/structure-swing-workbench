@@ -27,6 +27,10 @@ def _observed_at(value: datetime | None) -> str | None:
     """Do not invent a timezone for a database value without one."""
     if value is None or value.tzinfo is None or value.utcoffset() is None:
         return None
+    # Future-dated database rows are not observed facts. Allow only small
+    # clock skew; never let an incorrect timestamp authenticate account data.
+    if value.astimezone(timezone.utc) > datetime.now(timezone.utc) + timedelta(minutes=5):
+        return None
     return value.isoformat()
 
 

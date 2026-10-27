@@ -115,3 +115,11 @@
 - `backend/app/workbench/persisted.py` → `overview.py`：在只读 API 附加 `t_cycle_evidence`。所有条目 `broker_reconciled=false`、`trade_execution_enabled=false`。**首页 `t_cycles_today` 与 `open_t_cycles` 仍为 unavailable**：M1 当前没有券商成交全量水位、清算确认或每日对账完成标记，不能以数据库部分记录声称完整日内次数，也不能以未录入视为零。
 - 自动化证据：`backend/tests/test_workbench_t_cycle_evidence.py` 覆盖拆单、部分闭环、跨日、来源冲突、时间逆序和未来记录；`backend/tests/test_workbench_postgres_integration.py::test_postgres_recorded_t_cycle_fills_are_dated_but_not_broker_complete` 在迁移后 PostgreSQL 16 中核对实际成交记录往返、重复超额冲突与首页计数保持 unavailable。测试均使用合成数据和事务回滚，不代表真实券商账户已对账。
 - **剩余 FAIL**：缺少完整券商成交来源/每日对账水位、日终未闭环正式转仓事实、日内换仓、T+1 可卖数量、含 T 仓风险、脱敏真实格式 CSV→PG 对账及移动 Safari/可信 TLS 实机证据；仍需独立审核。CI 以本轮最新 HEAD 实际运行结果为准。
+
+
+### 2026-10-27 增量证据：跨计划版本 T 周期键隔离与缺键防碰撞
+
+- `backend/app/workbench/t_cycle_evidence.py`：`t_cycle_key` 是人工标识，不保证全局唯一。现在正式成交按**证券 + 计划版本 ID + T 周期键**隔离；两个不同计划版本即使同证券、同键，也不得把一边的开仓成交与另一边的平仓成交拼成虚假的完整 T。返回 `plan_version_id` 供来源追溯。
+- 对未填写周期键的成交使用结构化分组键，而不是拼接 `unkeyed:<成交ID>` 的伪键，避免真实用户周期键与内部标记意外重合；缺键仍视为冲突，不认证闭环。
+- `backend/tests/test_workbench_t_cycle_evidence.py` 新增跨计划版本和伪键碰撞反例。**边界**：这仅改进已记录成交的逐周期证据，不证明券商全量成交、T 日终转仓、T+1 可卖量或首页总次数。未核实指标仍为 `unavailable`；M8 Gate 仍 FAIL。
+- CI 结果以本次最新 HEAD 的 GitHub Actions 为准，不以此前绿色提交替代。

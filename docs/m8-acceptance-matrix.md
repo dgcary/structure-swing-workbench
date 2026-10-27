@@ -206,3 +206,10 @@
 - `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：自报完整日水位除达到该日收盘时刻、真实已发生外，还必须按上海市场时区落在声明的 `market_date` 当天。若使用次日或更晚水位，即使 CSV 成交编号完全匹配，仍返回 `insufficient`，不能标记 `matched_unverified`。
 - `backend/tests/test_workbench_account_snapshot_preview.py`：覆盖跨日水位的 +08:00 / UTC 等价时间表示；另验证历史 CSV 可于后续日期导出，只要覆盖水位仍属于声明的交易日，最多返回 `matched_unverified`。断言未认证券商、未授权交易，首页当日 T 次数保持不可用。
 - **边界**：本项仅修复用户自报水位的日期归属，不代表交易所日历或券商全量成交验证；`broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false` 不变。独立券商水位、正式 BROKEN 转仓、T+1、CORE/T 风险、真实 CSV→PostgreSQL 与 Safari/TLS 实机仍缺；M8 Gate FAIL，PR #19 保持 Draft。最新 CI 需按最终 HEAD 复核。
+
+
+### 2026-10-28 增量证据：周末自报全日成交不得冒充 A 股交易日
+
+- `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：上海市场日期落在周六或周日时，即使上传 CSV 与用户自报编号完全一致、覆盖水位晚于 15:00，也只能标为 `insufficient`，不得输出 `matched_unverified`。若存在缺失或额外编号，仍优先返回 `mismatch`，不能因为周末而掩盖数据矛盾。提示文案明确“日期可能非交易日”。
+- `backend/tests/test_workbench_account_snapshot_preview.py::test_weekend_self_report_cannot_claim_a_complete_a_share_market_day`、`test_weekend_manifest_discrepancy_remains_a_mismatch`：周日匹配清单的不足证据、周日清单缺项的冲突优先反例；所有响应仍不得标记券商认证或交易许可。
+- **边界**：仅排除确定无常规 A 股交易的周末，不代表已经接入交易所完整节假日/临时休市日历；工作日自报一致仍不是券商独立完整性证明。缺少券商身份、逐日可信水位、真实 CSV→PG、正式 BROKEN 转仓、日内换仓、T+1、CORE/T 独立风险和手机 Safari/可信 TLS 实机证据；M8 Gate 仍 FAIL，PR 保持 Draft。CI 以本次 HEAD 为准。

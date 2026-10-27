@@ -194,7 +194,7 @@ def test_postgres_explicit_manual_action_date_roundtrip_never_enables_trading():
                     changed = update_action_planned_date(
                         session, action_id,
                         ActionDateRequest(
-                            planned_for_date=market_today + timedelta(days=1),
+                            planned_for_date=(market_today + timedelta(days=1)).isoformat(),
                             expected_as_of=stored.updated_at,
                         ),
                     )
@@ -206,7 +206,7 @@ def test_postgres_explicit_manual_action_date_roundtrip_never_enables_trading():
                     update_action_planned_date(
                         session, action_id,
                         ActionDateRequest(
-                            planned_for_date=market_today,
+                            planned_for_date=market_today.isoformat(),
                             expected_as_of=refreshed.updated_at,
                         ),
                     )

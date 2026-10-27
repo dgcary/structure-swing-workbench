@@ -168,3 +168,11 @@
 - `frontend/tests/tCycleEvidenceContract.test.mjs`：新增正常闭环、日终未闭环、数量/分类冲突、伪造券商已对账或交易许可、非法时间及 CSV 跨来源混入的协议反例。
 - **CI 证据（代码 HEAD `df2f1c3d`）**：推送 [#40560916516](https://github.com/dgcary/structure-swing-workbench/actions/runs/40560916516) 和 PR [#40560921864](https://github.com/dgcary/structure-swing-workbench/actions/runs/40560921864) 均 completed/success；后端 453 passed、Ruff PASS、PostgreSQL 16/Alembic PASS，前端 TypeScript/Vite 构建及 94 项测试通过。文档提交后的最新 HEAD 须另行核验。
 - **边界**：仅使已有的后端 T 成交证据可见并防止前端将其误当成交易许可。**首页当日 T 总次数与未完成 T 总数仍为 `unavailable`**，没有券商全量成交水位、日终持久化转仓、日内换仓、T+1 可卖数量、含 T 仓独立风险、真实 CSV→PG 对账或手机 Safari/TLS 实机证据。M8 Gate 仍 FAIL，PR #19 保持 Draft，不合并、不部署、不启动 M9。
+
+
+### 2026-10-28 增量证据：已记录单票单日 T 次数超限的下界告警
+
+- `backend/app/workbench/t_cycle_evidence.py`：对指定交易日、同一证券的**不同周期键/计划版本**，仅累计内部数量、方向、时间、成交编号均自洽的 `closed` 配对周期；若已记录的独立闭环至少 **3 个**，则该证券当日所有已记录周期输出 `recorded_daily_limit_alert=true` 与中文「疑似超限，必须人工复核」警示。拆单仍属于同一个周期，其他证券不合并计算；冲突或未闭环周期不被当成完整 T。
+- **非认证语义**：少于 3 个时该字段为 `null`（未证明超限，**不是**合规通过）；即使超过 2 个也仅表示已记录配对的下界告警，不能证明券商全量成交已对账。首页 `t_cycles_today`、`open_t_cycles` 保持 `unavailable`，`broker_reconciled=false`、`trade_execution_enabled=false`；不写入交易状态、不修改主策略、不生成下单许可。
+- `backend/tests/test_workbench_t_cycle_evidence.py`：3 个配对触发告警、2 个配对加冲突周期不误判、按证券隔离以及跨计划版本累计；`frontend/src/overviewContract.ts` 强制逐行标记与同证券/日期已记录闭环下界一致，拒绝伪造已合规/遗漏告警；`frontend/tests/tCycleEvidenceContract.test.mjs` 验证 3 个配对、缺失标记、伪造标记及跨证券反例。T 仓页面突出显示疑似超限。
+- **Gate：增量待独立审核，M8 整体 FAIL。** 仍缺券商全量成交水位/逐日完整性、可信日终 BROKEN 转普通加减仓、日内换仓、T+1 可卖数量、CORE/T 独立成本与风险、脱敏真实 CSV→隔离 PostgreSQL 对账及移动 Safari/可信 TLS 实机验收。CI 以本轮最终 HEAD 的 Actions 结果为准，不把合成测试冒充真实账户证据。

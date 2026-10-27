@@ -74,3 +74,11 @@
 - `backend/app/workbench/persisted.py`：仅当动作的来源更新时间具备可信时区、未超出未来 5 分钟容差，并且用户日期恰好是上海市场当天，才标记 `date_status=today`。其他已记录未完成动作仍只读展示，日期不可信时 `planned_for_date=null`、`date_status=unverified`。
 - `frontend/src/App.tsx` 和 `overviewContract.ts`：今日人工计划与其他未完成动作分组；拒绝缺日期、非法日期或缺可信时间却声称“今日”的协议数据。无今日计划不等于今日无事项；所有动作仍 `executable=false`。
 - 本项仅完善**日期字段、只读来源与页面语义**，尚未提供正式动作的人工日期录入流程、实时审计或真实账户对账；不得把这一增量判定为完整“今日待执行动作”验收通过。CI 结果以最新 HEAD 为准。
+
+### 2026-10-27 增量证据：正式动作人工日期写入（安全默认关闭）
+
+- `backend/app/workbench/action_date.py`、`backend/app/main.py`：仅对**已有正式有效计划**下、状态为「计划中」的动作开放人工日期更改或清除；校验原动作来源时间、计划有效性、日期格式与 `expected_as_of` 乐观并发版本，并在 PostgreSQL 行锁内修改。已审计、已执行、过期计划、无可信时区、未来时间、过时版本均拒绝；不修改动作方向、数量、价格或审计，也不生成订单。
+- 写入口默认关闭。必须同时设置 `WORKBENCH_PERSISTED_READ_ENABLED=true`、`WORKBENCH_ACTION_DATE_WRITE_ENABLED=true`，并配置**至少 32 字符**随机 `WORKBENCH_ACTION_DATE_WRITE_TOKEN`；后端校验 Bearer 令牌，未配置或令牌不足长度则拒绝。仅在 HTTPS / 可信本地环境中启用，禁止在仓库提交令牌；前端只在表单内短暂持有，不写入 localStorage。
+- `frontend/src/App.tsx`：中文日期表单位于已记录的「计划中」正式动作下，用户手工输入日期或清空；提交后重新读取只读总览，验证协议并更新今日/非今日分组。所有显示仍为 `executable=false`，不提供下单入口。
+- `backend/tests/test_workbench_action_date.py`：默认关闭、短令牌、错误令牌、严格日期格式、时间戳并发冲突、已审计动作/过期计划等反例；`test_workbench_postgres_integration.py`：迁移后隔离 PostgreSQL 内经正式更新服务写入日期，再读取并验证分组，测试事务回滚。
+- **验收边界**：此功能提供正式动作日期录入/保存/刷新路径，但真实用户身份认证、券商来源对账、正式动作创建/审计全流程和手机实机操作尚未验收。管理员令牌是有限的 opt-in 控制，不等于多用户授权系统；不能将此项判为整个 M8 Gate 通过。CI 以本次最新 HEAD 的实际运行结果为准。

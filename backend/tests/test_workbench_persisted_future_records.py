@@ -35,7 +35,6 @@ class _ReadSession:
             summary="仅用于测试的历史审计", engine_version="m2",
             created_at=audit_time,
         )
-        self.audit_reads = 0
 
     def scalar(self, _statement):
         return None
@@ -48,8 +47,9 @@ class _ReadSession:
         if entity is TradeAction:
             return iter([self.action])
         if entity is AuditResult:
-            self.audit_reads += 1
-            return iter([self.audit] if self.audit_reads == 1 else [])
+            # The fixture represents an action-linked audit only, not a
+            # version-level audit; keep those two queries distinct.
+            return iter([self.audit] if "audit_results.action_id" in str(statement) else [])
         return iter([])
 
 

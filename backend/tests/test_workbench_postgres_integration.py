@@ -9,11 +9,13 @@ from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     AccountSnapshot,
+    ExecutionFill,
     PositionBucketSnapshot,
     PositionSnapshot,
     TradeAction,
@@ -232,6 +234,29 @@ def test_postgres_explicit_manual_action_date_roundtrip_never_enables_trading():
                     unknown = build_overview(persisted=project_persisted(session))
                     assert unknown["pending_actions"][0]["date_status"] == "unverified"
                     assert unknown["pending_actions"][0]["planned_for_date"] is None
+
+                    # A recorded fill must make the intended action date immutable,
+                    # even if an inconsistent legacy row still says PLANNED.
+                    session.add(ExecutionFill(
+                        action_id=action_id, side=OrderSide.BUY,
+                        quantity=Decimal(10), price=Decimal(10),
+                        fee=Decimal(0), executed_at=now - timedelta(minutes=5),
+                        source="manual",
+                    ))
+                    session.flush()
+                    session.expire_all()
+                    recorded = session.get(TradeAction, action_id)
+                    with pytest.raises(HTTPException) as rejected:
+                        update_action_planned_date(
+                            session, action_id,
+                            ActionDateRequest(
+                                planned_for_date=market_today.isoformat(),
+                                expected_as_of=recorded.updated_at,
+                            ),
+                        )
+                    assert rejected.value.status_code == 409
+                    session.expire_all()
+                    assert session.get(TradeAction, action_id).planned_for_date is None
             finally:
                 transaction.rollback()
     finally:

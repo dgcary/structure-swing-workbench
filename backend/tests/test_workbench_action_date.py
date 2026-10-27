@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app import main as api
 from app.core.config import Settings
-from app.db.models import TradePlan, TradePlanVersion
+from app.db.models import AuditResult, TradePlan, TradePlanVersion
 from app.domain.enums import ActionStatus, PlanVersionState
 from app.workbench.action_date import ActionDateRequest, update_action_planned_date
 
@@ -30,8 +30,11 @@ class _Session:
         )
         self.plan = SimpleNamespace(is_active=True)
         self.flushed = False
+        self.audit_present = False
 
-    def scalar(self, _statement):
+    def scalar(self, statement):
+        if statement.column_descriptions[0]["entity"] is AuditResult:
+            return self.audit_present
         return self.action
 
     def get(self, model, _identifier):
@@ -69,7 +72,7 @@ def test_explicit_date_and_clear_never_authorize_execution():
 
 
 @pytest.mark.parametrize("problem", [
-    "stale", "audited", "expired", "future_version", "naive_action", "inactive",
+    "stale", "audited", "has_audit", "expired", "future_version", "naive_action", "inactive",
 ])
 def test_conflict_or_untrusted_record_fails_closed(problem):
     session = _Session()
@@ -78,6 +81,8 @@ def test_conflict_or_untrusted_record_fails_closed(problem):
         payload.expected_as_of -= timedelta(minutes=1)
     elif problem == "audited":
         session.action.status = ActionStatus.AUDITED
+    elif problem == "has_audit":
+        session.audit_present = True
     elif problem == "expired":
         session.version.valid_until = (
             datetime.now(timezone(timedelta(hours=8))).date() - timedelta(days=1)

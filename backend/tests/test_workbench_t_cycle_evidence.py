@@ -107,3 +107,21 @@ def test_empty_or_other_day_records_do_not_fabricate_zero_today():
         _fill("old", OrderSide.BUY, "10", 1, at=NOW - timedelta(days=2)),
     )
     assert recorded_t_cycles([other_day], DAY, now=NOW) == []
+
+
+def test_early_close_cannot_be_covered_by_later_opening_fills():
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("open-10", OrderSide.SELL, "10", 1)),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("close-100", OrderSide.BUY, "100", 2)),
+        _record(ActionType.POSITIVE_T_SELL, _fill("late-open-90", OrderSide.SELL, "90", 3)),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "conflict"
+
+
+def test_simultaneous_open_close_without_ordering_evidence_fails_closed():
+    rows = [
+        _record(ActionType.REVERSE_T_BUY, _fill("buy", OrderSide.BUY, "10", 1)),
+        _record(ActionType.REVERSE_T_SELL, _fill("sell", OrderSide.SELL, "10", 1)),
+    ]
+    assert recorded_t_cycles(rows, DAY, now=NOW)[0]["state"] == "conflict"

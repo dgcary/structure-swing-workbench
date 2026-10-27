@@ -368,3 +368,72 @@ def test_weekend_manifest_discrepancy_remains_a_mismatch():
     assert coverage["unexpected_fill_count"] == 1
     assert coverage["broker_reconciled"] is False
     assert response.json()["trade_execution_enabled"] is False
+
+
+def test_exchange_holiday_manifest_is_not_full_day_even_when_ids_match():
+    # 2026-10-01 is a mainland exchange holiday, despite being Thursday.
+    holiday_csv = FILL_CSV.replace("2026-10-16", "2026-10-01")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": holiday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-01",
+            complete_through="2026-10-01T15:30:00+08:00",
+            exported_at="2026-10-01T16:00:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["market_calendar_status"] == "closed"
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_exchange_holiday_mismatch_has_priority_over_calendar_gate():
+    holiday_csv = FILL_CSV.replace("2026-10-16", "2026-10-01")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": holiday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-01",
+            complete_through="2026-10-01T15:30:00+08:00",
+            exported_at="2026-10-01T16:00:00+08:00",
+            expected_fill_ids=["A01"],
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["market_calendar_status"] == "closed"
+    assert coverage["unexpected_fill_count"] == 1
+    assert coverage["broker_reconciled"] is False
+
+
+def test_missing_or_out_of_range_exchange_calendar_fails_closed(monkeypatch):
+    from app.workbench import account_snapshot_preview as module
+
+    monkeypatch.setattr(module, "_market_session_status", lambda _date: "unknown")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["market_calendar_status"] == "unknown"
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_exchange_calendar_session_still_never_authenticates_broker():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["market_calendar_status"] == "session"
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False

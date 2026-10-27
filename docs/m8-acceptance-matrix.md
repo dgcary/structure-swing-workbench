@@ -199,3 +199,10 @@
 - `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：即使导出时间和覆盖水位处于允许的 5 分钟设备时钟偏差内，只要**实际当前时间尚未到达当日 15:00（上海时间）**，或导出/覆盖时间尚未真实发生，不能给出 `matched_unverified` 的完整交易日匹配标签；降为 `insufficient`。此限制只针对完整日声明，不改变既有未来时间过远时的 HTTP 422 拒绝。
 - `backend/tests/test_workbench_account_snapshot_preview.py`：新增实际 14:58 与声明 15:00/15:01、实际 15:02 后可显示自报一致，以及实际 15:02 但导出 15:04 尚未发生的反例。状态仍不得变为 `broker_reconciled=true`，也不得授权交易。
 - **验收边界**：自报编号匹配并不代表券商全量成交已证明，且没有真实账户/券商来源联调。仍需独立券商完整水位、T+1、日终正式转仓与重审、换仓、含 T 仓风险和移动端 Safari/TLS 实机。M8 Gate 仍 FAIL；PR #19 保持 Draft，禁止合并、部署或下发 M9。CI 必须核对本次最终 HEAD。
+
+
+### 2026-10-28 增量证据：跨交易日自报水位不得替代当日水位
+
+- `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：自报完整日水位除达到该日收盘时刻、真实已发生外，还必须按上海市场时区落在声明的 `market_date` 当天。若使用次日或更晚水位，即使 CSV 成交编号完全匹配，仍返回 `insufficient`，不能标记 `matched_unverified`。
+- `backend/tests/test_workbench_account_snapshot_preview.py`：覆盖跨日水位的 +08:00 / UTC 等价时间表示；另验证历史 CSV 可于后续日期导出，只要覆盖水位仍属于声明的交易日，最多返回 `matched_unverified`。断言未认证券商、未授权交易，首页当日 T 次数保持不可用。
+- **边界**：本项仅修复用户自报水位的日期归属，不代表交易所日历或券商全量成交验证；`broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false` 不变。独立券商水位、正式 BROKEN 转仓、T+1、CORE/T 风险、真实 CSV→PostgreSQL 与 Safari/TLS 实机仍缺；M8 Gate FAIL，PR #19 保持 Draft。最新 CI 需按最终 HEAD 复核。

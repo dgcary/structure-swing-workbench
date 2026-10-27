@@ -123,3 +123,10 @@
 - 对未填写周期键的成交使用结构化分组键，而不是拼接 `unkeyed:<成交ID>` 的伪键，避免真实用户周期键与内部标记意外重合；缺键仍视为冲突，不认证闭环。
 - `backend/tests/test_workbench_t_cycle_evidence.py` 新增跨计划版本和伪键碰撞反例。**边界**：这仅改进已记录成交的逐周期证据，不证明券商全量成交、T 日终转仓、T+1 可卖量或首页总次数。未核实指标仍为 `unavailable`；M8 Gate 仍 FAIL。
 - CI 结果以本次最新 HEAD 的 GitHub Actions 为准，不以此前绿色提交替代。
+
+
+### 2026-10-27 增量证据：异常成交数量的只读投影安全防护
+
+- `backend/app/workbench/t_cycle_evidence.py`：PostgreSQL NUMERIC 可能包含 `NaN` 等异常值。原实现虽然标记数量非法，仍将其参与 Decimal 累加和比较，可能触发 `InvalidOperation` 并导致整个总览接口失败。现在只允许**有限且大于零**的 Decimal 数量进入聚合与时间序列；其余数量一律标记 `conflict`，不认证 T 闭环。
+- `backend/tests/test_workbench_t_cycle_evidence.py`：覆盖 NaN、正负无穷、负数、零数量，以及缺失成交来源的异常输入；验证不抛异常、不提供虚假数量和交易许可。
+- 此修复属于已有 T 成交证据投影的可靠性修复，**不补齐**券商成交全量水位、日终转仓、日内换仓、T+1、含 T 仓风险或真实账户与移动端验收。M8 Gate 仍 FAIL，PR 保持 Draft；CI 须以最新 HEAD 实际结果为准。

@@ -17,11 +17,13 @@ AT = datetime(2026, 10, 27, 9, 30, tzinfo=UTC)
 class _ReadOnlySession:
     """Return explicit persisted rows; no database dialect may fabricate a timezone."""
 
-    def __init__(self, snapshot, position, buckets, version, plan):
+    def __init__(self, snapshot, position, buckets, version, plan, zero_conflict=False):
         self.snapshot = snapshot
         self.versions = [(version, plan)] if version is not None else []
         self.position = position
         self.buckets = buckets
+        self.zero_conflict = zero_conflict
+        self.bucket_reads = 0
 
     def scalar(self, _statement):
         return self.snapshot
@@ -29,8 +31,21 @@ class _ReadOnlySession:
     def scalars(self, statement):
         entity = statement.column_descriptions[0]["entity"]
         if entity is PositionSnapshot:
+            if self.zero_conflict:
+                zero_position = SimpleNamespace(
+                    id="position-zero", instrument_code="600001",
+                    total_quantity=Decimal(0), market_value=Decimal(0),
+                    broker_cost_price=Decimal(0),
+                )
+                return iter([self.position, zero_position])
             return iter([self.position])
         if entity is PositionBucketSnapshot:
+            self.bucket_reads += 1
+            if self.zero_conflict and self.bucket_reads == 2:
+                return iter([SimpleNamespace(
+                    bucket_type=PositionBucketType.CORE,
+                    quantity=Decimal(1), strategy_cost_price=Decimal(10),
+                )])
             return iter(self.buckets)
         return iter([])
 
@@ -41,7 +56,7 @@ class _ReadOnlySession:
 def _projection(*, core="100", t="0", cost="10", stop="9",
                 quantity="100", equity="200000",
                 snapshot_at=AT, version_at=AT - timedelta(hours=1),
-                with_plan=True, buckets_complete=True):
+                with_plan=True, buckets_complete=True, zero_conflict=False):
     snapshot = SimpleNamespace(
         id="snapshot-1", captured_at=snapshot_at, source="manual",
         total_equity=Decimal(equity), available_cash=Decimal(100000),
@@ -73,7 +88,8 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
         instrument_code="600000", instrument_name="人工指定标的",
     )
     return build_overview(persisted=project_persisted(
-        _ReadOnlySession(snapshot, position, buckets, version, plan)
+        _ReadOnlySession(snapshot, position, buckets, version, plan,
+                         zero_conflict=zero_conflict)
     ))
 
 
@@ -136,3 +152,13 @@ def test_invalid_numeric_core_risk_fails_closed():
         (Decimal(100), Decimal(10), Decimal(10)),
     ]:
         assert _core_only_risk(quantity, cost, stop) is None
+
+
+def test_zero_quantity_with_conflicting_buckets_blocks_total_risk():
+    # A zero-share position can still carry corrupt allocations; a partial
+    # inventory must never produce an apparently complete account-risk figure.
+    overview = _projection(zero_conflict=True)
+    risk = _metric(overview, "account_risk")
+    assert risk["status"] == "unavailable"
+    assert risk["value"] is None
+    assert overview["trade_execution_enabled"] is False

@@ -166,7 +166,27 @@ def recorded_t_cycles(
             if fill.executed_at is not None and fill.executed_at.tzinfo is not None
             and fill.executed_at.utcoffset() is not None
         ]
+        # End-of-day classification is a *review hint*, not a persisted
+        # BROKEN_T_CYCLE or a broker-reconciled position change. The residual
+        # first-leg quantity must be checked against the full broker ledger
+        # and the main plan before it can become an ordinary add/reduction.
+        market_now = current.astimezone(MARKET_TZ)
+        session_ended = (
+            market_day < market_now.date()
+            or (market_day == market_now.date()
+                and (market_now.hour, market_now.minute) >= (15, 0))
+        )
+        unclosed_at_day_end = state == "open" and session_ended
+        residual = opening - closing if unclosed_at_day_end else None
+        ordinary_effect = (
+            "普通减仓待核验" if unclosed_at_day_end and "positive" in directions else
+            "普通加仓待核验" if unclosed_at_day_end and "reverse" in directions else None
+        )
         result.append({
+            "end_of_day_unclosed": unclosed_at_day_end,
+            "residual_quantity": str(residual) if residual is not None else None,
+            "ordinary_effect": ordinary_effect,
+            "requires_reaudit": unclosed_at_day_end,
             "symbol": symbol,
             "cycle_key": key,
             "plan_version_id": plan_version_id,
@@ -182,6 +202,9 @@ def recorded_t_cycles(
             "warning": (
                 "成交方向、价格、数量、日期、来源或重复成交编号冲突；不可用于T次数核验。"
                 if conflict else
+                "已过当日收盘且记录中仍有未闭环T；剩余第一腿仅提示待核验的普通加减仓，"
+                "必须核对券商全量成交、主计划与风险后重新审计；未自动转仓或授权交易。"
+                if unclosed_at_day_end else
                 "仅为数据库中已记录成交的单周期证据；未验证券商成交完整性、"
                 "日内总T次数及T+1可卖数量，不授权交易。"
             ),

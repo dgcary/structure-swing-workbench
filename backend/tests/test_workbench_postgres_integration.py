@@ -41,8 +41,8 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                     plan_at = now - timedelta(hours=2)
                     snapshot = AccountSnapshot(
                         captured_at=captured_at,
-                        total_equity=Decimal("200000"),
-                        available_cash=Decimal("100000"),
+                        total_equity=Decimal(200000),
+                        available_cash=Decimal(100000),
                         source="manual",
                     )
                     session.add(snapshot)
@@ -51,9 +51,9 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                         account_snapshot_id=snapshot.id,
                         instrument_code="600000",
                         instrument_name="测试标的",
-                        total_quantity=Decimal("100"),
-                        market_value=Decimal("1200"),
-                        broker_cost_price=Decimal("10"),
+                        total_quantity=Decimal(100),
+                        market_value=Decimal(1200),
+                        broker_cost_price=Decimal(10),
                     )
                     session.add(position)
                     session.flush()
@@ -61,13 +61,13 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                         PositionBucketSnapshot(
                             position_snapshot_id=position.id,
                             bucket_type=PositionBucketType.CORE,
-                            quantity=Decimal("100"),
-                            strategy_cost_price=Decimal("10"),
+                            quantity=Decimal(100),
+                            strategy_cost_price=Decimal(10),
                         ),
                         PositionBucketSnapshot(
                             position_snapshot_id=position.id,
                             bucket_type=PositionBucketType.T,
-                            quantity=Decimal("0"),
+                            quantity=Decimal(0),
                         ),
                     ])
                     plan = TradePlan(
@@ -83,8 +83,8 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                         version_number=1,
                         state=PlanVersionState.EFFECTIVE,
                         is_effective=True,
-                        structure_invalidation_price=Decimal("9"),
-                        first_target_price=Decimal("12"),
+                        structure_invalidation_price=Decimal(9),
+                        first_target_price=Decimal(12),
                         created_at=plan_at,
                         updated_at=plan_at,
                     )
@@ -109,7 +109,7 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                     assert metrics["account_risk"]["status"] == "available"
                     assert overview["holdings"][0]["core_quantity"] == "100.0000"
                     assert overview["holdings"][0]["t_quantity"] == "0.0000"
-                    assert Decimal(overview["effective_plans"][0]["current_risk"]) == Decimal("100")
+                    assert Decimal(overview["effective_plans"][0]["current_risk"]) == Decimal(100)
                     assert overview["trade_execution_enabled"] is False
 
                     # A future timestamp cannot certify a real account fact.

@@ -125,3 +125,32 @@ def test_simultaneous_open_close_without_ordering_evidence_fails_closed():
         _record(ActionType.REVERSE_T_SELL, _fill("sell", OrderSide.SELL, "10", 1)),
     ]
     assert recorded_t_cycles(rows, DAY, now=NOW)[0]["state"] == "conflict"
+
+
+def test_same_symbol_and_key_across_plan_versions_cannot_close_each_other():
+    """Independent plan versions must not manufacture a completed T cycle."""
+    opening = _fill("open-a", OrderSide.SELL, "100", 1)
+    closing = _fill("close-b", OrderSide.BUY, "100", 2)
+    opening.action = SimpleNamespace(plan_version_id="version-a")
+    closing.action = SimpleNamespace(plan_version_id="version-b")
+    cycles = recorded_t_cycles([
+        _record(ActionType.POSITIVE_T_SELL, opening, key="reused-key"),
+        _record(ActionType.POSITIVE_T_BUYBACK, closing, key="reused-key"),
+    ], DAY, now=NOW)
+    assert len(cycles) == 2
+    assert {row["plan_version_id"] for row in cycles} == {"version-a", "version-b"}
+    assert {row["state"] for row in cycles} == {"open", "conflict"}
+    assert all(row["state"] != "closed" for row in cycles)
+
+
+def test_unkeyed_fill_does_not_collide_with_user_key_matching_old_prefix():
+    """A legitimate key starting with 'unkeyed:' must not absorb a missing key."""
+    keyed = _fill("sell", OrderSide.SELL, "10", 1)
+    unkeyed = _fill("42", OrderSide.BUY, "10", 2)
+    cycles = recorded_t_cycles([
+        _record(ActionType.POSITIVE_T_SELL, keyed, key="unkeyed:42"),
+        _record(ActionType.POSITIVE_T_BUYBACK, unkeyed, key=None),
+    ], DAY, now=NOW)
+    assert len(cycles) == 2
+    assert {row["cycle_key"] for row in cycles} == {"unkeyed:42", None}
+    assert all(row["state"] != "closed" for row in cycles)

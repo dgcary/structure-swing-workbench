@@ -16,26 +16,43 @@ FIELDS = {
 }
 
 
-def build_overview(ledger: AccountLedger | None = None) -> dict[str, object]:
+def build_overview(
+    ledger: AccountLedger | None = None, *, persisted: dict[str, object] | None = None
+) -> dict[str, object]:
+    """Only publish metrics that carry both an explicit source and a dated observation."""
     metrics = []
+    persisted_metrics = persisted.get("metrics", {}) if persisted is not None else {}
     for key, (label, ledger_key, unit) in FIELDS.items():
         fact = ledger.facts.get(ledger_key) if ledger and ledger_key else None
+        sourced = persisted_metrics.get(key) if isinstance(persisted_metrics, dict) else None
+        value = str(fact.value) if fact else sourced.get("value") if sourced else None
+        source = (
+            f"{fact.source.value}/{fact.source_id}" if fact else
+            sourced.get("source") if sourced else None
+        )
+        at = (
+            fact.observed_at.isoformat() if fact else
+            sourced.get("as_of") if sourced else None
+        )
+        available = value is not None and bool(source) and bool(at)
         metrics.append({
             "key": key, "label": label, "unit": unit,
-            "value": str(fact.value) if fact else None,
-            "status": "available" if fact else "unavailable",
-            "source": f"{fact.source.value}/{fact.source_id}" if fact else None,
-            "as_of": fact.observed_at.isoformat() if fact else None,
-            "availability_reason": None if fact else "缺少可追溯的数据来源",
+            "value": value if available else None,
+            "status": "available" if available else "unavailable",
+            "source": source if available else None,
+            "as_of": at if available else None,
+            "availability_reason": None if available else "缺少可追溯的数据来源",
         })
     return {
         "schema_version": "m8.overview.v1",
         "mode": "read_only",
         "notice": "未接入的数据不是零、空仓或审计通过；不得据此交易。",
         "metrics": metrics,
-        "holdings": project_holdings(ledger),
-        "effective_plans": None,
-        "pending_actions": None,
-        "audit_results": None,
+        "holdings": project_holdings(ledger) if ledger is not None else (
+            persisted.get("holdings") if persisted is not None else None
+        ),
+        "effective_plans": persisted.get("effective_plans") if persisted is not None else None,
+        "pending_actions": persisted.get("pending_actions") if persisted is not None else None,
+        "audit_results": persisted.get("audit_results") if persisted is not None else None,
         "trade_execution_enabled": False,
     }

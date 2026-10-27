@@ -68,6 +68,9 @@ def _preview_daily_fill_coverage(
     market_close = datetime.combine(claim.market_date, time(15), tzinfo=MARKET_TZ)
     claimed_full_day = (
         claim.declared_full_day
+        # A watermark for a later market day cannot certify this day's
+        # self-reported manifest, even when its IDs happen to match.
+        and claim.complete_through.astimezone(MARKET_TZ).date() == claim.market_date
         and claim.complete_through.astimezone(UTC) >= market_close.astimezone(UTC)
         # A five-minute clock-skew allowance must not turn a future close or
         # future export into an already completed market day.

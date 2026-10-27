@@ -17,8 +17,8 @@ class _ReadSession:
             id="version-1", version_number=1,
             state=PlanVersionState.EFFECTIVE,
             updated_at=now - timedelta(hours=2), valid_until=None,
-            structure_invalidation_price=Decimal("9"),
-            first_target_price=Decimal("12"),
+            structure_invalidation_price=Decimal(9),
+            first_target_price=Decimal(12),
         )
         self.plan = SimpleNamespace(
             instrument_code="600000", instrument_name="人工标的",
@@ -26,8 +26,8 @@ class _ReadSession:
         self.action = SimpleNamespace(
             id="action-1", action_type=ActionType.INITIAL_ENTRY,
             status=ActionStatus.PLANNED,
-            planned_price_low=Decimal("10"),
-            planned_price_high=Decimal("11"),
+            planned_price_low=Decimal(10),
+            planned_price_high=Decimal(11),
             updated_at=action_time,
         )
         self.audit = SimpleNamespace(

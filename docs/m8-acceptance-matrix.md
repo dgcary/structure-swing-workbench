@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 账户总权益 | `backend/app/workbench/overview.py`；M5 账户 CSV 临时账本，或显式开启持久化读取后从 `AccountSnapshot.total_equity` 投影 | 部分通过：仅已标注来源、时间的值可展示；非实时 |
 | 可用资金 | 同上，`AccountSnapshot.available_cash` | 部分通过：来源不足仍为“未接入” |
-| 当前总仓位 | `backend/app/workbench/persisted.py`；同一账户快照中所有持仓市值与总权益均存在且数值自洽时计算 | 部分通过：尚无完整账户核验与真实数据库联调 |
+| 当前总仓位 | `backend/app/workbench/persisted.py`；同一账户快照中所有持仓市值与总权益均存在且数值自洽时计算 | 部分通过：新增隔离 PostgreSQL 16 + Alembic 迁移 + 只读投影集成测试；真实券商账户与完整持仓仍未核验 |
 | 持仓股票数 | 同一账户快照内正数量标的计数；空快照不伪装为零持仓 | 部分通过：仅代表该快照范围，不保证券商账户全量 |
 | 当前账户总风险 | `persisted.py` 仅在全部有仓标的均有时间匹配的有效计划、CORE/T 精确分配、T=0、CORE 策略成本与失效价时，按历史快照计算 `(Σ核心仓数量×(策略成本−失效价))/权益×100%`；`test_workbench_persisted_risk.py` | **部分通过**：具备完整核心仓历史证据时可计算；含T仓、缺计划/止损/成本或时序冲突时仍为“未接入”，不能冒充实时账户风险 |
 | 当日 T 次数 | 尚无可复核的持久化完整 T 闭环事实来源 | **未通过** |
@@ -26,7 +26,7 @@
 | 已记录未完成动作 | 从正式有效版本读取计划中/已审计/执行中/部分成交的动作；全部 `executable=false` | 部分通过：缺经核验的计划执行日期，**不能称为今日待办** |
 | 正式历史审计 | 从正式版本/动作关联的 `AuditResult` 读取；非通过项优先、通过项折叠；始终不可执行 | 部分通过：历史审计不等于当前实时审计，尚无完整可执行性判定 |
 | 核心仓/T仓 | 仅同一 `PositionSnapshot` 的 CORE、T 两类桶都存在、非负且数量严格对账时显示 | 部分通过：没有可卖数量/T+1 的来源验证 |
-| 账户与持仓快照 | 只读投影、显式来源与时间；无时区的时间不冒充可验证事实 | 部分通过：SQLite 丢失时区时主动隐藏，需真实 PostgreSQL 联调 |
+| 账户与持仓快照 | 只读投影、显式来源与时间；无时区的时间不冒充可验证事实 | 部分通过：SQLite 丢失时区时主动隐藏；新增 PostgreSQL TIMESTAMPTZ 实库往返测试（合成数据），仍缺真实账户数据 |
 | 账户 CSV | `account_snapshot_preview.py` 仅处理请求内隔离账本，`persisted=false`，`full_account_verified=false` | 通过静态和自动测试；未做真实账户数据实机验收 |
 | 无自动下单 | 后端总览与全部计划/动作/审计投影保持 `trade_execution_enabled=false` / `executable=false` | 通过静态审查与单元测试，不等于交易规则整体通过 |
 
@@ -39,7 +39,7 @@
 - 只读来源协议：`frontend/src/overviewContract.ts`、`frontend/tests/overviewContract.test.mjs`、`frontend/tests/persistedOverviewContract.test.mjs`。
 - 后端数据与无来源保护：`backend/tests/test_workbench_overview.py`、`test_workbench_holdings.py`、`test_workbench_persisted_projection.py`、`test_workbench_persisted_risk.py`（T仓/缺成本/缺计划/时序不一致均 fail-closed）；`test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk` 验证未来日期快照/计划不得认证账户风险，允许最多5分钟设备时钟偏差。
 - 最新已核验 CI：提交 `2335ebdd11a0f15ad43589f29cd491192b3488f9` 对应 GitHub Actions `40474011692`（PR）与 `40474005578`（push）均完成 `success`；包括后端 pytest/ruff、前端构建/测试。未做真实 PostgreSQL 或移动端实机验收，CI 通过不等于 M8 Gate 通过。
-- **未完成实机证据**：手机宽度截图、全部导航入口人工点击、真实 PostgreSQL 时区/快照联调、真实 CSV 样例对账。不得把这些标记为 PASS。
+- **未完成实机证据**：手机宽度截图、全部导航入口人工点击、真实账户 PostgreSQL 快照联调、真实 CSV 样例对账。不得把这些标记为 PASS。
 
 ### 2026-10-27 增量证据：未来动作与未来审计不得冒充历史事实
 
@@ -47,6 +47,13 @@
 - 同文件：带时区且超出容差的未来 `AuditResult.created_at` 不进入历史审计列表，也不参与“当前最高审计等级”的历史来源指标。
 - `backend/tests/test_workbench_persisted_future_records.py`：覆盖未来动作、未来审计、正常历史记录三种情况；继续断言 `executable=false`、`trade_execution_enabled=false`。
 - 本项属于 **时间来源可信度防护**，不等于已实现“今日待执行动作”日期语义，也不证明真实 PostgreSQL、T+1、T闭环、换仓或手机实机验收。最新提交的 Actions 必须另行核验，不能用旧 HEAD 的 CI 代替。
+
+### 2026-10-27 增量证据：隔离 PostgreSQL 16 实库集成验证
+
+- CI 后端任务新增 PostgreSQL 16 服务容器，并先执行 `alembic upgrade head`，再运行测试；不依赖生产数据库，也不需要真实券商账号。
+- `backend/tests/test_workbench_postgres_integration.py`：在迁移后的真实 PostgreSQL 数据库中写入**隔离合成快照**、核心/T仓桶与正式计划；强制数据库往返，核验 TIMESTAMPTZ 保留时区、来源完整时的历史 CORE-only 风险，以及未来快照/计划 fail-closed。
+- 测试记录始终位于回滚事务内，绝不保存测试账户数据，也不授权交易。无测试数据库时本地跳过，GitHub Actions 配置测试库后必须执行。
+- 此项只证明**PostgreSQL 数据类型、迁移与只读投影集成**，不证明真实账户接入、真实 CSV 对账、T+1 可卖数量、T闭环、换仓或手机端可用。CI 结果以最新 HEAD 为准。
 
 ## 四、当前 Gate
 

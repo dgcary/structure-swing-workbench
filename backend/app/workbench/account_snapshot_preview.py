@@ -41,9 +41,10 @@ class DailyFillCoverageClaim(BaseModel):
 
 def _preview_daily_fill_coverage(
     ledger: AccountLedger, claim: DailyFillCoverageClaim, duplicate_rows: int,
+    *, now: datetime | None = None,
 ) -> dict[str, object]:
     """Compare claimed IDs with uploaded fills; never certify broker completeness."""
-    now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
     if (
         claim.exported_at.astimezone(UTC) > now + timedelta(minutes=5)
         or claim.complete_through.astimezone(UTC) > now + timedelta(minutes=5)
@@ -68,6 +69,11 @@ def _preview_daily_fill_coverage(
     claimed_full_day = (
         claim.declared_full_day
         and claim.complete_through.astimezone(UTC) >= market_close.astimezone(UTC)
+        # A five-minute clock-skew allowance must not turn a future close or
+        # future export into an already completed market day.
+        and now.astimezone(UTC) >= market_close.astimezone(UTC)
+        and claim.exported_at.astimezone(UTC) <= now.astimezone(UTC)
+        and claim.complete_through.astimezone(UTC) <= now.astimezone(UTC)
         and bool(expected)
     )
     mismatch = bool(missing or unexpected or duplicate_rows or outside_watermark)
@@ -79,7 +85,7 @@ def _preview_daily_fill_coverage(
         "上传成交与自报清单编号不一致、CSV 重复，或存在晚于自报水位的成交；"
         "必须核对原始券商流水。"
         if mismatch else
-        "上传成交与自报清单编号一致，但缺少收盘后完整覆盖声明或有效成交；不能认证当日T次数。"
+        "上传成交与自报清单编号一致，但未到实际收盘、导出/覆盖时间尚未发生，或缺少完整覆盖声明/有效成交；不能认证当日T次数。"
         if not claimed_full_day else
         "仅与用户自报成交清单逐笔编号一致；没有独立券商来源认证，"
         "不能证明全量成交、当日T次数、未闭环T或T+1可卖数量。"

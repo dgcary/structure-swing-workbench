@@ -53,8 +53,9 @@ def recorded_t_cycles(
     seen_external_ids: set[tuple[str, str]] = set()
     duplicate_external_ids: set[tuple[str, str]] = set()
     for _, _, action_type, fill in records:
-        if action_type not in T_LEGS:
-            continue
+        # Reconcile execution identities across *all* recorded actions.
+        # A broker reference reused by an ordinary trade can invalidate a
+        # T leg just as surely as one reused by a different T cycle.
         fill_id = str(fill.id)
         if fill_id in seen_fill_ids:
             duplicate_fill_ids.add(fill_id)
@@ -190,10 +191,11 @@ def recorded_t_cycles(
 
 def project_recorded_t_cycles(session: Session, market_day: date) -> list[dict[str, object]]:
     """Query recorded execution fills only; drafts and unfilled actions are not facts."""
-    fills = session.scalars(
-        select(ExecutionFill).join(TradeAction, ExecutionFill.action_id == TradeAction.id)
-        .where(TradeAction.action_type.in_(list(T_LEGS)))
-    )
+    # Include non-T actions for source-scoped duplicate execution detection;
+    # recorded_t_cycles groups and displays only the T legs themselves.
+    fills = session.scalars(select(ExecutionFill).join(
+        TradeAction, ExecutionFill.action_id == TradeAction.id
+    ))
     records = [
         (fill.action.plan_version.plan.instrument_code, fill.action.t_cycle_key,
          fill.action.action_type, fill)

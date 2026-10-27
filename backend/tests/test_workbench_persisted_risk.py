@@ -191,5 +191,7 @@ def test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk():
 
     plan = _projection(version_at=future)
     assert _metric(plan, "account_risk")["status"] == "unavailable"
-    assert plan["effective_plans"][0]["as_of"] is None
+    assert plan["effective_plans"] == []
+    assert plan["pending_actions"] == []
+    assert plan["audit_results"] == []
     assert plan["trade_execution_enabled"] is False

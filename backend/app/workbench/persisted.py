@@ -43,7 +43,7 @@ def _fact(value: Decimal | int | str | None, source: str, at: str | None) -> dic
 def _core_only_risk(quantity: Decimal, cost: Decimal | None, stop: Decimal | None) -> Decimal | None:
     """Historical CORE downside only; T inventory requires its own verified stop."""
     if (
-        quantity <= 0 or not quantity.is_finite()
+        not quantity.is_finite() or quantity <= 0
         or cost is None or not cost.is_finite()
         or stop is None or not stop.is_finite()
         or stop <= 0 or cost <= stop

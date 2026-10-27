@@ -207,6 +207,16 @@ def project_persisted(session: Session) -> dict[str, object]:
         valid_until = getattr(version, "valid_until", None)
         if valid_until is not None and valid_until < market_today:
             continue
+        # A future-dated version update cannot certify an effective plan.
+        # Preserve the existing fail-closed handling of timezone-naive SQLite
+        # records (display-only, no timestamp-based risk authentication).
+        updated_at = version.updated_at
+        if (
+            updated_at is not None and updated_at.tzinfo is not None
+            and updated_at.utcoffset() is not None
+            and _observed_at(updated_at) is None
+        ):
+            continue
         source = f"正式计划版本/{version.id}"
         current_risk = None
         # Compare two dated facts, never apply a newer plan to an older snapshot.

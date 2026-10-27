@@ -317,7 +317,8 @@ export function App() {
                 <button className="back-button" type="button" onClick={() => setSection("计划管理")}>查看本机草稿</button>
               </section>
               <section className="panel">
-                <h2>今日待执行动作</h2>
+                <h2>已记录未完成动作（非今日交易指令）</h2>
+                <p className="notice">当前记录不含经核验的计划执行日期，不能认定为今日待办或交易许可。</p>
                 {overview?.pending_actions && overview.pending_actions.length > 0 ? (
                   <div className="holding-list">
                     {overview.pending_actions.map((action) => (

@@ -221,3 +221,9 @@
 - 返回 `market_calendar_status=session/closed/unknown` 及第三方来源标识；编号缺失、额外、重复或超水位仍优先 `mismatch`。`matched_unverified` 只表示用户自报清单与上传 CSV 内部一致，**不代表券商独立完整成交水位或官方实时休市通知**。
 - `backend/tests/test_workbench_account_snapshot_preview.py` 新增 2026-10-01 工作日节假日、节假日编号冲突优先、日历不可用 fail-closed、正常交易日仍不认证券商四类回归测试；`backend/pyproject.toml` 引入开源日历库，最新 HEAD 的 CI 须重新核验。
 - **独立 Gate 尚未满足**：真实券商账户身份、独立完整成交证明、交易所临时休市实时校验、脱敏真实 CSV→PostgreSQL、日终 BROKEN 转仓、换仓、T+1、CORE/T 独立风险及 Safari/TLS 实机。维持 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`；首页当日 T 次数与未闭环总数保持不可用。PR Draft，不合并、不部署、不派发 M9。
+
+### 2026-10-28 增量证据：第三方交易日历提供方异常降级
+
+- `backend/app/workbench/account_snapshot_preview.py::_market_session_status`：在已有缺包、无效日期和超范围处理之外，明确处理交易日历提供方的 `LookupError`（含 `KeyError` / `IndexError`）、`RuntimeError` 与 `OSError`。日历查询异常时返回 `unknown`，即使自报清单与 CSV 编号一致也只能 `insufficient`，不将异常误判为有效交易日。
+- `backend/tests/test_workbench_account_snapshot_preview.py::test_calendar_provider_failure_fails_closed_without_hiding_csv_discrepancy`：4 类提供方异常 × 2 类清单，验证日历未知时不能升级为 `matched_unverified`，但缺失/额外成交仍优先 `mismatch`；始终保持 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`。
+- **证据边界**：本项只增强第三方日历失效时的只读预览可靠性，不是官方临时休市验证，也不是独立券商账户或全量成交认证。可信日终 BROKEN 转仓、换仓、T+1、CORE/T 风险、真实 CSV→隔离 PostgreSQL 及移动 Safari/TLS 实机验收仍未完成。最终 CI 以本轮 HEAD 为准，PR #19 保持 Draft，M8 整体 Gate 仍 FAIL。

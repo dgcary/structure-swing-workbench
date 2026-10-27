@@ -213,3 +213,11 @@
 - `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：上海市场日期落在周六或周日时，即使上传 CSV 与用户自报编号完全一致、覆盖水位晚于 15:00，也只能标为 `insufficient`，不得输出 `matched_unverified`。若存在缺失或额外编号，仍优先返回 `mismatch`，不能因为周末而掩盖数据矛盾。提示文案明确“日期可能非交易日”。
 - `backend/tests/test_workbench_account_snapshot_preview.py::test_weekend_self_report_cannot_claim_a_complete_a_share_market_day`、`test_weekend_manifest_discrepancy_remains_a_mismatch`：周日匹配清单的不足证据、周日清单缺项的冲突优先反例；所有响应仍不得标记券商认证或交易许可。
 - **边界**：仅排除确定无常规 A 股交易的周末，不代表已经接入交易所完整节假日/临时休市日历；工作日自报一致仍不是券商独立完整性证明。缺少券商身份、逐日可信水位、真实 CSV→PG、正式 BROKEN 转仓、日内换仓、T+1、CORE/T 独立风险和手机 Safari/可信 TLS 实机证据；M8 Gate 仍 FAIL，PR 保持 Draft。CI 以本次 HEAD 为准。
+
+
+### 2026-10-28 增量证据：第三方交易所日历节假日门禁（非券商认证）
+
+- `backend/app/workbench/account_snapshot_preview.py`：隔离 CSV 的 `daily_fill_claim` 不再仅凭工作日判断交易日；通过成熟开源 `exchange_calendars` 的 `XSHG` 会话日历识别沪市交易日、周末与已知节假日。非交易日或日历缺失/超出范围/异常时，一律 `insufficient`，不把编号匹配的自报清单当作完整交易日。
+- 返回 `market_calendar_status=session/closed/unknown` 及第三方来源标识；编号缺失、额外、重复或超水位仍优先 `mismatch`。`matched_unverified` 只表示用户自报清单与上传 CSV 内部一致，**不代表券商独立完整成交水位或官方实时休市通知**。
+- `backend/tests/test_workbench_account_snapshot_preview.py` 新增 2026-10-01 工作日节假日、节假日编号冲突优先、日历不可用 fail-closed、正常交易日仍不认证券商四类回归测试；`backend/pyproject.toml` 引入开源日历库，最新 HEAD 的 CI 须重新核验。
+- **独立 Gate 尚未满足**：真实券商账户身份、独立完整成交证明、交易所临时休市实时校验、脱敏真实 CSV→PostgreSQL、日终 BROKEN 转仓、换仓、T+1、CORE/T 独立风险及 Safari/TLS 实机。维持 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`；首页当日 T 次数与未闭环总数保持不可用。PR Draft，不合并、不部署、不派发 M9。

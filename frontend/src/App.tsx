@@ -35,15 +35,34 @@ type Holding = {
   unanchored_fill_delta?: string | null;
 };
 
+type PersistedPlan = {
+  id: string; symbol: string; name: string; version: number; state_zh: string;
+  invalidation_price: string | null; first_target_price: string | null;
+  initial_risk: string | null; current_risk: string | null;
+  source: string; as_of: string | null; warning: string;
+};
+
+type PersistedAction = {
+  id: string; symbol: string; action_zh: string; status_zh: string;
+  planned_price_low: string | null; planned_price_high: string | null;
+  source: string; as_of: string | null; executable: false; warning: string;
+};
+
+type PersistedAudit = {
+  id: string; level: "pass" | "warning" | "overridable_fail" | "hard_fail";
+  level_zh: string; summary: string; source: string; as_of: string | null;
+  executable: false; warning: string;
+};
+
 type Overview = {
   schema_version: string;
   mode: "read_only" | "isolated_csv_preview";
   notice: string;
   metrics: Metric[];
   holdings: Holding[] | null;
-  effective_plans: unknown[] | null;
-  pending_actions: unknown[] | null;
-  audit_results: unknown[] | null;
+  effective_plans: PersistedPlan[] | null;
+  pending_actions: PersistedAction[] | null;
+  audit_results: PersistedAudit[] | null;
   trade_execution_enabled: boolean;
 };
 
@@ -273,7 +292,19 @@ export function App() {
               </section>
               <section className="panel">
                 <h2>有效交易计划</h2>
-                <Unavailable title="正式有效计划未接入" detail="持久化计划与审计未接入；本机草稿不能替代正式有效计划。" />
+                {overview?.effective_plans && overview.effective_plans.length > 0 ? (
+                  <div className="holding-list">
+                    {overview.effective_plans.map((plan) => (
+                      <article className="holding-card" key={plan.id}>
+                        <h3>{plan.symbol} · {plan.name} · 第{plan.version}版</h3>
+                        <p>计划状态：{plan.state_zh} · 结构失效价：{plan.invalidation_price ?? "未知"}</p>
+                        <p>第一目标：{plan.first_target_price ?? "未知"} · 初始风险：{plan.initial_risk ?? "未核实"} · 当前风险：{plan.current_risk ?? "未核实"}</p>
+                        <p>来源：{plan.source} · 数据时间：{plan.as_of ?? "未核实"}</p>
+                        <p className="notice">{plan.warning}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : <Unavailable title="正式有效计划未接入" detail="未读取到可追溯的正式有效计划；本机草稿不能替代正式计划。" />}
                 <h3>本机人工计划草稿（未审计）</h3>
                 {localDraftError ? <p role="alert">本机草稿读取异常，已停止展示；请核对原数据。</p> :
                   localDraftSummary && localDraftSummary.latest.length > 0 ? <>
@@ -287,12 +318,45 @@ export function App() {
               </section>
               <section className="panel">
                 <h2>今日待执行动作</h2>
-                <Unavailable title="尚无可验证的待办" detail="待办只能来自用户制定且经过审计的计划；此处不会生成买卖建议。" />
+                {overview?.pending_actions && overview.pending_actions.length > 0 ? (
+                  <div className="holding-list">
+                    {overview.pending_actions.map((action) => (
+                      <article className="holding-card" key={action.id}>
+                        <h3>{action.symbol} · {action.action_zh} · {action.status_zh}</h3>
+                        <p>计划价格：{action.planned_price_low ?? "未知"} ～ {action.planned_price_high ?? "未知"}</p>
+                        <p className="audit-unknown">仅供核对 · 不可执行</p>
+                        <p>来源：{action.source} · 数据时间：{action.as_of ?? "未核实"}</p>
+                        <p>{action.warning}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : <Unavailable title="尚无可验证的待办" detail="仅展示已保存的人工动作；此处不会生成买卖建议。" />}
               </section>
               <section className="panel">
                 <h2>纪律审计与可执行性</h2>
-                <div className="audit-unknown">未审计 · 不可认定可执行</div>
-                <p>正式审计记录尚未接入。局部预审不构成交易许可；硬性失败与可覆盖失败将在接入正式审计后优先展示。</p>
+                <div className="audit-unknown">历史审计仅供查阅 · 不可认定可执行</div>
+                {overview?.audit_results && overview.audit_results.length > 0 ? (
+                  <>
+                    {overview.audit_results.filter((audit) => audit.level !== "pass").map((audit) => (
+                      <article className="holding-card" key={audit.id} role="status">
+                        <strong>{audit.level_zh} · {audit.summary}</strong>
+                        <p>来源：{audit.source} · 数据时间：{audit.as_of ?? "未核实"}</p>
+                        <p>{audit.warning}</p>
+                      </article>
+                    ))}
+                    {overview.audit_results.some((audit) => audit.level === "pass") && (
+                      <details>
+                        <summary>展开正常审计记录（{overview.audit_results.filter((audit) => audit.level === "pass").length}项）</summary>
+                        {overview.audit_results.filter((audit) => audit.level === "pass").map((audit) => (
+                          <article className="holding-card" key={audit.id}>
+                            <strong>{audit.level_zh} · {audit.summary}</strong>
+                            <p>来源：{audit.source} · 数据时间：{audit.as_of ?? "未核实"}</p>
+                          </article>
+                        ))}
+                      </details>
+                    )}
+                  </>
+                ) : <p>正式审计记录尚未接入。局部预审不构成交易许可。</p>}
                 {lastAuditPreview && <p>最近一次局部预审：{lastAuditPreview.symbol} · {lastAuditPreview.highest_checked_level_zh}（不可执行）</p>}
                 <button className="back-button" type="button" onClick={() => setSection("审计结果")}>查看审计状态</button>
               </section>

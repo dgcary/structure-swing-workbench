@@ -63,6 +63,7 @@ type RecordedTCycle = {
   opening_quantity: string | null; closing_quantity: string | null;
   end_of_day_unclosed: boolean; residual_quantity: string | null;
   ordinary_effect: string | null; requires_reaudit: boolean;
+  recorded_daily_limit_alert: true | null;
   as_of: string | null; sources: string[];
   broker_reconciled: false; trade_execution_enabled: false; warning: string;
 };
@@ -516,6 +517,7 @@ export function App() {
                     }</h3>
                     <p>交易日：{cycle.market_date} · 周期标识：{cycle.cycle_key ?? "缺失"}</p>
                     <p>第一腿数量：{cycle.opening_quantity ?? "不可核实"} · 第二腿数量：{cycle.closing_quantity ?? "不可核实"}</p>
+                    {cycle.recorded_daily_limit_alert === true && <p className="audit-unknown">疑似单票当日 T 次数超限（已记录至少 3 个配对）· 必须人工复核</p>}
                     {cycle.end_of_day_unclosed && <p className="audit-unknown">剩余数量：{cycle.residual_quantity} · {cycle.ordinary_effect} · 必须重新审计</p>}
                     <p>记录时间：{cycle.as_of ?? "不可核实"} · 成交来源记录：{cycle.sources.length} 条</p>
                     <p>{cycle.warning}</p>

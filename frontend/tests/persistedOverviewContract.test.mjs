@@ -25,6 +25,7 @@ const plan = {
 const action = {
   id: "action-1", symbol: "600000", action_zh: "初始建仓", status_zh: "已审计",
   planned_price_low: "11", planned_price_high: "11.5",
+  planned_for_date: null, date_status: "unverified",
   source: "正式交易动作/action-1", as_of: null,
   executable: false, warning: "不得据此执行",
 };
@@ -63,6 +64,26 @@ test("persisted rows reject missing provenance, invalid symbols and execution fl
   assert.throws(() => assertReadOnlyOverview({
     ...data, pending_actions: [action, action],
   }, "read_only"), /协议异常/);
+});
+
+test("only explicitly dated sourced actions may be labelled as today's manual plan", () => {
+  const data = baseline();
+  const sourced = { ...action, as_of: "2026-10-27T10:00:00+08:00",
+    planned_for_date: "2026-10-27", date_status: "today" };
+  data.pending_actions = [sourced];
+  assert.doesNotThrow(() => assertReadOnlyOverview(data, "read_only"));
+  for (const broken of [
+    { ...sourced, planned_for_date: null },
+    { ...sourced, planned_for_date: "2026-02-30" },
+    { ...sourced, planned_for_date: "2026-10-27T00:00:00" },
+    { ...sourced, as_of: null },
+    { ...action, date_status: "today" },
+    { ...sourced, date_status: "unknown" },
+  ]) {
+    assert.throws(() => assertReadOnlyOverview({
+      ...data, pending_actions: [broken],
+    }, "read_only"), /协议异常/);
+  }
 });
 
 test("isolated CSV can never carry persisted plans or audits", () => {

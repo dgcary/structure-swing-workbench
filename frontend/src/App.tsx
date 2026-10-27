@@ -45,6 +45,7 @@ type PersistedPlan = {
 type PersistedAction = {
   id: string; symbol: string; action_zh: string; status_zh: string;
   planned_price_low: string | null; planned_price_high: string | null;
+  planned_for_date: string | null; date_status: "today" | "other_day" | "unverified";
   source: string; as_of: string | null; executable: false; warning: string;
 };
 
@@ -118,6 +119,22 @@ function MetricCard({ metric }: { metric: Metric }) {
           ? `来源：${metric.source ?? "未知"} · ${metric.as_of ?? "时间未知"}`
           : "尚无可验证的账户或业务事实"}
       </p>
+    </article>
+  );
+}
+
+function ActionCard({ action }: { action: PersistedAction }) {
+  return (
+    <article className="holding-card">
+      <h3>{action.symbol} · {action.action_zh} · {action.status_zh}</h3>
+      <p>计划价格：{action.planned_price_low ?? "未知"} ～ {action.planned_price_high ?? "未知"}</p>
+      <p>人工计划日期：{action.planned_for_date ?? "未核实"} · {
+        action.date_status === "today" ? "今日人工计划" :
+        action.date_status === "other_day" ? "非今日计划" : "日期未核验"
+      }</p>
+      <p className="audit-unknown">仅供核对 · 不可执行</p>
+      <p>来源：{action.source} · 数据时间：{action.as_of ?? "未核实"}</p>
+      <p>{action.warning}</p>
     </article>
   );
 }
@@ -219,6 +236,13 @@ export function App() {
       .catch((reason: Error) => setOverviewError(reason.message));
   }, []);
 
+  const todayActions = overview?.pending_actions?.filter(
+    (action) => action.date_status === "today",
+  ) ?? [];
+  const otherActions = overview?.pending_actions?.filter(
+    (action) => action.date_status !== "today",
+  ) ?? [];
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -317,21 +341,20 @@ export function App() {
                 <button className="back-button" type="button" onClick={() => setSection("计划管理")}>查看本机草稿</button>
               </section>
               <section className="panel">
-                <h2>已记录未完成动作（非今日交易指令）</h2>
-                <p className="notice">当前记录不含经核验的计划执行日期，不能认定为今日待办或交易许可。</p>
-                {overview?.pending_actions && overview.pending_actions.length > 0 ? (
+                <h2>今日人工计划动作（非交易指令）</h2>
+                <p className="notice">仅将人工明确指定今日执行日期、且记录时间可核验的正式动作列在此处；仍需重新审计和券商核对，不代表可执行。</p>
+                {todayActions.length > 0 ? (
                   <div className="holding-list">
-                    {overview.pending_actions.map((action) => (
-                      <article className="holding-card" key={action.id}>
-                        <h3>{action.symbol} · {action.action_zh} · {action.status_zh}</h3>
-                        <p>计划价格：{action.planned_price_low ?? "未知"} ～ {action.planned_price_high ?? "未知"}</p>
-                        <p className="audit-unknown">仅供核对 · 不可执行</p>
-                        <p>来源：{action.source} · 数据时间：{action.as_of ?? "未核实"}</p>
-                        <p>{action.warning}</p>
-                      </article>
-                    ))}
+                    {todayActions.map((action) => <ActionCard key={action.id} action={action} />)}
                   </div>
-                ) : <Unavailable title="尚无可验证的待办" detail="仅展示已保存的人工动作；此处不会生成买卖建议。" />}
+                ) : <Unavailable title="今日计划动作尚未核实" detail="没有带可信人工日期的今日计划记录，不代表今天没有待处理事项。" />}
+                <h3>其他已记录未完成动作（非今日待办）</h3>
+                <p className="notice">未填写日期、日期不可信或计划日期不是今天的动作，不得冒充今日待办。</p>
+                {otherActions.length > 0 ? (
+                  <div className="holding-list">
+                    {otherActions.map((action) => <ActionCard key={action.id} action={action} />)}
+                  </div>
+                ) : <p>暂无其他可展示的历史动作；不代表已完成审计。</p>}
               </section>
               <section className="panel">
                 <h2>纪律审计与可执行性</h2>

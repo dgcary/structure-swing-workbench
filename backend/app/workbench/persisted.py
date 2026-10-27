@@ -268,6 +268,17 @@ def project_persisted(session: Session) -> dict[str, object]:
                 and _observed_at(action_time) is None
             ):
                 continue
+            # An update timestamp is not an intended execution date.
+            # Only an explicit date with a trustworthy record timestamp can
+            # be labelled as today's manual plan, never as trading permission.
+            action_observed = _observed_at(action.updated_at)
+            planned_for_date = getattr(action, "planned_for_date", None)
+            if action_observed is None:
+                planned_for_date = None
+            date_status = (
+                "today" if planned_for_date == market_today else
+                "other_day" if planned_for_date is not None else "unverified"
+            )
             actions.append({
                 "id": action.id, "symbol": plan.instrument_code,
                 "action_zh": action.action_type.label_zh,
@@ -275,9 +286,17 @@ def project_persisted(session: Session) -> dict[str, object]:
                 "planned_price_low": _number(action.planned_price_low),
                 "planned_price_high": _number(action.planned_price_high),
                 "source": f"正式交易动作/{action.id}",
-                "as_of": _observed_at(action.updated_at),
+                "as_of": action_observed,
+                "planned_for_date": (
+                    planned_for_date.isoformat() if planned_for_date is not None else None
+                ),
+                "date_status": date_status,
                 "executable": False,
-                "warning": "仅展示人工记录；未执行实时审计与券商核对。",
+                "warning": (
+                    "人工计划日期已记录；仍需实时审计与券商核对，不构成交易许可。"
+                    if planned_for_date is not None else
+                    "未核验人工计划执行日期；仅展示历史动作，不能认定为今日待办。"
+                ),
             })
             audit_rows.extend(session.scalars(
                 select(AuditResult).where(AuditResult.action_id == action.id)

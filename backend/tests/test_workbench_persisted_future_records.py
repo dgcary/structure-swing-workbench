@@ -1,6 +1,6 @@
 """M8 never presents future-dated persisted actions/audits as observed facts."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -89,3 +89,32 @@ def test_dated_historical_action_and_audit_stay_read_only():
     assert overview["pending_actions"][0]["executable"] is False
     assert overview["audit_results"][0]["executable"] is False
     assert overview["trade_execution_enabled"] is False
+
+
+def test_explicit_market_date_is_required_for_todays_manual_plan():
+    now = datetime.now(UTC)
+    session = _ReadSession(now - timedelta(minutes=30), now - timedelta(minutes=20))
+    market_today = datetime.now(timezone(timedelta(hours=8))).date()
+    session.action.planned_for_date = market_today
+
+    action = build_overview(persisted=project_persisted(session))["pending_actions"][0]
+    assert action["planned_for_date"] == market_today.isoformat()
+    assert action["date_status"] == "today"
+    assert action["executable"] is False
+
+    session.action.planned_for_date = market_today - timedelta(days=1)
+    action = build_overview(persisted=project_persisted(session))["pending_actions"][0]
+    assert action["date_status"] == "other_day"
+    assert action["planned_for_date"] == session.action.planned_for_date.isoformat()
+
+    session.action.planned_for_date = None
+    action = build_overview(persisted=project_persisted(session))["pending_actions"][0]
+    assert action["date_status"] == "unverified"
+    assert action["planned_for_date"] is None
+
+    # SQLite legacy timestamps without timezone cannot certify today's schedule.
+    session.action.planned_for_date = market_today
+    session.action.updated_at = now.replace(tzinfo=None)
+    action = build_overview(persisted=project_persisted(session))["pending_actions"][0]
+    assert action["date_status"] == "unverified"
+    assert action["planned_for_date"] is None

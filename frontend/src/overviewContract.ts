@@ -156,6 +156,12 @@ function validPlanRow(value: unknown): boolean {
     typeof value.warning === "string" && value.warning.trim().length > 0;
 }
 
+function validCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + "T00:00:00Z");
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function validActionRow(value: unknown): boolean {
   return sourcedRow(value, "正式交易动作/") &&
     typeof value.symbol === "string" && A_SHARE_SYMBOL.test(value.symbol) &&
@@ -163,6 +169,10 @@ function validActionRow(value: unknown): boolean {
     typeof value.status_zh === "string" && value.status_zh.trim().length > 0 &&
     optionalDecimal(value.planned_price_low) &&
     optionalDecimal(value.planned_price_high) &&
+    (value.date_status === "unverified"
+      ? value.planned_for_date === null
+      : (value.date_status === "today" || value.date_status === "other_day") &&
+        value.as_of !== null && validCalendarDate(value.planned_for_date)) &&
     value.executable === false &&
     typeof value.warning === "string" && value.warning.trim().length > 0;
 }

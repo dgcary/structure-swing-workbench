@@ -176,6 +176,8 @@ class TradeAction(IdMixin, TimestampMixin, Base):
     planned_price_high: Mapped[Decimal | None] = mapped_column(PRICE, nullable=True)
     planned_quantity: Mapped[Decimal | None] = mapped_column(QUANTITY, nullable=True)
     planned_position_pct: Mapped[Decimal | None] = mapped_column(PERCENT, nullable=True)
+    # Explicit user-specified market date; never infer it from record timestamps.
+    planned_for_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     t_cycle_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 

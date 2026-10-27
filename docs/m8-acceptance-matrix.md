@@ -91,3 +91,11 @@
 - `backend/app/main.py::_trusted_date_write_transport`：管理员 Bearer 令牌保护的日期修改接口**不再接受远程明文 HTTP**。仅接受 ASGI 已认证的 HTTPS scheme，或请求来源 IP 和目标主机均为回环地址的本机 HTTP；不信任客户端自行添加的 `X-Forwarded-Proto` 头。TLS 终止代理需正确、可信地向 ASGI 服务器传递 scheme；普通局域网 HTTP 页面不能执行管理员日期修改。
 - `backend/tests/test_workbench_action_date.py::test_date_write_transport_requires_https_or_both_loopback_addresses` 和 `test_privileged_date_write_rejects_remote_http_even_with_valid_token`：验证 HTTPS/本机回环正例、远程 HTTP、伪造转发头及目标地址与来源不一致反例；原 Bearer 认证测试改为 HTTPS 测试客户端。
 - **验收边界**：本项只防止管理员日期接口经远程明文传输令牌；不是完整用户登录、权限管理或实际 HTTPS 代理部署验收。全部动作仍不可执行，M8 Gate 仍 FAIL；真实账户/CSV、T 闭环/换仓/T+1、手机实机证据仍待补齐。CI 以本增量最新 HEAD 为准。
+
+
+### 2026-10-27 增量证据：已存在成交的正式动作禁止事后改写计划日期
+
+- `backend/app/workbench/action_date.py`：即使旧动作状态仍标记「计划中」，只要该动作关联任意 `ExecutionFill`，管理员日期接口就返回 HTTP 409，拒绝事后修改人工计划日期；防止记录与实际成交日期发生混淆。已有动作审计的拒绝逻辑继续保留。
+- `backend/tests/test_workbench_action_date.py`：增加状态仍为「计划中」但已有成交的反例，要求无数据库 flush、无日期变化。
+- `backend/tests/test_workbench_postgres_integration.py`：在隔离 PostgreSQL 16/Alembic 数据库写入合成真实成交记录后，验证日期写入被拒绝且原日期未变。测试数据全部事务回滚。
+- **验收边界**：这是历史成交不可改写的安全约束，不代表已完成真实券商/CSV 对账、T 闭环统计、换仓、T+1、含 T 仓风险或手机端实机验收；仍须以最新 HEAD 的 CI 结果核验。PR #19 保持 Draft、M8 Gate FAIL，禁止合并或启动 M9。

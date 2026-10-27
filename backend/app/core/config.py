@@ -11,6 +11,8 @@ class Settings(BaseSettings):
         "postgresql+psycopg://structure_swing:change-me@postgres:5432/structure_swing"
     )
     cors_origins: str = "http://localhost:5173"
+    # Opt-in read-only DB projections; no broker access or order submission.
+    workbench_persisted_read_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

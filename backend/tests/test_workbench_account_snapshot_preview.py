@@ -72,3 +72,127 @@ def test_small_upload_clock_skew_remains_display_only() -> None:
     assert payload["persisted"] is False
     assert payload["realtime"] is False
     assert payload["trade_execution_enabled"] is False
+
+
+FILL_CSV = (
+    "fill_id,symbol,side,quantity,price,executed_at\n"
+    "A01,600000,BUY,100,10,2026-10-16T10:00:00+08:00\n"
+    "A02,600000,SELL,100,11,2026-10-16T11:00:00+08:00\n"
+)
+
+
+def _daily_claim(**overrides):
+    claim = {
+        "market_date": "2026-10-16",
+        "exported_at": "2026-10-16T16:00:00+08:00",
+        "complete_through": "2026-10-16T15:30:00+08:00",
+        "export_reference": "脱敏券商导出-001",
+        "expected_fill_ids": ["A01", "A02"],
+        "declared_full_day": True,
+    }
+    claim.update(overrides)
+    return claim
+
+
+def test_daily_fill_manifest_matches_ids_but_never_certifies_broker_or_t_count():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    coverage = body["daily_fill_coverage"]
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["recorded_fill_count"] == 2
+    assert coverage["declared_fill_count"] == 2
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert coverage["trade_execution_enabled"] is False
+    assert "没有独立券商来源认证" in coverage["warning"]
+    assert body["full_account_verified"] is False
+    assert body["trade_execution_enabled"] is False
+    metrics = {item["key"]: item for item in body["metrics"]}
+    assert metrics["t_cycles_today"]["status"] == "unavailable"
+    assert metrics["open_t_cycles"]["status"] == "unavailable"
+
+
+@pytest.mark.parametrize(("expected", "missing", "unexpected"), [
+    (["A01", "missing"], 1, 1),
+    (["A01"], 0, 1),
+    (["A01", "A02", "A03"], 1, 0),
+])
+def test_daily_fill_manifest_detects_missing_and_unexpected_ids(
+    expected, missing, unexpected,
+):
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(expected_fill_ids=expected),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["missing_fill_count"] == missing
+    assert coverage["unexpected_fill_count"] == unexpected
+    assert coverage["broker_reconciled"] is False
+
+
+def test_daily_fill_manifest_duplicate_csv_rows_are_not_silent_completeness():
+    duplicated = FILL_CSV + FILL_CSV.splitlines(keepends=True)[1]
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": duplicated, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["duplicate_csv_rows"] == 1
+    assert coverage["broker_reconciled"] is False
+
+
+def test_daily_fill_manifest_before_close_is_insufficient_even_if_ids_match():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(
+            exported_at="2026-10-16T14:00:00+08:00",
+            complete_through="2026-10-16T13:30:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["daily_fill_coverage"]["status"] == "insufficient"
+
+
+@pytest.mark.parametrize("claim", [
+    _daily_claim(expected_fill_ids=["A01", "A01"]),
+    _daily_claim(exported_at="2026-10-16T16:00:00",
+                 complete_through="2026-10-16T15:30:00+08:00"),
+    _daily_claim(exported_at="2026-10-16T14:00:00+08:00"),
+    _daily_claim(export_reference="  "),
+    _daily_claim(expected_fill_ids=[" A01", "A02"]),
+])
+def test_daily_fill_manifest_rejects_ambiguous_claims(claim):
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV, "daily_fill_claim": claim,
+    })
+    assert response.status_code == 422
+
+
+def test_daily_fill_manifest_requires_csv_and_rejects_future_watermark():
+    no_fills = client.post("/workbench/account-snapshot-preview", json={
+        "account": ACCOUNT_CSV, "daily_fill_claim": _daily_claim(),
+    })
+    assert no_fills.status_code == 422
+    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(exported_at=future, complete_through=future),
+    })
+    assert response.status_code == 422
+    assert "未来" in response.json()["detail"]
+
+
+def test_daily_fill_manifest_not_provided_remains_explicitly_unavailable():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["daily_fill_coverage"] is None
+    assert response.json()["full_account_verified"] is False

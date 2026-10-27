@@ -37,8 +37,8 @@
 - 首页：`frontend/src/App.tsx`；中文导航涵盖总览、计划管理、审计结果、K线、成交导入、T仓、历史计划、复盘、研究样例。
 - 本机草稿与复盘：`LocalPlanDrafts.tsx`、`LocalReview.tsx`；相关本机存储与版本测试位于 `frontend/tests/`。
 - 只读来源协议：`frontend/src/overviewContract.ts`、`frontend/tests/overviewContract.test.mjs`、`frontend/tests/persistedOverviewContract.test.mjs`。
-- 后端数据与无来源保护：`backend/tests/test_workbench_overview.py`、`test_workbench_holdings.py`、`test_workbench_persisted_projection.py`、`test_workbench_persisted_risk.py`（T仓/缺成本/缺计划/时序不一致均 fail-closed）。
-- 最新已核验 CI：提交 `1053ff3fbe47dff0e628ca200ae261f199512989` 对应 GitHub Actions `40472962652`（CI #618）完成 `success`；包括后端 pytest/ruff、前端构建/测试。未做真实 PostgreSQL 或移动端实机验收，CI 通过不等于 M8 Gate 通过。
+- 后端数据与无来源保护：`backend/tests/test_workbench_overview.py`、`test_workbench_holdings.py`、`test_workbench_persisted_projection.py`、`test_workbench_persisted_risk.py`（T仓/缺成本/缺计划/时序不一致均 fail-closed）；`test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk` 验证未来日期快照/计划不得认证账户风险，允许最多5分钟设备时钟偏差。
+- 最新已核验 CI：提交 `2335ebdd11a0f15ad43589f29cd491192b3488f9` 对应 GitHub Actions `40474011692`（PR）与 `40474005578`（push）均完成 `success`；包括后端 pytest/ruff、前端构建/测试。未做真实 PostgreSQL 或移动端实机验收，CI 通过不等于 M8 Gate 通过。
 - **未完成实机证据**：手机宽度截图、全部导航入口人工点击、真实 PostgreSQL 时区/快照联调、真实 CSV 样例对账。不得把这些标记为 PASS。
 
 ## 四、当前 Gate

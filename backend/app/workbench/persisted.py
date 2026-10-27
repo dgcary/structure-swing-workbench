@@ -116,6 +116,9 @@ def project_persisted(session: Session) -> dict[str, object]:
                 )
                 if not consistent:
                     core = t_qty = None
+                    # Even a zero-share row with conflicting CORE/T buckets
+                    # invalidates the snapshot as a complete risk inventory.
+                    risk_complete = False
                 # An exact CORE/T split is necessary but insufficient for risk:
                 # any T quantity requires a separate T stop absent from M1 snapshots.
                 if position.total_quantity.is_finite() and position.total_quantity > 0:

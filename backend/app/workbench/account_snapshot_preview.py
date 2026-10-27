@@ -1,5 +1,7 @@
 """Isolated, user-supplied CSV overview. No account data is retained between requests."""
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
 
@@ -35,6 +37,15 @@ def preview_account_snapshot(data: AccountSnapshotPreviewRequest) -> dict[str, o
             row_counts[kind] = result.imported + result.duplicates
         if ledger.conflicts:
             raise ValueError("上传的账户事实存在冲突，请核对来源和时间")
+        # Future timestamps cannot authenticate observed account or fill facts.
+        # Reject the entire disposable M8 preview; do not alter the M5 ledger.
+        latest_allowed = datetime.now(UTC) + timedelta(minutes=5)
+        if any(fact.observed_at.astimezone(UTC) > latest_allowed
+               for fact in ledger.facts.values()) or any(
+            fill.executed_at.astimezone(UTC) > latest_allowed
+            for fill in ledger.fills.values()
+        ):
+            raise ValueError("上传的账户、持仓或成交 CSV 包含未来时间，无法作为已发生事实展示")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

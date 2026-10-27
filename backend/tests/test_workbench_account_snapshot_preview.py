@@ -171,6 +171,58 @@ def test_daily_fill_manifest_accepts_fill_at_exact_watermark_only_as_unverified(
     assert response.json()["full_account_verified"] is False
 
 
+def test_daily_fill_manifest_cannot_claim_full_day_before_actual_market_close():
+    """The 5-minute clock-skew grace period must not certify a future close."""
+    from app.account.csv_ingest import import_csv
+    from app.account.ledger import AccountLedger
+    from app.workbench.account_snapshot_preview import (
+        DailyFillCoverageClaim,
+        _preview_daily_fill_coverage,
+    )
+
+    ledger = AccountLedger()
+    import_csv(ledger, "fills", FILL_CSV, batch_id="preclose-coverage")
+    claim = DailyFillCoverageClaim.model_validate(_daily_claim(
+        exported_at="2026-10-16T15:01:00+08:00",
+        complete_through="2026-10-16T15:00:00+08:00",
+    ))
+    before = _preview_daily_fill_coverage(
+        ledger, claim, 0, now=datetime.fromisoformat("2026-10-16T14:58:00+08:00")
+    )
+    assert before["status"] == "insufficient"
+    assert before["broker_reconciled"] is False
+    assert before["trade_execution_enabled"] is False
+
+    after = _preview_daily_fill_coverage(
+        ledger, claim, 0, now=datetime.fromisoformat("2026-10-16T15:02:00+08:00")
+    )
+    assert after["status"] == "matched_unverified"
+    assert after["broker_reconciled"] is False
+
+
+def test_daily_fill_manifest_future_export_after_close_is_not_completed_coverage():
+    """A claim with a future export is not an observed full-day report."""
+    from app.account.csv_ingest import import_csv
+    from app.account.ledger import AccountLedger
+    from app.workbench.account_snapshot_preview import (
+        DailyFillCoverageClaim,
+        _preview_daily_fill_coverage,
+    )
+
+    ledger = AccountLedger()
+    import_csv(ledger, "fills", FILL_CSV, batch_id="future-export")
+    claim = DailyFillCoverageClaim.model_validate(_daily_claim(
+        exported_at="2026-10-16T15:04:00+08:00",
+        complete_through="2026-10-16T15:00:00+08:00",
+    ))
+    coverage = _preview_daily_fill_coverage(
+        ledger, claim, 0, now=datetime.fromisoformat("2026-10-16T15:02:00+08:00")
+    )
+    assert coverage["status"] == "insufficient"
+    assert coverage["broker_reconciled"] is False
+    assert coverage["trade_execution_enabled"] is False
+
+
 def test_daily_fill_manifest_duplicate_csv_rows_are_not_silent_completeness():
     duplicated = FILL_CSV + FILL_CSV.splitlines(keepends=True)[1]
     response = client.post("/workbench/account-snapshot-preview", json={

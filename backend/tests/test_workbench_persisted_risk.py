@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.db.models import PositionBucketSnapshot, PositionSnapshot
 from app.domain.enums import PlanVersionState, PositionBucketType
 from app.workbench.overview import build_overview
 from app.workbench.persisted import _core_only_risk, project_persisted
@@ -19,14 +20,19 @@ class _ReadOnlySession:
     def __init__(self, snapshot, position, buckets, version, plan):
         self.snapshot = snapshot
         self.versions = [(version, plan)] if version is not None else []
-        # positions, their two buckets, then open actions and plan audits.
-        self.rows = iter([[position], buckets] + ([[], []] if version is not None else []))
+        self.position = position
+        self.buckets = buckets
 
     def scalar(self, _statement):
         return self.snapshot
 
-    def scalars(self, _statement):
-        return iter(next(self.rows))
+    def scalars(self, statement):
+        entity = statement.column_descriptions[0]["entity"]
+        if entity is PositionSnapshot:
+            return iter([self.position])
+        if entity is PositionBucketSnapshot:
+            return iter(self.buckets)
+        return iter([])
 
     def execute(self, _statement):
         return self.versions

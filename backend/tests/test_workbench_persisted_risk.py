@@ -118,7 +118,12 @@ def test_missing_or_mismatched_risk_facts_remain_unknown(kwargs):
     assert risk["source"] is None
     assert risk["as_of"] is None
     for plan in overview["effective_plans"]:
-        assert plan["current_risk"] is None
+        if kwargs.get("equity") == "NaN":
+            # Per-position monetary risk is sourced even when the account
+            # denominator is invalid; percentage risk must remain unavailable.
+            assert Decimal(plan["current_risk"]) == Decimal(100)
+        else:
+            assert plan["current_risk"] is None
     assert overview["trade_execution_enabled"] is False
 
 

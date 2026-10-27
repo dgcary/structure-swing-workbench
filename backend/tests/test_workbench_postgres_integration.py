@@ -5,7 +5,7 @@ No real brokerage credentials, holdings, or orders are involved.
 """
 
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -16,10 +16,18 @@ from app.db.models import (
     AccountSnapshot,
     PositionBucketSnapshot,
     PositionSnapshot,
+    TradeAction,
     TradePlan,
     TradePlanVersion,
 )
-from app.domain.enums import PlanStatus, PlanVersionState, PositionBucketType
+from app.domain.enums import (
+    ActionStatus,
+    ActionType,
+    OrderSide,
+    PlanStatus,
+    PlanVersionState,
+    PositionBucketType,
+)
 from app.workbench.overview import build_overview
 from app.workbench.persisted import project_persisted
 
@@ -132,6 +140,74 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                     assert future_plan["pending_actions"] == []
                     assert future_plan["audit_results"] == []
                     assert future_plan["trade_execution_enabled"] is False
+            finally:
+                transaction.rollback()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.skipif(not PG_TEST_URL, reason="需要独立的 PostgreSQL 测试数据库")
+def test_postgres_explicit_manual_action_date_roundtrip_never_enables_trading():
+    """M8 action dates survive the Alembic migration without becoming orders."""
+    engine = create_engine(PG_TEST_URL)
+    try:
+        with engine.connect() as connection:
+            transaction = connection.begin()
+            try:
+                with Session(bind=connection, expire_on_commit=False) as session:
+                    now = datetime.now(UTC)
+                    market_today = datetime.now(timezone(timedelta(hours=8))).date()
+                    plan = TradePlan(
+                        instrument_code="600000", instrument_name="合成测试标的",
+                        status=PlanStatus.ACTIVE, is_active=True,
+                    )
+                    session.add(plan)
+                    session.flush()
+                    version = TradePlanVersion(
+                        plan_id=plan.id, version_number=1,
+                        state=PlanVersionState.EFFECTIVE, is_effective=True,
+                        created_at=now - timedelta(hours=2),
+                        updated_at=now - timedelta(hours=2),
+                    )
+                    session.add(version)
+                    session.flush()
+                    action = TradeAction(
+                        plan_version_id=version.id,
+                        action_type=ActionType.INITIAL_ENTRY,
+                        side=OrderSide.BUY, status=ActionStatus.PLANNED,
+                        planned_for_date=market_today,
+                        created_at=now - timedelta(minutes=20),
+                        updated_at=now - timedelta(minutes=20),
+                    )
+                    session.add(action)
+                    session.flush()
+                    action_id = action.id
+                    session.expire_all()
+                    stored = session.get(TradeAction, action_id)
+                    assert stored is not None
+                    assert stored.planned_for_date == market_today
+                    assert stored.updated_at.utcoffset() is not None
+
+                    overview = build_overview(persisted=project_persisted(session))
+                    assert len(overview["pending_actions"]) == 1
+                    row = overview["pending_actions"][0]
+                    assert row["date_status"] == "today"
+                    assert row["planned_for_date"] == market_today.isoformat()
+                    assert row["executable"] is False
+                    assert overview["trade_execution_enabled"] is False
+
+                    stored.planned_for_date = market_today - timedelta(days=1)
+                    session.flush()
+                    session.expire_all()
+                    past = build_overview(persisted=project_persisted(session))
+                    assert past["pending_actions"][0]["date_status"] == "other_day"
+
+                    session.get(TradeAction, action_id).planned_for_date = None
+                    session.flush()
+                    session.expire_all()
+                    unknown = build_overview(persisted=project_persisted(session))
+                    assert unknown["pending_actions"][0]["date_status"] == "unverified"
+                    assert unknown["pending_actions"][0]["planned_for_date"] is None
             finally:
                 transaction.rollback()
     finally:

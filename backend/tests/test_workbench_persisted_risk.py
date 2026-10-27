@@ -39,15 +39,16 @@ class _ReadOnlySession:
 
 
 def _projection(*, core="100", t="0", cost="10", stop="9",
+                quantity="100", equity="200000",
                 snapshot_at=AT, version_at=AT - timedelta(hours=1),
                 with_plan=True, buckets_complete=True):
     snapshot = SimpleNamespace(
         id="snapshot-1", captured_at=snapshot_at, source="manual",
-        total_equity=Decimal(200000), available_cash=Decimal(100000),
+        total_equity=Decimal(equity), available_cash=Decimal(100000),
     )
     position = SimpleNamespace(
         id="position-1", instrument_code="600000",
-        total_quantity=Decimal(100), market_value=Decimal(1200),
+        total_quantity=Decimal(quantity), market_value=Decimal(1200),
         broker_cost_price=Decimal(10),
     )
     buckets = [
@@ -105,6 +106,9 @@ def test_sourced_core_only_risk_is_historical_not_trade_permission():
     {"snapshot_at": AT.replace(tzinfo=None)},  # SQLite-naive timestamp.
     {"with_plan": False},
     {"buckets_complete": False},
+    {"quantity": "NaN"},
+    {"equity": "NaN"},
+    {"core": "NaN"},
 ])
 def test_missing_or_mismatched_risk_facts_remain_unknown(kwargs):
     overview = _projection(**kwargs)

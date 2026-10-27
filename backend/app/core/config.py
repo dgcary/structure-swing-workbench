@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     # Opt-in read-only DB projections; no broker access or order submission.
     workbench_persisted_read_enabled: bool = False
+    # Date-only edits are disabled unless explicitly opted in and bearer-authenticated.
+    workbench_action_date_write_enabled: bool = False
+    workbench_action_date_write_token: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

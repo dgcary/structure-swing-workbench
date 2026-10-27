@@ -136,6 +136,41 @@ def test_daily_fill_manifest_detects_missing_and_unexpected_ids(
     assert coverage["broker_reconciled"] is False
 
 
+@pytest.mark.parametrize("late_at", [
+    "2026-10-16T15:45:00+08:00",
+    "2026-10-16T07:45:00+00:00",
+])
+def test_daily_fill_manifest_rejects_fills_after_claimed_watermark(late_at):
+    # Identical ID sets do not prove that the declared time range covers all rows.
+    late_csv = FILL_CSV.replace("2026-10-16T11:00:00+08:00", late_at)
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": late_csv, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["outside_watermark_fill_count"] == 1
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_daily_fill_manifest_accepts_fill_at_exact_watermark_only_as_unverified():
+    boundary_csv = FILL_CSV.replace(
+        "2026-10-16T11:00:00+08:00", "2026-10-16T07:30:00+00:00"
+    )
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": boundary_csv, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["outside_watermark_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+
+
 def test_daily_fill_manifest_duplicate_csv_rows_are_not_silent_completeness():
     duplicated = FILL_CSV + FILL_CSV.splitlines(keepends=True)[1]
     response = client.post("/workbench/account-snapshot-preview", json={

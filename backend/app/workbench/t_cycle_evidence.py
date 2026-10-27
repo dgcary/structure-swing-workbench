@@ -45,6 +45,28 @@ def recorded_t_cycles(
         tuple[str, str | None, str | None, str | None],
         list[tuple[ActionType, ExecutionFill]],
     ] = defaultdict(list)
+    # Broker execution references are source-scoped, not cycle-scoped. A
+    # repeated reference across different actions or plan versions is still
+    # conflicting evidence; counting both could certify a fictitious T cycle.
+    seen_fill_ids: set[str] = set()
+    duplicate_fill_ids: set[str] = set()
+    seen_external_ids: set[tuple[str, str]] = set()
+    duplicate_external_ids: set[tuple[str, str]] = set()
+    for _, _, action_type, fill in records:
+        if action_type not in T_LEGS:
+            continue
+        fill_id = str(fill.id)
+        if fill_id in seen_fill_ids:
+            duplicate_fill_ids.add(fill_id)
+        seen_fill_ids.add(fill_id)
+        source = getattr(fill, "source", None)
+        external_id = getattr(fill, "external_execution_id", None)
+        if (isinstance(source, str) and source.strip()
+                and isinstance(external_id, str) and external_id.strip()):
+            reference = (source.strip(), external_id.strip())
+            if reference in seen_external_ids:
+                duplicate_external_ids.add(reference)
+            seen_external_ids.add(reference)
     for symbol, key, action_type, fill in records:
         if action_type in T_LEGS:
             group_key = key.strip() if key and key.strip() else None
@@ -80,6 +102,14 @@ def recorded_t_cycles(
             direction, leg, side = T_LEGS[action_type]
             directions.add(direction)
             stamp = fill.executed_at
+            source = getattr(fill, "source", None)
+            external_id = getattr(fill, "external_execution_id", None)
+            if str(fill.id) in duplicate_fill_ids:
+                conflict = True
+            if (isinstance(source, str) and source.strip()
+                    and isinstance(external_id, str) and external_id.strip()
+                    and (source.strip(), external_id.strip()) in duplicate_external_ids):
+                conflict = True
             # PostgreSQL NUMERIC may contain NaN; never add a non-finite
             # quantity to the running balance (Decimal comparisons can raise).
             valid_quantity = (
@@ -96,10 +126,10 @@ def recorded_t_cycles(
             )
             if (
                 fill.side != side or not valid_quantity or not valid_price
-                or not fill.source or not fill.source.strip()
+                or not isinstance(source, str) or not source.strip()
             ):
                 conflict = True
-            sources.append(f"成交记录/{fill.id}/{fill.source}")
+            sources.append(f"成交记录/{fill.id}/{source}")
             if not valid_quantity:
                 continue
             if stamp is not None and stamp.tzinfo is not None and stamp.utcoffset() is not None:
@@ -149,7 +179,7 @@ def recorded_t_cycles(
             "broker_reconciled": False,
             "trade_execution_enabled": False,
             "warning": (
-                "成交方向、价格、数量、日期或来源冲突；不可用于T次数核验。"
+                "成交方向、价格、数量、日期、来源或重复成交编号冲突；不可用于T次数核验。"
                 if conflict else
                 "仅为数据库中已记录成交的单周期证据；未验证券商成交完整性、"
                 "日内总T次数及T+1可卖数量，不授权交易。"

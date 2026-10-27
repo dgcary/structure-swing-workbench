@@ -137,3 +137,10 @@
 - `backend/app/workbench/t_cycle_evidence.py`：正式成交数量即使平衡，若任一开腿或闭腿缺少成交价格、价格为零/负数或 PostgreSQL NUMERIC 的 `NaN`、正负无穷，也只能标记 `conflict`，不得认证为 `closed`。这属于已有成交证据的格式完整性校验，不计算盈利或自动判断买卖。
 - `backend/tests/test_workbench_t_cycle_evidence.py::test_invalid_execution_price_never_certifies_a_completed_t_cycle`：覆盖两种成交方向的开/闭腿价格异常，确认不会发布已认证的数量或交易许可；原有有效价格测试保持覆盖正常正T/反T及拆单。
 - **验收边界**：此项不能证明券商全量成交、日终未闭环转仓、日内换仓、T+1 可卖数量、含T仓账户风险、真实CSV→PostgreSQL对账或手机 Safari/TLS 实机验收。首页日内 T 总次数及未闭环总数仍保持 `unavailable`。独立 Gate 仍 FAIL，PR #19 保持 Draft；以最新 HEAD 的 GitHub Actions 为准。
+
+
+### 2026-10-28 增量证据：重复券商成交编号不得认证 T 闭环
+
+- `backend/app/workbench/t_cycle_evidence.py`：在按证券、计划版本和 T 周期键汇总之前，先全局核对已记录 T 成交的内部记录 ID 与（来源、外部成交编号）组合；重复的内部 ID 或相同来源下重复的外部成交编号，无论发生在同一周期还是不同计划版本，涉及的周期一律标记 `conflict`。不同来源的相同外部编号不直接视为冲突。缺少外部成交编号的手工记录仍不等于券商已对账。
+- `backend/tests/test_workbench_t_cycle_evidence.py`：新增同周期重复外部编号、跨计划版本重复外部编号、重复内部成交 ID 反例，以及不同来源相同外部编号的正例；仍禁止发布日内完整 T 次数或交易许可。
+- **验收边界**：仅修复已记录成交的去重可信度，不证明券商全量成交水位、日终 T 转仓、日内换仓、T+1 可卖量、含 T 仓风险、脱敏真实 CSV→PostgreSQL 对账或手机 Safari/可信 TLS 实机验收。首页完整 T 次数、未完成 T 总数仍为 `unavailable`；M8 整体 Gate 继续 FAIL，PR #19 保持 Draft，不合并、不部署、不启动 M9。CI 以最新 HEAD 的实际运行结果为准。

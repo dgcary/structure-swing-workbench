@@ -49,7 +49,7 @@ class _ReadSession:
         if entity is AuditResult:
             # The fixture represents an action-linked audit only, not a
             # version-level audit; keep those two queries distinct.
-            return iter([self.audit] if "audit_results.action_id" in str(statement) else [])
+            return iter([self.audit] if "audit_results.action_id" in str(statement.whereclause) else [])
         return iter([])
 
 

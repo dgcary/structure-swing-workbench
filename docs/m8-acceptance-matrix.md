@@ -130,3 +130,10 @@
 - `backend/app/workbench/t_cycle_evidence.py`：PostgreSQL NUMERIC 可能包含 `NaN` 等异常值。原实现虽然标记数量非法，仍将其参与 Decimal 累加和比较，可能触发 `InvalidOperation` 并导致整个总览接口失败。现在只允许**有限且大于零**的 Decimal 数量进入聚合与时间序列；其余数量一律标记 `conflict`，不认证 T 闭环。
 - `backend/tests/test_workbench_t_cycle_evidence.py`：覆盖 NaN、正负无穷、负数、零数量，以及缺失成交来源的异常输入；验证不抛异常、不提供虚假数量和交易许可。
 - 此修复属于已有 T 成交证据投影的可靠性修复，**不补齐**券商成交全量水位、日终转仓、日内换仓、T+1、含 T 仓风险或真实账户与移动端验收。M8 Gate 仍 FAIL，PR 保持 Draft；CI 须以最新 HEAD 实际结果为准。
+
+
+### 2026-10-27 增量证据：T 成交价格完整性校验
+
+- `backend/app/workbench/t_cycle_evidence.py`：正式成交数量即使平衡，若任一开腿或闭腿缺少成交价格、价格为零/负数或 PostgreSQL NUMERIC 的 `NaN`、正负无穷，也只能标记 `conflict`，不得认证为 `closed`。这属于已有成交证据的格式完整性校验，不计算盈利或自动判断买卖。
+- `backend/tests/test_workbench_t_cycle_evidence.py::test_invalid_execution_price_never_certifies_a_completed_t_cycle`：覆盖两种成交方向的开/闭腿价格异常，确认不会发布已认证的数量或交易许可；原有有效价格测试保持覆盖正常正T/反T及拆单。
+- **验收边界**：此项不能证明券商全量成交、日终未闭环转仓、日内换仓、T+1 可卖数量、含T仓账户风险、真实CSV→PostgreSQL对账或手机 Safari/TLS 实机验收。首页日内 T 总次数及未闭环总数仍保持 `unavailable`。独立 Gate 仍 FAIL，PR #19 保持 Draft；以最新 HEAD 的 GitHub Actions 为准。

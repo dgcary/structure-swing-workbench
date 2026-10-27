@@ -309,6 +309,7 @@ def test_postgres_recorded_t_cycle_fills_are_dated_but_not_broker_complete():
                             action_id=sell.id, side=OrderSide.SELL,
                             quantity=Decimal(40), price=Decimal(10),
                             fee=Decimal(0), executed_at=first_at, source="manual",
+                            external_execution_id="shared-with-ordinary",
                         ),
                         ExecutionFill(
                             action_id=sell.id, side=OrderSide.SELL,
@@ -340,6 +341,29 @@ def test_postgres_recorded_t_cycle_fills_are_dated_but_not_broker_complete():
                     assert metrics["t_cycles_today"]["status"] == "unavailable"
                     assert metrics["open_t_cycles"]["status"] == "unavailable"
                     assert overview["trade_execution_enabled"] is False
+
+                    # A non-T fill with the same source-scoped broker ID
+                    # invalidates the T evidence after a real database round-trip.
+                    ordinary = TradeAction(
+                        plan_version_id=version.id,
+                        action_type=ActionType.ORDINARY_ADD,
+                        side=OrderSide.BUY, status=ActionStatus.FILLED,
+                    )
+                    session.add(ordinary)
+                    session.flush()
+                    session.add(ExecutionFill(
+                        action_id=ordinary.id, side=OrderSide.BUY,
+                        quantity=Decimal(40), price=Decimal(10),
+                        fee=Decimal(0), executed_at=first_at + timedelta(seconds=3),
+                        source="manual",
+                        external_execution_id="shared-with-ordinary",
+                    ))
+                    session.flush()
+                    session.expire_all()
+                    reused = project_recorded_t_cycles(session, market_day)
+                    assert len(reused) == 1
+                    assert reused[0]["state"] == "conflict"
+                    assert reused[0]["broker_reconciled"] is False
 
                     session.add(ExecutionFill(
                         action_id=buy.id, side=OrderSide.BUY,

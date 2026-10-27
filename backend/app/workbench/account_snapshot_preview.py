@@ -50,10 +50,17 @@ def _preview_daily_fill_coverage(
         or claim.market_date > now.astimezone(MARKET_TZ).date()
     ):
         raise ValueError("成交清单日期或覆盖水位在未来，不能作为已发生事实")
-    recorded = {
-        fill.fill_id for fill in ledger.fills.values()
+    day_fills = [
+        fill for fill in ledger.fills.values()
         if fill.executed_at.astimezone(MARKET_TZ).date() == claim.market_date
-    }
+    ]
+    recorded = {fill.fill_id for fill in day_fills}
+    # A self-reported watermark cannot cover a fill executed after that instant.
+    # Count such rows even when the self-reported ID set matches exactly.
+    outside_watermark = sum(
+        fill.executed_at.astimezone(UTC) > claim.complete_through.astimezone(UTC)
+        for fill in day_fills
+    )
     expected = set(claim.expected_fill_ids)
     missing = expected - recorded
     unexpected = recorded - expected
@@ -63,13 +70,14 @@ def _preview_daily_fill_coverage(
         and claim.complete_through.astimezone(UTC) >= market_close.astimezone(UTC)
         and bool(expected)
     )
-    mismatch = bool(missing or unexpected or duplicate_rows)
+    mismatch = bool(missing or unexpected or duplicate_rows or outside_watermark)
     status = (
         "mismatch" if mismatch else
         "matched_unverified" if claimed_full_day else "insufficient"
     )
     warning = (
-        "上传成交与自报清单编号不一致，或 CSV 存在重复成交；必须核对原始券商流水。"
+        "上传成交与自报清单编号不一致、CSV 重复，或存在晚于自报水位的成交；"
+        "必须核对原始券商流水。"
         if mismatch else
         "上传成交与自报清单编号一致，但缺少收盘后完整覆盖声明或有效成交；不能认证当日T次数。"
         if not claimed_full_day else
@@ -86,6 +94,7 @@ def _preview_daily_fill_coverage(
         "missing_fill_count": len(missing),
         "unexpected_fill_count": len(unexpected),
         "duplicate_csv_rows": duplicate_rows,
+        "outside_watermark_fill_count": outside_watermark,
         "broker_reconciled": False,
         "trade_execution_enabled": False,
         "warning": warning,

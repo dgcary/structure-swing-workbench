@@ -42,10 +42,10 @@ def test_empty_or_invalid_account_upload_fails_closed() -> None:
 
 
 @pytest.mark.parametrize(("kind", "row"), [
-    ("account", "equity,available_cash,as_of\\n200000,65000,{at}\\n"),
-    ("holdings", "symbol,quantity,cost,as_of\\n600000,100,10,{at}\\n"),
-    ("fills", "fill_id,symbol,side,quantity,price,executed_at\\n"
-              "future-fill,600000,BUY,100,10,{at}\\n"),
+    ("account", "equity,available_cash,as_of\n200000,65000,{at}\n"),
+    ("holdings", "symbol,quantity,cost,as_of\n600000,100,10,{at}\n"),
+    ("fills", "fill_id,symbol,side,quantity,price,executed_at\n"
+              "future-fill,600000,BUY,100,10,{at}\n"),
 ])
 def test_future_dated_uploaded_facts_fail_closed(kind: str, row: str) -> None:
     # All three user-supplied CSV sources must be observed, not future facts.
@@ -63,8 +63,8 @@ def test_small_upload_clock_skew_remains_display_only() -> None:
     response = client.post(
         "/workbench/account-snapshot-preview",
         json={"account": (
-            "equity,available_cash,as_of\\n"
-            f"200000,65000,{near_future}\\n"
+            "equity,available_cash,as_of\n"
+            f"200000,65000,{near_future}\n"
         )},
     )
     assert response.status_code == 200

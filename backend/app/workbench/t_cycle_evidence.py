@@ -66,6 +66,7 @@ def recorded_t_cycles(
         first_close: datetime | None = None
         directions = set()
         sources = []
+        timeline: list[tuple[datetime, str, Decimal]] = []
         conflict = invalid_time or dates != {market_day} or key.startswith("unkeyed:")
         for action_type, fill in legs:
             direction, leg, side = T_LEGS[action_type]
@@ -75,6 +76,8 @@ def recorded_t_cycles(
                     or fill.quantity <= 0 or not fill.source.strip()):
                 conflict = True
             sources.append(f"成交记录/{fill.id}/{fill.source}")
+            if stamp is not None and stamp.tzinfo is not None and stamp.utcoffset() is not None:
+                timeline.append((stamp, leg, fill.quantity))
             if leg == "open":
                 opening += fill.quantity
                 if stamp.tzinfo is not None and stamp.utcoffset() is not None:
@@ -87,6 +90,19 @@ def recorded_t_cycles(
                 or (first_close is not None and
                     (first_open is None or first_close < first_open))):
             conflict = True
+        # A later opening fill cannot retroactively cover an earlier closing
+        # fill, even if aggregate buy/sell quantities eventually match.
+        balance = Decimal(0)
+        previous_stamp: datetime | None = None
+        previous_leg: str | None = None
+        for stamp, leg, quantity in sorted(timeline, key=lambda item: item[0]):
+            if (previous_stamp == stamp and previous_leg is not None
+                    and previous_leg != leg):
+                conflict = True  # Same-timestamp legs have no reliable ordering.
+            balance += quantity if leg == "open" else -quantity
+            if balance < 0:
+                conflict = True
+            previous_stamp, previous_leg = stamp, leg
         state = "conflict" if conflict else "closed" if opening == closing else "open"
         dated = [
             fill.executed_at for _, fill in legs

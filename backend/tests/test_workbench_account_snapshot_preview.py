@@ -426,6 +426,38 @@ def test_missing_or_out_of_range_exchange_calendar_fails_closed(monkeypatch):
     assert response.json()["trade_execution_enabled"] is False
 
 
+@pytest.mark.parametrize("provider_error", [
+    RuntimeError("calendar provider failed"),
+    KeyError("missing exchange session"),
+    IndexError("calendar range lookup failed"),
+    OSError("calendar data unavailable"),
+])
+@pytest.mark.parametrize("expected_ids,expected_status", [
+    (["A01", "A02"], "insufficient"),
+    (["A01"], "mismatch"),
+])
+def test_calendar_provider_failure_fails_closed_without_hiding_csv_discrepancy(
+    monkeypatch, provider_error, expected_ids, expected_status,
+):
+    from app.workbench import account_snapshot_preview as module
+
+    def failing_calendar():
+        raise provider_error
+
+    monkeypatch.setattr(module, "_xshg_calendar", failing_calendar)
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(expected_fill_ids=expected_ids),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["market_calendar_status"] == "unknown"
+    assert coverage["status"] == expected_status
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
 def test_exchange_calendar_session_still_never_authenticates_broker():
     response = client.post("/workbench/account-snapshot-preview", json={
         "fills": FILL_CSV,

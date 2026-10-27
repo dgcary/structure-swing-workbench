@@ -132,6 +132,65 @@ function validHolding(value: unknown): boolean {
   return true;
 }
 
+
+/** Persisted records are display-only and must never be accepted from a CSV preview. */
+function sourcedRow(value: unknown, prefix: string): value is Record<string, unknown> {
+  return record(value) && typeof value.id === "string" && value.id.trim().length > 0 &&
+    typeof value.source === "string" && value.source.startsWith(prefix) &&
+    (value.as_of === null || validObservedAt(value.as_of));
+}
+
+function optionalDecimal(value: unknown): boolean {
+  return value === null || decimalText(value);
+}
+
+function validPlanRow(value: unknown): boolean {
+  return sourcedRow(value, "正式计划版本/") &&
+    typeof value.symbol === "string" && A_SHARE_SYMBOL.test(value.symbol) &&
+    typeof value.name === "string" && value.name.trim().length > 0 &&
+    typeof value.version === "number" && Number.isSafeInteger(value.version) &&
+    value.version > 0 && typeof value.state_zh === "string" &&
+    value.state_zh.trim().length > 0 &&
+    ["invalidation_price", "first_target_price", "initial_risk", "current_risk"]
+      .every((key) => optionalDecimal(value[key])) &&
+    typeof value.warning === "string" && value.warning.trim().length > 0;
+}
+
+function validActionRow(value: unknown): boolean {
+  return sourcedRow(value, "正式交易动作/") &&
+    typeof value.symbol === "string" && A_SHARE_SYMBOL.test(value.symbol) &&
+    typeof value.action_zh === "string" && value.action_zh.trim().length > 0 &&
+    typeof value.status_zh === "string" && value.status_zh.trim().length > 0 &&
+    optionalDecimal(value.planned_price_low) &&
+    optionalDecimal(value.planned_price_high) &&
+    value.executable === false &&
+    typeof value.warning === "string" && value.warning.trim().length > 0;
+}
+
+function validAuditRow(value: unknown): boolean {
+  return sourcedRow(value, "审计记录/") &&
+    typeof value.level === "string" &&
+    ["pass", "warning", "overridable_fail", "hard_fail"].includes(value.level) &&
+    typeof value.level_zh === "string" && value.level_zh.trim().length > 0 &&
+    typeof value.summary === "string" && value.summary.trim().length > 0 &&
+    value.executable === false &&
+    typeof value.warning === "string" && value.warning.trim().length > 0;
+}
+
+function validPersistedSections(
+  data: Record<string, unknown>, mode: "read_only" | "isolated_csv_preview",
+): boolean {
+  const keys = ["effective_plans", "pending_actions", "audit_results"] as const;
+  if (mode === "isolated_csv_preview") return keys.every((key) => data[key] === null);
+  if (keys.every((key) => data[key] === null)) return true;
+  const validators = [validPlanRow, validActionRow, validAuditRow];
+  return keys.every((key, index) => {
+    const rows = data[key];
+    return Array.isArray(rows) && rows.every(validators[index]) &&
+      new Set(rows.map((row: Record<string, unknown>) => row.id)).size === rows.length;
+  });
+}
+
 /** Both live and uploaded CSV overviews are read-only; neither authorizes trading. */
 export function assertReadOnlyOverview(
   payload: unknown, mode: "read_only" | "isolated_csv_preview",
@@ -157,9 +216,7 @@ export function assertReadOnlyOverview(
          data.holdings.every(validHolding) &&
          new Set(data.holdings.map((holding: Record<string, unknown>) =>
            String(holding.symbol).trim())).size === data.holdings.length)) ||
-      data.effective_plans !== null ||
-      data.pending_actions !== null ||
-      data.audit_results !== null) fail();
+      !validPersistedSections(data, mode)) fail();
 
   if (mode === "isolated_csv_preview" &&
       (data.persisted !== false || data.realtime !== false ||

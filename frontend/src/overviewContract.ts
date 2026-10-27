@@ -203,6 +203,8 @@ function validRecordedTCycle(value: unknown): boolean {
       !optionalText(value.as_of) ||
       typeof value.end_of_day_unclosed !== "boolean" ||
       typeof value.requires_reaudit !== "boolean" ||
+      !(value.recorded_daily_limit_alert === null ||
+        value.recorded_daily_limit_alert === true) ||
       value.broker_reconciled !== false ||
       value.trade_execution_enabled !== false ||
       typeof value.warning !== "string" || !value.warning.trim() ||
@@ -290,6 +292,22 @@ export function assertReadOnlyOverview(
           : data.t_cycle_evidence === null ||
             (Array.isArray(data.t_cycle_evidence) &&
              data.t_cycle_evidence.every(validRecordedTCycle))))) fail();
+
+  // The source is partial, but three or more distinct recorded closed pairs
+  // for one symbol/day must trigger a lower-bound warning on every row.
+  // Fewer than three is NOT proof that the trading rule passed.
+  if (Array.isArray(data.t_cycle_evidence)) {
+    const closedByDay = new Map<string, number>();
+    for (const cycle of data.t_cycle_evidence) {
+      const key = cycle.symbol + "/" + cycle.market_date;
+      if (cycle.state === "closed") {
+        closedByDay.set(key, (closedByDay.get(key) ?? 0) + 1);
+      }
+    }
+    if (data.t_cycle_evidence.some((cycle: Record<string, unknown>) =>
+      ((closedByDay.get(String(cycle.symbol) + "/" + String(cycle.market_date)) ?? 0) > 2)
+      !== (cycle.recorded_daily_limit_alert === true))) fail();
+  }
 
   if (mode === "isolated_csv_preview" &&
       (data.persisted !== false || data.realtime !== false ||

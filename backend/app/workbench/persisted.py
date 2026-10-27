@@ -21,6 +21,7 @@ from app.db.models import (
     TradePlanVersion,
 )
 from app.domain.enums import ActionStatus, AuditLevel, PlanVersionState, PositionBucketType
+from app.workbench.t_cycle_evidence import project_recorded_t_cycles
 
 
 def _observed_at(value: datetime | None) -> str | None:
@@ -357,4 +358,6 @@ def project_persisted(session: Session) -> dict[str, object]:
         "effective_plans": plans,
         "pending_actions": actions,
         "audit_results": audits,
+        # Recorded T legs are partial evidence, not a broker-complete daily count.
+        "t_cycle_evidence": project_recorded_t_cycles(session, market_today),
     }

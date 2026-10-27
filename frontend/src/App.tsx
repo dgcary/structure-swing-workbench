@@ -56,6 +56,17 @@ type PersistedAudit = {
   executable: false; warning: string;
 };
 
+type RecordedTCycle = {
+  symbol: string; cycle_key: string | null; plan_version_id: string | null;
+  market_date: string; direction: "positive" | "reverse" | null;
+  state: "open" | "closed" | "conflict";
+  opening_quantity: string | null; closing_quantity: string | null;
+  end_of_day_unclosed: boolean; residual_quantity: string | null;
+  ordinary_effect: string | null; requires_reaudit: boolean;
+  as_of: string | null; sources: string[];
+  broker_reconciled: false; trade_execution_enabled: false; warning: string;
+};
+
 type Overview = {
   schema_version: string;
   mode: "read_only" | "isolated_csv_preview";
@@ -65,6 +76,7 @@ type Overview = {
   effective_plans: PersistedPlan[] | null;
   pending_actions: PersistedAction[] | null;
   audit_results: PersistedAudit[] | null;
+  t_cycle_evidence?: RecordedTCycle[] | null;
   trade_execution_enabled: boolean;
 };
 
@@ -482,7 +494,39 @@ export function App() {
         </section>}
         {section === "成交导入" && <CSVPreview />}
         {section === "K线" && <KlinePreview />}
-        {section === "T仓" && <TCyclePreview />}
+        {section === "T仓" && <>
+          <section className="panel" aria-label="已记录T周期复核">
+            <h2>已记录T周期 · 仅供复核</h2>
+            <p className="notice">这里只显示数据库已有成交的单周期证据，不代表券商全量成交。即使显示“买卖已配对”，当日T次数、T+1可卖数量及交易许可仍未核验。</p>
+            {overview?.mode !== "read_only" ? (
+              <Unavailable title="当前是临时CSV预览" detail="临时导入数据与正式数据库成交不能混合认证；请重置预览后查看已记录T周期。" />
+            ) : !overview.t_cycle_evidence?.length ? (
+              <Unavailable title="暂无可复核的T成交周期" detail="未发现记录不代表当日没有做T；必须核对券商全量成交。" />
+            ) : (
+              <div className="holding-list">
+                {[...overview.t_cycle_evidence].sort((a, b) =>
+                  (a.state === "conflict" ? 0 : a.end_of_day_unclosed ? 1 : a.state === "open" ? 2 : 3) -
+                  (b.state === "conflict" ? 0 : b.end_of_day_unclosed ? 1 : b.state === "open" ? 2 : 3)
+                ).map((cycle, index) => (
+                  <article className="holding-card" key={cycle.symbol + "/" + (cycle.plan_version_id ?? "") + "/" + (cycle.cycle_key ?? "") + "/" + index} role="status">
+                    <h3>{cycle.symbol} · {cycle.direction === "positive" ? "正T" : cycle.direction === "reverse" ? "反T" : "方向冲突"} · {
+                      cycle.state === "conflict" ? "成交证据冲突" :
+                      cycle.end_of_day_unclosed ? "收盘未闭环，待重审" :
+                      cycle.state === "open" ? "已记录未闭环" : "已记录买卖配对（未对账）"
+                    }</h3>
+                    <p>交易日：{cycle.market_date} · 周期标识：{cycle.cycle_key ?? "缺失"}</p>
+                    <p>第一腿数量：{cycle.opening_quantity ?? "不可核实"} · 第二腿数量：{cycle.closing_quantity ?? "不可核实"}</p>
+                    {cycle.end_of_day_unclosed && <p className="audit-unknown">剩余数量：{cycle.residual_quantity} · {cycle.ordinary_effect} · 必须重新审计</p>}
+                    <p>记录时间：{cycle.as_of ?? "不可核实"} · 成交来源记录：{cycle.sources.length} 条</p>
+                    <p>{cycle.warning}</p>
+                    <p className="audit-unknown">券商全量未对账 · 不可执行交易</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+          <TCyclePreview />
+        </>}
         {section === "历史计划" && <LocalPlanDrafts history />}
         {section === "复盘" && <LocalReview />}
         {section === "研究样例" && <ResearchDemo />}

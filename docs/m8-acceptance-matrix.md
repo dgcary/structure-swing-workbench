@@ -176,3 +176,12 @@
 - **非认证语义**：少于 3 个时该字段为 `null`（未证明超限，**不是**合规通过）；即使超过 2 个也仅表示已记录配对的下界告警，不能证明券商全量成交已对账。首页 `t_cycles_today`、`open_t_cycles` 保持 `unavailable`，`broker_reconciled=false`、`trade_execution_enabled=false`；不写入交易状态、不修改主策略、不生成下单许可。
 - `backend/tests/test_workbench_t_cycle_evidence.py`：3 个配对触发告警、2 个配对加冲突周期不误判、按证券隔离以及跨计划版本累计；`frontend/src/overviewContract.ts` 强制逐行标记与同证券/日期已记录闭环下界一致，拒绝伪造已合规/遗漏告警；`frontend/tests/tCycleEvidenceContract.test.mjs` 验证 3 个配对、缺失标记、伪造标记及跨证券反例。T 仓页面突出显示疑似超限。
 - **Gate：增量待独立审核，M8 整体 FAIL。** 仍缺券商全量成交水位/逐日完整性、可信日终 BROKEN 转普通加减仓、日内换仓、T+1 可卖数量、CORE/T 独立成本与风险、脱敏真实 CSV→隔离 PostgreSQL 对账及移动 Safari/可信 TLS 实机验收。CI 以本轮最终 HEAD 的 Actions 结果为准，不把合成测试冒充真实账户证据。
+
+
+### 2026-10-28 增量：隔离 CSV 每日成交清单与自报覆盖水位核对
+
+- `backend/app/workbench/account_snapshot_preview.py` 在原有 **仅请求内存、无数据库写入** 的账户 CSV 预览中，增加可选 `daily_fill_claim`：交易日、导出时间、覆盖至时间、自报导出编号、自报逐笔成交编号及是否声明覆盖全天。必须同时提供成交 CSV；时间须带时区，覆盖时间不得晚于导出时间，不接受未来时间、重复/空白自报成交编号。
+- 按 **上海交易日** 比对上传 CSV 与自报成交编号集合，输出缺失数、额外数、重复 CSV 行数；即使集合完全一致，也只返回 `matched_unverified`（自报清单一致、**未验证**），不会返回 broker verified。缺失、额外、重复行返回 `mismatch`；收盘前水位、无全天声明等返回 `insufficient`。无声明则 `daily_fill_coverage=null`，不能推断零成交。
+- **重要证据边界**：用户可以同时编辑 CSV 和清单，因此“自报编号一致”不构成独立券商全量成交认证。接口仍 `persisted=false`、`realtime=false`、`full_account_verified=false`、`broker_reconciled=false`、`trade_execution_enabled=false`；首页当日 T 总次数和未完成 T 总数继续 `unavailable`，不允许据此执行日终正式转仓、T+1 或账户风险认证。
+- `backend/tests/test_workbench_account_snapshot_preview.py` 新增匹配但不认证、缺失/额外编号、重复 CSV、收盘前水位、时区/重复声明/导出顺序/未来时间、缺少成交 CSV 及未声明情形的回归测试。
+- **Gate：仅完成自报清单结构核对的第一步，M8 整体仍 FAIL。** 后续必须引入独立、可信的券商导出完整性证据（含账户身份、日期范围、来源真实性和可复核水位）、CSV→隔离 PostgreSQL 对账，才能考虑认证全量日内 T 统计与日终状态转换；还缺日内换仓、T+1、CORE/T 风险和手机 Safari/TLS 实机验收。

@@ -23,7 +23,7 @@
 | 验收项 | 证据 | 当前结论 |
 | --- | --- | --- |
 | 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本，并按 A 股市场当日日期排除显式 `valid_until` 已过期版本；`App.tsx` 显示失效价、第一目标、版本与来源；CORE-only 且时序可核验时显示历史风险估算（元）；`test_workbench_persisted_risk.py::test_expired_effective_flag_does_not_publish_an_active_plan_or_risk`、`test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk` | 部分通过：已过期版本及时间戳明显超前的版本不再作为当前有效计划展示，也不提供账户风险指标；无时区的 SQLite 记录仍仅作未认证历史展示；缺真实 PostgreSQL 数据联调、T仓风险及初始风险 |
-| 今日人工计划动作 | 新增 `TradeAction.planned_for_date` 可空人工指定 A 股市场日期（Alembic 0004）；仅当动作记录时间可信且该日期等于上海市场当日时标记为“今日人工计划”，其他动作单独展示；全部 `executable=false` | **部分通过**：日期语义不再由 `updated_at` 猜测，缺正式人工录入/真实账户端到端验证，仍不能当作交易许可 |
+| 今日人工计划动作 | 新增 `TradeAction.planned_for_date` 可空人工指定 A 股市场日期（Alembic 0004）；仅当动作记录时间可信且该日期等于上海市场当日时标记为“今日人工计划”，其他动作单独展示；全部 `executable=false` | **部分通过**：日期语义不再由 `updated_at` 猜测；已新增默认关闭、管理员令牌保护的正式日期录入/保存/刷新路径及 PostgreSQL 合成数据往返验证，仍缺真实账户与手机端验收，不构成交易许可 |
 | 正式历史审计 | 从正式版本/动作关联的 `AuditResult` 读取；非通过项优先、通过项折叠；始终不可执行 | 部分通过：历史审计不等于当前实时审计，尚无完整可执行性判定 |
 | 核心仓/T仓 | 仅同一 `PositionSnapshot` 的 CORE、T 两类桶都存在、非负且数量严格对账时显示 | 部分通过：没有可卖数量/T+1 的来源验证 |
 | 账户与持仓快照 | 只读投影、显式来源与时间；无时区的时间不冒充可验证事实 | 部分通过：SQLite 丢失时区时主动隐藏；新增 PostgreSQL TIMESTAMPTZ 实库往返测试（合成数据），仍缺真实账户数据 |
@@ -65,7 +65,7 @@
 
 **M8 暂不通过，PR #19 保持 Draft，不合并、不部署、不启动 M9。**
 
-下一轮仅在原分支继续补齐：含T仓时独立止损风险、T 闭环/换仓可追溯来源、今日动作日期语义、实际数据接入与完整移动端验收。不得凭历史审计、草稿、模拟行情或推断价格生成交易许可；如所需模型字段与既定规则发生冲突，先记录阻塞而不是擅自修改交易体系。
+下一轮仅在原分支继续补齐：含T仓时独立止损风险、T 闭环/换仓/T+1可卖数量的可追溯来源、真实账户/CSV对账与完整移动端验收。不得凭历史审计、草稿、模拟行情或推断价格生成交易许可；如所需模型字段与既定规则发生冲突，先记录阻塞而不是擅自修改交易体系。
 
 
 ### 2026-10-27 增量证据：今日人工计划动作的日期来源
@@ -73,7 +73,7 @@
 - `backend/app/db/models.py` 与 Alembic `0004_m8_action_planned_for_date`：为正式交易动作新增**可空、仅由用户明确填写**的 `planned_for_date`，不从创建时间、更新时间、行情或 AI 推断。
 - `backend/app/workbench/persisted.py`：仅当动作的来源更新时间具备可信时区、未超出未来 5 分钟容差，并且用户日期恰好是上海市场当天，才标记 `date_status=today`。其他已记录未完成动作仍只读展示，日期不可信时 `planned_for_date=null`、`date_status=unverified`。
 - `frontend/src/App.tsx` 和 `overviewContract.ts`：今日人工计划与其他未完成动作分组；拒绝缺日期、非法日期或缺可信时间却声称“今日”的协议数据。无今日计划不等于今日无事项；所有动作仍 `executable=false`。
-- 本项仅完善**日期字段、只读来源与页面语义**，尚未提供正式动作的人工日期录入流程、实时审计或真实账户对账；不得把这一增量判定为完整“今日待执行动作”验收通过。CI 结果以最新 HEAD 为准。
+- 此前增量仅完善**日期字段、只读来源与页面语义**；现已在下节补充正式动作的管理员授权日期写入，但仍未完成实时审计、真实账户对账或手机实机验收；不得判定整个“今日待执行动作”通过。CI 结果以最新 HEAD 为准。
 
 ### 2026-10-27 增量证据：正式动作人工日期写入（安全默认关闭）
 
@@ -82,3 +82,5 @@
 - `frontend/src/App.tsx`：中文日期表单位于已记录的「计划中」正式动作下，用户手工输入日期或清空；提交后重新读取只读总览，验证协议并更新今日/非今日分组。所有显示仍为 `executable=false`，不提供下单入口。
 - `backend/tests/test_workbench_action_date.py`：默认关闭、短令牌、错误令牌、严格日期格式、时间戳并发冲突、已审计动作/过期计划等反例；`test_workbench_postgres_integration.py`：迁移后隔离 PostgreSQL 内经正式更新服务写入日期，再读取并验证分组，测试事务回滚。
 - **验收边界**：此功能提供正式动作日期录入/保存/刷新路径，但真实用户身份认证、券商来源对账、正式动作创建/审计全流程和手机实机操作尚未验收。管理员令牌是有限的 opt-in 控制，不等于多用户授权系统；不能将此项判为整个 M8 Gate 通过。CI 以本次最新 HEAD 的实际运行结果为准。
+
+- **本轮最新 CI 证据（HEAD `697467dc`）**：推送 [#40505288890](https://github.com/dgcary/structure-swing-workbench/actions/runs/40505288890) 与 PR [#40505295033](https://github.com/dgcary/structure-swing-workbench/actions/runs/40505295033) 均 completed/success；后端 426 passed、Ruff 通过、PostgreSQL 16/Alembic 迁移及正式日期写入往返通过，前端 89/89 测试与生产构建通过。此前中间提交的 TypeScript 回调遗漏、Ruff 导入排序、日期参数类型和时区引用失败已在本 HEAD 修复。CI 仅证明代码/合成数据测试通过，不代表真实账户或移动端实机通过。

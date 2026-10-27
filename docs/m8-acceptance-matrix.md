@@ -10,7 +10,7 @@
 | 可用资金 | 同上，`AccountSnapshot.available_cash` | 部分通过：来源不足仍为“未接入” |
 | 当前总仓位 | `backend/app/workbench/persisted.py`；同一账户快照中所有持仓市值与总权益均存在且数值自洽时计算 | 部分通过：尚无完整账户核验与真实数据库联调 |
 | 持仓股票数 | 同一账户快照内正数量标的计数；空快照不伪装为零持仓 | 部分通过：仅代表该快照范围，不保证券商账户全量 |
-| 当前账户总风险 | 尚无同时核验计划止损、真实持仓与风险暴露的完整数据路径 | **未通过** |
+| 当前账户总风险 | `persisted.py` 仅在全部有仓标的均有时间匹配的有效计划、CORE/T 精确分配、T=0、CORE 策略成本与失效价时，按历史快照计算 `(Σ核心仓数量×(策略成本−失效价))/权益×100%`；`test_workbench_persisted_risk.py` | **部分通过**：具备完整核心仓历史证据时可计算；含T仓、缺计划/止损/成本或时序冲突时仍为“未接入”，不能冒充实时账户风险 |
 | 当日 T 次数 | 尚无可复核的持久化完整 T 闭环事实来源 | **未通过** |
 | 未完成 T 循环 | 尚无可复核的持久化未闭环周期来源 | **未通过** |
 | 日内换仓状态 | 尚无已核验的换仓事实模型/来源 | **未通过** |
@@ -22,7 +22,7 @@
 
 | 验收项 | 证据 | 当前结论 |
 | --- | --- | --- |
-| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本；`App.tsx` 显示失效价、第一目标、版本与来源 | 部分通过：缺真实 PostgreSQL 数据联调；风险仍未知 |
+| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本；`App.tsx` 显示失效价、第一目标、版本与来源；在 CORE-only 且时序可核验时额外显示当前风险历史估算（元），初始风险仍未知 | 部分通过：缺真实 PostgreSQL 数据联调；T仓风险及初始风险未接入 |
 | 已记录未完成动作 | 从正式有效版本读取计划中/已审计/执行中/部分成交的动作；全部 `executable=false` | 部分通过：缺经核验的计划执行日期，**不能称为今日待办** |
 | 正式历史审计 | 从正式版本/动作关联的 `AuditResult` 读取；非通过项优先、通过项折叠；始终不可执行 | 部分通过：历史审计不等于当前实时审计，尚无完整可执行性判定 |
 | 核心仓/T仓 | 仅同一 `PositionSnapshot` 的 CORE、T 两类桶都存在、非负且数量严格对账时显示 | 部分通过：没有可卖数量/T+1 的来源验证 |
@@ -37,7 +37,7 @@
 - 首页：`frontend/src/App.tsx`；中文导航涵盖总览、计划管理、审计结果、K线、成交导入、T仓、历史计划、复盘、研究样例。
 - 本机草稿与复盘：`LocalPlanDrafts.tsx`、`LocalReview.tsx`；相关本机存储与版本测试位于 `frontend/tests/`。
 - 只读来源协议：`frontend/src/overviewContract.ts`、`frontend/tests/overviewContract.test.mjs`、`frontend/tests/persistedOverviewContract.test.mjs`。
-- 后端数据与无来源保护：`backend/tests/test_workbench_overview.py`、`test_workbench_holdings.py`、`test_workbench_persisted_projection.py`。
+- 后端数据与无来源保护：`backend/tests/test_workbench_overview.py`、`test_workbench_holdings.py`、`test_workbench_persisted_projection.py`、`test_workbench_persisted_risk.py`（T仓/缺成本/缺计划/时序不一致均 fail-closed）。
 - 已核验的阶段 CI：提交 `233871ee` 对应的 Actions 成功，前端 88 项、后端 386 项通过；**最新 HEAD 仍须重新确认**。
 - **未完成实机证据**：手机宽度截图、全部导航入口人工点击、真实 PostgreSQL 时区/快照联调、真实 CSV 样例对账。不得把这些标记为 PASS。
 
@@ -45,4 +45,4 @@
 
 **M8 暂不通过，PR #19 保持 Draft，不合并、不部署、不启动 M9。**
 
-下一轮仅在原分支继续补齐：账户风险、T 闭环/换仓可追溯来源、今日动作日期语义、实际数据接入与完整移动端验收。不得凭历史审计、草稿、模拟行情或推断价格生成交易许可；如所需模型字段与既定规则发生冲突，先记录阻塞而不是擅自修改交易体系。
+下一轮仅在原分支继续补齐：含T仓时独立止损风险、T 闭环/换仓可追溯来源、今日动作日期语义、实际数据接入与完整移动端验收。不得凭历史审计、草稿、模拟行情或推断价格生成交易许可；如所需模型字段与既定规则发生冲突，先记录阻塞而不是擅自修改交易体系。

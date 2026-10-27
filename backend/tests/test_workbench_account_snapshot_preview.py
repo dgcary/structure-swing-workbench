@@ -328,3 +328,43 @@ def test_daily_fill_manifest_not_provided_remains_explicitly_unavailable():
     assert response.status_code == 200, response.text
     assert response.json()["daily_fill_coverage"] is None
     assert response.json()["full_account_verified"] is False
+
+
+def test_weekend_self_report_cannot_claim_a_complete_a_share_market_day():
+    # Even internally matching IDs cannot make Sunday an A-share session.
+    sunday_csv = FILL_CSV.replace("2026-10-16", "2026-10-18")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": sunday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-18",
+            complete_through="2026-10-18T15:30:00+08:00",
+            exported_at="2026-10-18T16:00:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_weekend_manifest_discrepancy_remains_a_mismatch():
+    sunday_csv = FILL_CSV.replace("2026-10-16", "2026-10-18")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": sunday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-18",
+            complete_through="2026-10-18T15:30:00+08:00",
+            exported_at="2026-10-18T16:00:00+08:00",
+            expected_fill_ids=["A01"],
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["unexpected_fill_count"] == 1
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False

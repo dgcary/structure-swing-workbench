@@ -393,3 +393,76 @@ def test_closed_or_conflicting_t_never_claims_end_of_day_ordinary_conversion():
         assert cycle["ordinary_effect"] is None
         assert cycle["requires_reaudit"] is False
         assert cycle["trade_execution_enabled"] is False
+
+
+def _completed_t_pair(key: str, start_hour: int, *, symbol: str = "600000"):
+    return [
+        _record(
+            ActionType.POSITIVE_T_SELL,
+            _fill(f"{symbol}-{key}-open", OrderSide.SELL, "10", start_hour),
+            key=key, symbol=symbol,
+        ),
+        _record(
+            ActionType.POSITIVE_T_BUYBACK,
+            _fill(f"{symbol}-{key}-close", OrderSide.BUY, "10", start_hour + 1),
+            key=key, symbol=symbol,
+        ),
+    ]
+
+
+def test_three_recorded_closed_t_cycles_warn_without_claiming_broker_reconciliation():
+    """Three independent closed pairs are a lower-bound alert, not a daily total."""
+    rows = (
+        _completed_t_pair("one", 1)
+        + _completed_t_pair("two", 3)
+        + _completed_t_pair("three", 5)
+    )
+    cycles = recorded_t_cycles(rows, DAY, now=NOW)
+    assert len(cycles) == 3
+    assert all(cycle["state"] == "closed" for cycle in cycles)
+    assert all(cycle["recorded_daily_limit_alert"] is True for cycle in cycles)
+    assert all("最多2次" in cycle["warning"] for cycle in cycles)
+    assert all(cycle["broker_reconciled"] is False for cycle in cycles)
+    assert all(cycle["trade_execution_enabled"] is False for cycle in cycles)
+
+
+def test_two_pairs_or_incomplete_third_cannot_be_called_compliant_or_over_limit():
+    rows = _completed_t_pair("one", 1) + _completed_t_pair("two", 3)
+    # An invalid third cycle is not a third confirmed closed pair.
+    rows += [
+        _record(
+            ActionType.POSITIVE_T_SELL,
+            _fill("invalid-third", OrderSide.BUY, "10", 5),
+            key="three",
+        ),
+    ]
+    cycles = recorded_t_cycles(rows, DAY, now=NOW)
+    assert len(cycles) == 3
+    assert {cycle["state"] for cycle in cycles} == {"closed", "conflict"}
+    assert all(cycle["recorded_daily_limit_alert"] is None for cycle in cycles)
+    assert all(cycle["broker_reconciled"] is False for cycle in cycles)
+
+
+def test_daily_limit_lower_bound_is_per_symbol_not_per_plan_or_whole_account():
+    rows = (
+        _completed_t_pair("one", 1)
+        + _completed_t_pair("two", 3)
+        + _completed_t_pair("other", 5, symbol="000001")
+    )
+    cycles = recorded_t_cycles(rows, DAY, now=NOW)
+    assert len(cycles) == 3
+    assert all(cycle["recorded_daily_limit_alert"] is None for cycle in cycles)
+    # A third same-symbol pair across a separate plan version still counts.
+    third = _completed_t_pair("three", 5)
+    for _, _, _, fill in third:
+        fill.action = SimpleNamespace(plan_version_id="another-version")
+    cycles = recorded_t_cycles(rows + third, DAY, now=NOW)
+    assert len(cycles) == 4
+    assert all(
+        cycle["recorded_daily_limit_alert"] is True
+        for cycle in cycles if cycle["symbol"] == "600000"
+    )
+    assert all(
+        cycle["recorded_daily_limit_alert"] is None
+        for cycle in cycles if cycle["symbol"] == "000001"
+    )

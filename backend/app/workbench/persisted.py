@@ -40,6 +40,18 @@ def _fact(value: Decimal | int | str | None, source: str, at: str | None) -> dic
     return {"value": str(value), "source": source, "as_of": at}
 
 
+def _core_only_risk(quantity: Decimal, cost: Decimal | None, stop: Decimal | None) -> Decimal | None:
+    """Historical CORE downside only; T inventory requires its own verified stop."""
+    if (
+        quantity <= 0 or not quantity.is_finite()
+        or cost is None or not cost.is_finite()
+        or stop is None or not stop.is_finite()
+        or stop <= 0 or cost <= stop
+    ):
+        return None
+    return quantity * (cost - stop)
+
+
 def project_persisted(session: Session) -> dict[str, object]:
     """Read only existing records; no migrations, writes or synthetic data."""
     snapshot = session.scalar(
@@ -49,9 +61,18 @@ def project_persisted(session: Session) -> dict[str, object]:
     )
     metrics: dict[str, dict] = {}
     holdings: list[dict] | None = None
+    # Risk is never inferred from broker display cost or an unverified T stop.
+    risk_inventory: dict[str, tuple[Decimal, Decimal]] = {}
+    risk_complete = False
+    snapshot_at: datetime | None = None
+    snapshot_equity: Decimal | None = None
+    snapshot_source = ""
     if snapshot is not None:
         at = _observed_at(snapshot.captured_at)
         source = f"账户快照/{snapshot.source}/{snapshot.id}"
+        snapshot_at = snapshot.captured_at if at is not None else None
+        snapshot_equity = snapshot.total_equity
+        snapshot_source = source
         for key, value in (
             ("equity", snapshot.total_equity),
             ("available_cash", snapshot.available_cash),
@@ -70,7 +91,9 @@ def project_persisted(session: Session) -> dict[str, object]:
                          row.instrument_code) for row in positions
         ):
             holdings = []
-            valid = all(row.total_quantity >= 0 for row in positions)
+            valid = all(row.total_quantity.is_finite() and row.total_quantity >= 0
+                        for row in positions)
+            risk_complete = valid and snapshot.total_equity.is_finite() and snapshot.total_equity > 0
             for position in positions:
                 buckets = list(session.scalars(
                     select(PositionBucketSnapshot).where(
@@ -88,6 +111,23 @@ def project_persisted(session: Session) -> dict[str, object]:
                 )
                 if not consistent:
                     core = t_qty = None
+                # An exact CORE/T split is necessary but insufficient for risk:
+                # any T quantity requires a separate T stop absent from M1 snapshots.
+                if position.total_quantity > 0:
+                    core_bucket = next(
+                        (row for row in buckets
+                         if row.bucket_type is PositionBucketType.CORE), None
+                    )
+                    core_cost = (
+                        core_bucket.strategy_cost_price if core_bucket is not None else None
+                    )
+                    if (
+                        consistent and t_qty == 0 and core == position.total_quantity
+                        and core_cost is not None and core_cost.is_finite() and core_cost > 0
+                    ):
+                        risk_inventory[position.instrument_code] = (core, core_cost)
+                    else:
+                        risk_complete = False
                 conflict = position.total_quantity < 0
                 holdings.append({
                     "symbol": position.instrument_code,
@@ -140,8 +180,23 @@ def project_persisted(session: Session) -> dict[str, object]:
     plans = []
     actions = []
     audit_rows = []
+    risk_by_symbol: dict[str, Decimal] = {}
     for version, plan in versions:
         source = f"正式计划版本/{version.id}"
+        current_risk = None
+        # Compare two dated facts, never apply a newer plan to an older snapshot.
+        if (
+            snapshot_at is not None and _observed_at(version.updated_at) is not None
+            and version.updated_at <= snapshot_at
+            and plan.instrument_code in risk_inventory
+            and plan.instrument_code not in risk_by_symbol
+        ):
+            quantity, cost = risk_inventory[plan.instrument_code]
+            current_risk = _core_only_risk(
+                quantity, cost, version.structure_invalidation_price
+            )
+            if current_risk is not None:
+                risk_by_symbol[plan.instrument_code] = current_risk
         plans.append({
             "id": version.id, "symbol": plan.instrument_code,
             "name": plan.instrument_name,
@@ -149,9 +204,15 @@ def project_persisted(session: Session) -> dict[str, object]:
             "state_zh": version.state.label_zh,
             "invalidation_price": _number(version.structure_invalidation_price),
             "first_target_price": _number(version.first_target_price),
-            "initial_risk": None, "current_risk": None,
-            "source": source, "as_of": _observed_at(version.updated_at),
-            "warning": "仅为已存储的计划状态；未验证完整账户及最新审计，不构成交易许可。",
+            "initial_risk": None, "current_risk": _number(current_risk),
+            "source": source + (f" + {snapshot_source}/核心仓" if current_risk is not None else ""),
+            "as_of": _observed_at(version.updated_at),
+            "warning": (
+                "当前风险为历史快照的核心仓价差估算（元）；"
+                "不含未核验T仓、费用或实时变化，不构成交易许可。"
+                if current_risk is not None else
+                "仅为已存储的计划状态；风险来源不足，未验证完整账户及最新审计。"
+            ),
         })
         for action in session.scalars(
             select(TradeAction).where(
@@ -179,6 +240,19 @@ def project_persisted(session: Session) -> dict[str, object]:
         audit_rows.extend(session.scalars(
             select(AuditResult).where(AuditResult.plan_version_id == version.id)
         ))
+
+    # Never label a partial risk sum as total account risk.
+    if (
+        risk_complete and risk_inventory
+        and len(risk_by_symbol) == len(risk_inventory)
+        and snapshot_equity is not None and snapshot_equity > 0
+        and snapshot_at is not None
+    ):
+        account_risk = sum(risk_by_symbol.values(), Decimal(0)) * Decimal(100) / snapshot_equity
+        metrics["account_risk"] = _fact(
+            account_risk, snapshot_source + "/有效计划止损/核心仓策略成本",
+            _observed_at(snapshot_at),
+        )
 
     audits = []
     for row in sorted(audit_rows, key=lambda item: (item.created_at, item.id)):

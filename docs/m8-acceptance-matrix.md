@@ -22,7 +22,7 @@
 
 | 验收项 | 证据 | 当前结论 |
 | --- | --- | --- |
-| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本，并按 A 股市场当日日期排除显式 `valid_until` 已过期版本；`App.tsx` 显示失效价、第一目标、版本与来源；CORE-only 且时序可核验时显示历史风险估算（元）；`test_workbench_persisted_risk.py::test_expired_effective_flag_does_not_publish_an_active_plan_or_risk` | 部分通过：过期版本不再冒充当前计划或提供风险指标；缺真实 PostgreSQL 数据联调、T仓风险及初始风险 |
+| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本，并按 A 股市场当日日期排除显式 `valid_until` 已过期版本；`App.tsx` 显示失效价、第一目标、版本与来源；CORE-only 且时序可核验时显示历史风险估算（元）；`test_workbench_persisted_risk.py::test_expired_effective_flag_does_not_publish_an_active_plan_or_risk`、`test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk` | 部分通过：已过期版本及时间戳明显超前的版本不再作为当前有效计划展示，也不提供账户风险指标；无时区的 SQLite 记录仍仅作未认证历史展示；缺真实 PostgreSQL 数据联调、T仓风险及初始风险 |
 | 已记录未完成动作 | 从正式有效版本读取计划中/已审计/执行中/部分成交的动作；全部 `executable=false` | 部分通过：缺经核验的计划执行日期，**不能称为今日待办** |
 | 正式历史审计 | 从正式版本/动作关联的 `AuditResult` 读取；非通过项优先、通过项折叠；始终不可执行 | 部分通过：历史审计不等于当前实时审计，尚无完整可执行性判定 |
 | 核心仓/T仓 | 仅同一 `PositionSnapshot` 的 CORE、T 两类桶都存在、非负且数量严格对账时显示 | 部分通过：没有可卖数量/T+1 的来源验证 |

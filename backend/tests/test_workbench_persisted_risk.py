@@ -11,7 +11,7 @@ from app.domain.enums import PlanVersionState, PositionBucketType
 from app.workbench.overview import build_overview
 from app.workbench.persisted import _core_only_risk, project_persisted
 
-AT = datetime(2026, 10, 27, 9, 30, tzinfo=UTC)
+AT = datetime.now(UTC) - timedelta(hours=1)
 
 
 class _ReadOnlySession:
@@ -178,3 +178,18 @@ def test_expired_effective_flag_does_not_publish_an_active_plan_or_risk():
     still_valid = _projection(valid_until=market_today)
     assert len(still_valid["effective_plans"]) == 1
     assert _metric(still_valid, "account_risk")["status"] == "available"
+
+
+def test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk():
+    # Clock errors and predated records must not look like observed account facts.
+    future = datetime.now(UTC) + timedelta(days=1)
+    snapshot = _projection(snapshot_at=future)
+    assert snapshot["holdings"] is None
+    assert _metric(snapshot, "equity")["status"] == "unavailable"
+    assert _metric(snapshot, "account_risk")["status"] == "unavailable"
+    assert snapshot["trade_execution_enabled"] is False
+
+    plan = _projection(version_at=future)
+    assert _metric(plan, "account_risk")["status"] == "unavailable"
+    assert plan["effective_plans"][0]["as_of"] is None
+    assert plan["trade_execution_enabled"] is False

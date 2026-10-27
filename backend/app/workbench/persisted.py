@@ -77,7 +77,10 @@ def project_persisted(session: Session) -> dict[str, object]:
             ("equity", snapshot.total_equity),
             ("available_cash", snapshot.available_cash),
         ):
-            fact = _fact(_number(value), source, at)
+            fact = _fact(
+                _number(value) if value.is_finite() and value >= 0 else None,
+                source, at,
+            )
             if fact is not None:
                 metrics[key] = fact
         positions = list(session.scalars(
@@ -106,14 +109,16 @@ def project_persisted(session: Session) -> dict[str, object]:
                 consistent = (
                     len(allocations) == len(buckets) and
                     set(allocations) == {PositionBucketType.CORE, PositionBucketType.T} and
-                    all(value >= 0 for value in allocations.values()) and
+                    all(value.is_finite() and value >= 0
+                        for value in allocations.values()) and
+                    position.total_quantity.is_finite() and
                     sum(allocations.values(), Decimal(0)) == position.total_quantity
                 )
                 if not consistent:
                     core = t_qty = None
                 # An exact CORE/T split is necessary but insufficient for risk:
                 # any T quantity requires a separate T stop absent from M1 snapshots.
-                if position.total_quantity > 0:
+                if position.total_quantity.is_finite() and position.total_quantity > 0:
                     core_bucket = next(
                         (row for row in buckets
                          if row.bucket_type is PositionBucketType.CORE), None
@@ -128,11 +133,16 @@ def project_persisted(session: Session) -> dict[str, object]:
                         risk_inventory[position.instrument_code] = (core, core_cost)
                     else:
                         risk_complete = False
-                conflict = position.total_quantity < 0
+                if not position.total_quantity.is_finite():
+                    risk_complete = False
+                conflict = (
+                    not position.total_quantity.is_finite()
+                    or position.total_quantity < 0
+                )
                 holdings.append({
                     "symbol": position.instrument_code,
                     "status": "conflict" if conflict else (
-                        "snapshot" if position.broker_cost_price is not None else "partial"
+                        "snapshot" if _number(position.broker_cost_price) is not None else "partial"
                     ),
                     "quantity": None if conflict else _number(position.total_quantity),
                     "broker_display_cost": (
@@ -154,8 +164,9 @@ def project_persisted(session: Session) -> dict[str, object]:
                     sum(row.total_quantity > 0 for row in positions), source, at
                 )
                 if (
-                    snapshot.total_equity > 0 and
-                    all(row.market_value is not None and row.market_value >= 0
+                    snapshot.total_equity.is_finite() and snapshot.total_equity > 0 and
+                    all(row.market_value is not None and row.market_value.is_finite()
+                        and row.market_value >= 0
                         for row in positions)
                 ):
                     exposure = sum((row.market_value for row in positions), Decimal(0))

@@ -185,3 +185,10 @@
 - **重要证据边界**：用户可以同时编辑 CSV 和清单，因此“自报编号一致”不构成独立券商全量成交认证。接口仍 `persisted=false`、`realtime=false`、`full_account_verified=false`、`broker_reconciled=false`、`trade_execution_enabled=false`；首页当日 T 总次数和未完成 T 总数继续 `unavailable`，不允许据此执行日终正式转仓、T+1 或账户风险认证。
 - `backend/tests/test_workbench_account_snapshot_preview.py` 新增匹配但不认证、缺失/额外编号、重复 CSV、收盘前水位、时区/重复声明/导出顺序/未来时间、缺少成交 CSV 及未声明情形的回归测试。
 - **Gate：仅完成自报清单结构核对的第一步，M8 整体仍 FAIL。** 后续必须引入独立、可信的券商导出完整性证据（含账户身份、日期范围、来源真实性和可复核水位）、CSV→隔离 PostgreSQL 对账，才能考虑认证全量日内 T 统计与日终状态转换；还缺日内换仓、T+1、CORE/T 风险和手机 Safari/TLS 实机验收。
+
+
+### 2026-10-28 增量证据：自报成交水位之外的迟到记录
+
+- **状态：增量代码与自动测试已提交；M8 整体 FAIL。** `backend/app/workbench/account_snapshot_preview.py` 的隔离 CSV 每日清单核对新增 `outside_watermark_fill_count`。即使自报成交编号集合完全一致，只要同一上海市场交易日的任一成交时间**晚于**用户声明的 `complete_through`（按 UTC 绝对时间比较），就返回 `status=mismatch`，不再误标 `matched_unverified`。时间恰好等于水位不算越界。
+- `backend/tests/test_workbench_account_snapshot_preview.py` 覆盖相同编号但迟于水位的 +08:00 / UTC 两种时区表示、边界时刻等价，以及来源未认证、交易禁止的断言。
+- **证据边界**：此改动仅检查自报声明的内部时间一致性，不能证明券商独立导出身份、全量成交、逐日清算、真实账户 T+1 或正式 BROKEN 转仓。仍强制 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`；首页当日 T 次数与未闭环总数仍为 `unavailable`。独立 Gate 仍 FAIL，PR #19 保持 Draft；CI 以最新 HEAD 实际运行结果为准。

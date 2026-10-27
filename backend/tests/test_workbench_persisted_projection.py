@@ -46,16 +46,16 @@ def test_persisted_plan_action_and_hard_fail_never_enable_execution(session) -> 
     version = TradePlanVersion(
         plan_id=plan.id, version_number=1,
         state=PlanVersionState.EFFECTIVE, is_effective=True,
-        structure_invalidation_price=Decimal("9"),
-        first_target_price=Decimal("13"),
+        structure_invalidation_price=Decimal(9),
+        first_target_price=Decimal(13),
     )
     session.add(version)
     session.flush()
     action = TradeAction(
         plan_version_id=version.id, action_type=ActionType.INITIAL_ENTRY,
         side=OrderSide.BUY, status=ActionStatus.AUDITED,
-        planned_price_low=Decimal("10"),
-        planned_price_high=Decimal("11"),
+        planned_price_low=Decimal(10),
+        planned_price_high=Decimal(11),
     )
     session.add(action)
     session.flush()
@@ -79,25 +79,25 @@ def test_persisted_plan_action_and_hard_fail_never_enable_execution(session) -> 
 def test_naive_database_times_cannot_be_presented_as_sourced_account(session) -> None:
     snapshot = AccountSnapshot(
         captured_at=datetime(2026, 10, 22, 10, 0),
-        total_equity=Decimal("100000"), available_cash=Decimal("20000"),
+        total_equity=Decimal(100000), available_cash=Decimal(20000),
         source="manual",
     )
     session.add(snapshot)
     session.flush()
     position = PositionSnapshot(
         account_snapshot_id=snapshot.id, instrument_code="600000",
-        instrument_name="人工标的", total_quantity=Decimal("100"),
-        market_value=Decimal("1200"), broker_cost_price=Decimal("10"),
+        instrument_name="人工标的", total_quantity=Decimal(100),
+        market_value=Decimal(1200), broker_cost_price=Decimal(10),
     )
     session.add(position)
     session.flush()
     session.add(PositionBucketSnapshot(
         position_snapshot_id=position.id, bucket_type=PositionBucketType.CORE,
-        quantity=Decimal("70"),
+        quantity=Decimal(70),
     ))
     session.add(PositionBucketSnapshot(
         position_snapshot_id=position.id, bucket_type=PositionBucketType.T,
-        quantity=Decimal("30"),
+        quantity=Decimal(30),
     ))
     session.flush()
     overview = build_overview(persisted=project_persisted(session))

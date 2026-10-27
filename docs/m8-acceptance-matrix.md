@@ -84,3 +84,10 @@
 - **验收边界**：此功能提供正式动作日期录入/保存/刷新路径，但真实用户身份认证、券商来源对账、正式动作创建/审计全流程和手机实机操作尚未验收。管理员令牌是有限的 opt-in 控制，不等于多用户授权系统；不能将此项判为整个 M8 Gate 通过。CI 以本次最新 HEAD 的实际运行结果为准。
 
 - **本轮最新 CI 证据（HEAD `697467dc`）**：推送 [#40505288890](https://github.com/dgcary/structure-swing-workbench/actions/runs/40505288890) 与 PR [#40505295033](https://github.com/dgcary/structure-swing-workbench/actions/runs/40505295033) 均 completed/success；后端 426 passed、Ruff 通过、PostgreSQL 16/Alembic 迁移及正式日期写入往返通过，前端 89/89 测试与生产构建通过。此前中间提交的 TypeScript 回调遗漏、Ruff 导入排序、日期参数类型和时区引用失败已在本 HEAD 修复。CI 仅证明代码/合成数据测试通过，不代表真实账户或移动端实机通过。
+
+
+### 2026-10-27 增量证据：正式动作日期写入的传输安全门禁
+
+- `backend/app/main.py::_trusted_date_write_transport`：管理员 Bearer 令牌保护的日期修改接口**不再接受远程明文 HTTP**。仅接受 ASGI 已认证的 HTTPS scheme，或请求来源 IP 和目标主机均为回环地址的本机 HTTP；不信任客户端自行添加的 `X-Forwarded-Proto` 头。TLS 终止代理需正确、可信地向 ASGI 服务器传递 scheme；普通局域网 HTTP 页面不能执行管理员日期修改。
+- `backend/tests/test_workbench_action_date.py::test_date_write_transport_requires_https_or_both_loopback_addresses` 和 `test_privileged_date_write_rejects_remote_http_even_with_valid_token`：验证 HTTPS/本机回环正例、远程 HTTP、伪造转发头及目标地址与来源不一致反例；原 Bearer 认证测试改为 HTTPS 测试客户端。
+- **验收边界**：本项只防止管理员日期接口经远程明文传输令牌；不是完整用户登录、权限管理或实际 HTTPS 代理部署验收。全部动作仍不可执行，M8 Gate 仍 FAIL；真实账户/CSV、T 闭环/换仓/T+1、手机实机证据仍待补齐。CI 以本增量最新 HEAD 为准。

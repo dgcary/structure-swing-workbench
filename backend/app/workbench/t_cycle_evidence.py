@@ -38,18 +38,26 @@ def recorded_t_cycles(
     before its opening leg is never a completed T.
     """
     current = now or datetime.now(UTC)
-    grouped: dict[tuple[str, str | None], list[tuple[ActionType, ExecutionFill]]] = (
-        defaultdict(list)
-    )
+    # A user-entered cycle key is not globally unique. Never pair legs from
+    # different plan versions, even if their symbol and key happen to match.
+    # Keep missing keys structurally separate from user-entered strings.
+    grouped: dict[
+        tuple[str, str | None, str | None, str | None],
+        list[tuple[ActionType, ExecutionFill]],
+    ] = defaultdict(list)
     for symbol, key, action_type, fill in records:
         if action_type in T_LEGS:
-            # Do not combine unrelated unkeyed fills into a fictitious cycle.
             group_key = key.strip() if key and key.strip() else None
-            grouped[(symbol, group_key if group_key else f"unkeyed:{fill.id}")].append(
-                (action_type, fill)
-            )
+            action = getattr(fill, "action", None)
+            plan_version_id = getattr(action, "plan_version_id", None)
+            grouped[(
+                symbol, plan_version_id, group_key,
+                str(fill.id) if group_key is None else None,
+            )].append((action_type, fill))
     result = []
-    for (symbol, key), legs in sorted(grouped.items()):
+    for (symbol, plan_version_id, key, _), legs in sorted(
+        grouped.items(), key=lambda item: tuple(part or "" for part in item[0])
+    ):
         dates = set()
         invalid_time = False
         for _, fill in legs:
@@ -67,7 +75,7 @@ def recorded_t_cycles(
         directions = set()
         sources = []
         timeline: list[tuple[datetime, str, Decimal]] = []
-        conflict = invalid_time or dates != {market_day} or key.startswith("unkeyed:")
+        conflict = invalid_time or dates != {market_day} or key is None
         for action_type, fill in legs:
             direction, leg, side = T_LEGS[action_type]
             directions.add(direction)
@@ -111,7 +119,8 @@ def recorded_t_cycles(
         ]
         result.append({
             "symbol": symbol,
-            "cycle_key": None if key.startswith("unkeyed:") else key,
+            "cycle_key": key,
+            "plan_version_id": plan_version_id,
             "market_date": market_day.isoformat(),
             "direction": next(iter(directions)) if len(directions) == 1 else None,
             "state": state,

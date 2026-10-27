@@ -82,8 +82,9 @@ def project_persisted(session: Session) -> dict[str, object]:
                 t_qty = allocations.get(PositionBucketType.T)
                 consistent = (
                     len(allocations) == len(buckets) and
+                    set(allocations) == {PositionBucketType.CORE, PositionBucketType.T} and
                     all(value >= 0 for value in allocations.values()) and
-                    sum(allocations.values(), Decimal(0)) <= position.total_quantity
+                    sum(allocations.values(), Decimal(0)) == position.total_quantity
                 )
                 if not consistent:
                     core = t_qty = None

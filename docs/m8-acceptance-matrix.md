@@ -144,3 +144,11 @@
 - `backend/app/workbench/t_cycle_evidence.py`：在按证券、计划版本和 T 周期键汇总之前，先全局核对已记录 T 成交的内部记录 ID 与（来源、外部成交编号）组合；重复的内部 ID 或相同来源下重复的外部成交编号，无论发生在同一周期还是不同计划版本，涉及的周期一律标记 `conflict`。不同来源的相同外部编号不直接视为冲突。缺少外部成交编号的手工记录仍不等于券商已对账。
 - `backend/tests/test_workbench_t_cycle_evidence.py`：新增同周期重复外部编号、跨计划版本重复外部编号、重复内部成交 ID 反例，以及不同来源相同外部编号的正例；仍禁止发布日内完整 T 次数或交易许可。
 - **验收边界**：仅修复已记录成交的去重可信度，不证明券商全量成交水位、日终 T 转仓、日内换仓、T+1 可卖量、含 T 仓风险、脱敏真实 CSV→PostgreSQL 对账或手机 Safari/可信 TLS 实机验收。首页完整 T 次数、未完成 T 总数仍为 `unavailable`；M8 整体 Gate 继续 FAIL，PR #19 保持 Draft，不合并、不部署、不启动 M9。CI 以最新 HEAD 的实际运行结果为准。
+
+
+### 2026-10-28 增量证据：T 与普通动作之间的成交编号交叉核对
+
+- **发现与修复**：原 `project_recorded_t_cycles` 仅查询 T 动作关联成交。若相同券商来源的外部成交编号同时出现在 T 成交与普通加仓/减仓成交中，原逻辑仍可能把 T 周期误判为 `closed`。现在只读查询全部正式动作成交，先跨动作类型检查内部成交 ID 与（来源、外部成交编号）重复，再仅投影 T 周期。普通动作不会被计为 T；与普通动作重复的 T 成交必须 `conflict`。
+- **单元测试**：`backend/tests/test_workbench_t_cycle_evidence.py` 新增 T/普通动作同来源重复外部编号、跨动作重复内部 ID 的反例，以及不同来源相同外部编号不误判的正例。
+- **隔离 PostgreSQL 实库测试**：`backend/tests/test_workbench_postgres_integration.py::test_postgres_recorded_t_cycle_fills_are_dated_but_not_broker_complete` 增加普通动作成交与 T 成交共享来源编号的数据库往返反例，必须使 T 周期冲突；测试事务回滚。
+- **限制 / Gate FAIL**：跨动作去重仅验证**已记录**数据，不能保证券商全量成交、每日完整性水位、日终未闭环转普通加减仓、日内换仓、T+1 可卖数量、含 T 仓独立风险、脱敏真实券商 CSV→PG 对账或手机 Safari/可信 TLS 实机验收。首页 `t_cycles_today`、`open_t_cycles` 仍为 `unavailable`，不发布交易许可；PR #19 保持 Draft。CI 须核验本次最新 HEAD，旧绿灯不可代替。

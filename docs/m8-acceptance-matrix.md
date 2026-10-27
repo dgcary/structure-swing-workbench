@@ -99,3 +99,10 @@
 - `backend/tests/test_workbench_action_date.py`：增加状态仍为「计划中」但已有成交的反例，要求无数据库 flush、无日期变化。
 - `backend/tests/test_workbench_postgres_integration.py`：在隔离 PostgreSQL 16/Alembic 数据库写入合成真实成交记录后，验证日期写入被拒绝且原日期未变。测试数据全部事务回滚。
 - **验收边界**：这是历史成交不可改写的安全约束，不代表已完成真实券商/CSV 对账、T 闭环统计、换仓、T+1、含 T 仓风险或手机端实机验收；仍须以最新 HEAD 的 CI 结果核验。PR #19 保持 Draft、M8 Gate FAIL，禁止合并或启动 M9。
+
+
+### 2026-10-27 增量证据：浏览器端管理员令牌传输保护
+
+- `frontend/src/dateWriteTransport.ts` 与 `App.tsx`：日期表单在发出包含 Bearer 令牌的请求**之前**校验页面来源，远程 HTTP 页面直接拒绝发送；仅 HTTPS 页面或本机回环 HTTP 页面允许提交，避免服务端 HTTP 403 已发生但令牌仍先经明文网络泄露。
+- `frontend/tests/dateWriteTransport.test.mjs`：覆盖 HTTPS、localhost/127.0.0.1/IPv6 回环、局域网明文、伪造本地域名和非 HTTP 协议。
+- **验收边界**：该措施与后端传输门禁共同防护日期编辑令牌，不等于完成生产反向代理/TLS 部署、身份系统或移动端实机验收；全部交易动作仍不可执行。M8 Gate 仍 FAIL。

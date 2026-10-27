@@ -80,19 +80,27 @@ def recorded_t_cycles(
             direction, leg, side = T_LEGS[action_type]
             directions.add(direction)
             stamp = fill.executed_at
-            if (fill.side != side or not fill.quantity.is_finite()
-                    or fill.quantity <= 0 or not fill.source.strip()):
+            # PostgreSQL NUMERIC may contain NaN; never add a non-finite
+            # quantity to the running balance (Decimal comparisons can raise).
+            valid_quantity = (
+                isinstance(fill.quantity, Decimal)
+                and fill.quantity.is_finite()
+                and fill.quantity > 0
+            )
+            if fill.side != side or not valid_quantity or not fill.source or not fill.source.strip():
                 conflict = True
             sources.append(f"成交记录/{fill.id}/{fill.source}")
+            if not valid_quantity:
+                continue
             if stamp is not None and stamp.tzinfo is not None and stamp.utcoffset() is not None:
                 timeline.append((stamp, leg, fill.quantity))
             if leg == "open":
                 opening += fill.quantity
-                if stamp.tzinfo is not None and stamp.utcoffset() is not None:
+                if stamp is not None and stamp.tzinfo is not None and stamp.utcoffset() is not None:
                     first_open = min(first_open, stamp) if first_open else stamp
             else:
                 closing += fill.quantity
-                if stamp.tzinfo is not None and stamp.utcoffset() is not None:
+                if stamp is not None and stamp.tzinfo is not None and stamp.utcoffset() is not None:
                     first_close = min(first_close, stamp) if first_close else stamp
         if (len(directions) != 1 or opening <= 0 or closing > opening
                 or (first_close is not None and

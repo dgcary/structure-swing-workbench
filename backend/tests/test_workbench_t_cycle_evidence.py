@@ -11,11 +11,14 @@ NOW = datetime(2026, 10, 27, 12, tzinfo=UTC)
 DAY = date(2026, 10, 27)
 
 
-def _fill(identifier, side, qty, hour, *, source="manual", at=None, price="10"):
+def _fill(
+    identifier, side, qty, hour, *, source="manual", at=None, price="10", external_id=None
+):
     return SimpleNamespace(
         id=identifier, side=side, quantity=Decimal(qty), source=source,
         price=Decimal(price) if price is not None else None,
         executed_at=at if at is not None else NOW.replace(hour=hour),
+        external_execution_id=external_id,
     )
 
 
@@ -208,3 +211,75 @@ def test_invalid_execution_price_never_certifies_a_completed_t_cycle():
             _fill("close", OrderSide.BUY, "10", 2, price=invalid),
         )
         assert recorded_t_cycles(rows, DAY, now=NOW)[0]["state"] == "conflict"
+
+
+def test_duplicate_broker_execution_reference_never_closes_a_cycle():
+    """Two local fill IDs cannot stand in for two distinct broker executions."""
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill(
+            "open-1", OrderSide.SELL, "10", 1,
+            source="broker-csv", external_id="order-123")),
+        _record(ActionType.POSITIVE_T_SELL, _fill(
+            "open-2", OrderSide.SELL, "10", 2,
+            source="broker-csv", external_id="order-123")),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill(
+            "close", OrderSide.BUY, "20", 3,
+            source="broker-csv", external_id="order-456")),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "conflict"
+    assert cycle["opening_quantity"] is None
+    assert cycle["broker_reconciled"] is False
+    assert cycle["trade_execution_enabled"] is False
+
+
+def test_duplicate_external_reference_across_plan_versions_taints_both_cycles():
+    """A broker reference reused across plans cannot certify either cycle."""
+    a_open = _fill(
+        "a-open", OrderSide.SELL, "10", 1, source="broker-csv", external_id="shared"
+    )
+    a_close = _fill(
+        "a-close", OrderSide.BUY, "10", 2, source="broker-csv", external_id="a-close"
+    )
+    b_open = _fill(
+        "b-open", OrderSide.SELL, "10", 3, source="broker-csv", external_id="b-open"
+    )
+    b_close = _fill(
+        "b-close", OrderSide.BUY, "10", 4, source="broker-csv", external_id="shared"
+    )
+    for fill, version in (
+        (a_open, "version-a"), (a_close, "version-a"),
+        (b_open, "version-b"), (b_close, "version-b"),
+    ):
+        fill.action = SimpleNamespace(plan_version_id=version)
+    cycles = recorded_t_cycles([
+        _record(ActionType.POSITIVE_T_SELL, a_open),
+        _record(ActionType.POSITIVE_T_BUYBACK, a_close),
+        _record(ActionType.POSITIVE_T_SELL, b_open),
+        _record(ActionType.POSITIVE_T_BUYBACK, b_close),
+    ], DAY, now=NOW)
+    assert len(cycles) == 2
+    assert all(cycle["state"] == "conflict" for cycle in cycles)
+    assert all(cycle["broker_reconciled"] is False for cycle in cycles)
+
+
+def test_duplicate_internal_fill_id_cannot_be_double_counted():
+    rows = [
+        _record(ActionType.REVERSE_T_BUY, _fill("same-id", OrderSide.BUY, "10", 1)),
+        _record(ActionType.REVERSE_T_BUY, _fill("same-id", OrderSide.BUY, "10", 2)),
+        _record(ActionType.REVERSE_T_SELL, _fill("close", OrderSide.SELL, "20", 3)),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "conflict"
+
+
+def test_broker_reference_is_source_scoped_and_distinct_ids_still_close():
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill(
+            "open", OrderSide.SELL, "10", 1, source="broker-a", external_id="1")),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill(
+            "close", OrderSide.BUY, "10", 2, source="broker-b", external_id="1")),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "closed"
+    assert cycle["broker_reconciled"] is False

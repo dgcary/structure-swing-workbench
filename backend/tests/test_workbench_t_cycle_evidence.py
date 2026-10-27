@@ -335,3 +335,61 @@ def test_same_external_reference_in_different_sources_does_not_taint_t():
     assert len(cycles) == 1
     assert cycles[0]["state"] == "closed"
     assert cycles[0]["broker_reconciled"] is False
+
+
+def test_unclosed_t_at_day_end_only_exposes_unverified_ordinary_effect():
+    """After 15:00 Shanghai, residual first-leg shares need broker reconciliation."""
+    positive = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("open", OrderSide.SELL, "100", 1)),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("partial", OrderSide.BUY, "40", 2)),
+    ]
+    before_close = recorded_t_cycles(
+        positive, DAY, now=datetime(2026, 10, 27, 6, tzinfo=UTC)
+    )[0]
+    assert before_close["state"] == "open"
+    assert before_close["end_of_day_unclosed"] is False
+    assert before_close["residual_quantity"] is None
+    assert before_close["ordinary_effect"] is None
+    assert before_close["requires_reaudit"] is False
+
+    after_close = recorded_t_cycles(
+        positive, DAY, now=datetime(2026, 10, 27, 7, tzinfo=UTC)
+    )[0]
+    assert after_close["state"] == "open"  # Not an authenticated BROKEN state.
+    assert after_close["end_of_day_unclosed"] is True
+    assert after_close["residual_quantity"] == "60"
+    assert after_close["ordinary_effect"] == "普通减仓待核验"
+    assert after_close["requires_reaudit"] is True
+    assert after_close["broker_reconciled"] is False
+    assert after_close["trade_execution_enabled"] is False
+    assert "未自动转仓" in after_close["warning"]
+
+    reverse = [
+        _record(ActionType.REVERSE_T_BUY, _fill("buy", OrderSide.BUY, "100", 1)),
+        _record(ActionType.REVERSE_T_SELL, _fill("sell", OrderSide.SELL, "30", 2)),
+    ]
+    next_day = recorded_t_cycles(
+        reverse, DAY, now=datetime(2026, 10, 28, 2, tzinfo=UTC)
+    )[0]
+    assert next_day["end_of_day_unclosed"] is True
+    assert next_day["residual_quantity"] == "70"
+    assert next_day["ordinary_effect"] == "普通加仓待核验"
+    assert next_day["requires_reaudit"] is True
+
+
+def test_closed_or_conflicting_t_never_claims_end_of_day_ordinary_conversion():
+    closed = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("sell", OrderSide.SELL, "10", 1)),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("buy", OrderSide.BUY, "10", 2)),
+    ]
+    conflict = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("bad", OrderSide.BUY, "10", 1)),
+    ]
+    for rows, expected in ((closed, "closed"), (conflict, "conflict")):
+        cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+        assert cycle["state"] == expected
+        assert cycle["end_of_day_unclosed"] is False
+        assert cycle["residual_quantity"] is None
+        assert cycle["ordinary_effect"] is None
+        assert cycle["requires_reaudit"] is False
+        assert cycle["trade_execution_enabled"] is False

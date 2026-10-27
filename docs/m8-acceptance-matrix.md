@@ -38,7 +38,7 @@
 - 本机草稿与复盘：`LocalPlanDrafts.tsx`、`LocalReview.tsx`；相关本机存储与版本测试位于 `frontend/tests/`。
 - 只读来源协议：`frontend/src/overviewContract.ts`、`frontend/tests/overviewContract.test.mjs`、`frontend/tests/persistedOverviewContract.test.mjs`。
 - 后端数据与无来源保护：`backend/tests/test_workbench_overview.py`、`test_workbench_holdings.py`、`test_workbench_persisted_projection.py`、`test_workbench_persisted_risk.py`（T仓/缺成本/缺计划/时序不一致均 fail-closed）；`test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk` 验证未来日期快照/计划不得认证账户风险，允许最多5分钟设备时钟偏差。
-- 最新已核验 CI：提交 `2335ebdd11a0f15ad43589f29cd491192b3488f9` 对应 GitHub Actions `40474011692`（PR）与 `40474005578`（push）均完成 `success`；包括后端 pytest/ruff、前端构建/测试。未做真实 PostgreSQL 或移动端实机验收，CI 通过不等于 M8 Gate 通过。
+- 最新已核验代码 CI：提交 `27337a21875023d66f2a44189b688764bac30ed2` 对应 [PR CI #40495411215](https://github.com/dgcary/structure-swing-workbench/actions/runs/40495411215) 完成 `success`；后端 410 passed、Ruff PASS，前端构建与测试 PASS（包含 PostgreSQL 16 实库合成数据测试）。未做真实账户或移动端实机验收，CI 通过不等于 M8 Gate 通过。
 - **未完成实机证据**：手机宽度截图、全部导航入口人工点击、真实账户 PostgreSQL 快照联调、真实 CSV 样例对账。不得把这些标记为 PASS。
 
 ### 2026-10-27 增量证据：未来动作与未来审计不得冒充历史事实
@@ -54,6 +54,12 @@
 - `backend/tests/test_workbench_postgres_integration.py`：在迁移后的真实 PostgreSQL 数据库中写入**隔离合成快照**、核心/T仓桶与正式计划；强制数据库往返，核验 TIMESTAMPTZ 保留时区、来源完整时的历史 CORE-only 风险，以及未来快照/计划 fail-closed。
 - 测试记录始终位于回滚事务内，绝不保存测试账户数据，也不授权交易。无测试数据库时本地跳过，GitHub Actions 配置测试库后必须执行。
 - 此项只证明**PostgreSQL 数据类型、迁移与只读投影集成**，不证明真实账户接入、真实 CSV 对账、T+1 可卖数量、T闭环、换仓或手机端可用。CI 结果以最新 HEAD 为准。
+
+### 2026-10-27 增量证据：用户上传 CSV 的未来时间门禁
+
+- `backend/app/workbench/account_snapshot_preview.py`：隔离导入账户、持仓、成交 CSV 后，检查全部事实与成交的来源时间；超过 UTC 当前时间 5 分钟容差的未来记录使整次预览返回 HTTP 422，不显示为已发生账户事实。只修改 M8 预览，不改变 M5 导入器或交易规则。
+- `backend/tests/test_workbench_account_snapshot_preview.py`：账户、持仓、成交三类未来时间反例及小幅设备时钟偏差正例；全部保持 `persisted=false`、`realtime=false`、`trade_execution_enabled=false`。
+- 代码 HEAD `27337a21` 的 [PR CI #40495411215](https://github.com/dgcary/structure-swing-workbench/actions/runs/40495411215) 已完成 success，后端 410 项测试及 Ruff 通过，前端检查通过。该修复不代表真实券商数据接入、T+1、T闭环或手机实机验收完成。
 
 ## 四、当前 Gate
 

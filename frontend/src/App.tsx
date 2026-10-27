@@ -123,7 +123,73 @@ function MetricCard({ metric }: { metric: Metric }) {
   );
 }
 
-function ActionCard({ action }: { action: PersistedAction }) {
+function ActionDateEditor({
+  action, onSaved,
+}: { action: PersistedAction; onSaved: () => Promise<void> }) {
+  const [plannedDate, setPlannedDate] = useState(action.planned_for_date ?? "");
+  const [token, setToken] = useState("");
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState("");
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!action.as_of || !token) return;
+    setPending(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        "/api/workbench/actions/" + encodeURIComponent(action.id) + "/planned-date",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+          body: JSON.stringify({
+            planned_for_date: plannedDate || null,
+            expected_as_of: action.as_of,
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(response.status === 409 ? "记录已改变或不允许修改，请刷新核对。" :
+          response.status === 401 ? "管理员令牌无效。" :
+          response.status === 404 ? "日期修改功能未启用或记录不存在。" :
+          "保存失败（HTTP " + response.status + "）。");
+      }
+      const result: unknown = await response.json();
+      if (typeof result !== "object" || result === null ||
+          !("saved" in result) || result.saved !== true ||
+          !("trade_execution_enabled" in result) ||
+          result.trade_execution_enabled !== false) {
+        throw new Error("日期保存响应不可信，请重新核对。");
+      }
+      setToken("");
+      await onSaved();
+      setMessage("人工日期已保存并重新读取；仍不可执行交易。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "日期保存失败。");
+    } finally {
+      setPending(false);
+    }
+  }
+  return <details>
+    <summary>人工修改正式动作日期（管理员授权）</summary>
+    <p className="notice">仅修改计划中动作的日期，不改变交易内容或审计结论。默认关闭；需要管理员在后端显式启用。令牌仅在本次表单内使用，不保存到浏览器。</p>
+    <form className="plan-form" onSubmit={save}>
+      <label>人工指定计划日期（可留空清除）
+        <input type="date" value={plannedDate}
+          onChange={(event) => setPlannedDate(event.target.value)} />
+      </label>
+      <label>管理员令牌
+        <input type="password" autoComplete="off" required value={token}
+          onChange={(event) => setToken(event.target.value)} />
+      </label>
+      <button type="submit" disabled={pending}>{pending ? "保存中…" : "保存日期并刷新"}</button>
+    </form>
+    {message && <p role="status">{message}</p>}
+  </details>;
+}
+
+function ActionCard({
+  action, onSaved,
+}: { action: PersistedAction; onSaved: () => Promise<void> }) {
   return (
     <article className="holding-card">
       <h3>{action.symbol} · {action.action_zh} · {action.status_zh}</h3>
@@ -135,6 +201,8 @@ function ActionCard({ action }: { action: PersistedAction }) {
       <p className="audit-unknown">仅供核对 · 不可执行</p>
       <p>来源：{action.source} · 数据时间：{action.as_of ?? "未核实"}</p>
       <p>{action.warning}</p>
+      {action.status_zh === "计划中" && action.as_of !== null &&
+        <ActionDateEditor key={action.as_of} action={action} onSaved={onSaved} />}
     </article>
   );
 }
@@ -235,6 +303,15 @@ export function App() {
       })
       .catch((reason: Error) => setOverviewError(reason.message));
   }, []);
+
+  async function refreshAfterDateEdit(): Promise<void> {
+    const response = await fetch("/api/workbench/overview");
+    if (!response.ok) throw new Error("重新读取正式动作失败，请刷新页面核对。");
+    const payload: Overview = await response.json();
+    assertReadOnlyOverview(payload, "read_only");
+    setBaselineOverview(payload);
+    setOverview((current) => current?.mode === "isolated_csv_preview" ? current : payload);
+  }
 
   const todayActions = overview?.pending_actions?.filter(
     (action) => action.date_status === "today",
@@ -345,7 +422,7 @@ export function App() {
                 <p className="notice">仅将人工明确指定今日执行日期、且记录时间可核验的正式动作列在此处；仍需重新审计和券商核对，不代表可执行。</p>
                 {todayActions.length > 0 ? (
                   <div className="holding-list">
-                    {todayActions.map((action) => <ActionCard key={action.id} action={action} />)}
+                    {todayActions.map((action) => <ActionCard key={action.id} action={action} onSaved={refreshAfterDateEdit} />)}
                   </div>
                 ) : <Unavailable title="今日计划动作尚未核实" detail="没有带可信人工日期的今日计划记录，不代表今天没有待处理事项。" />}
                 <h3>其他已记录未完成动作（非今日待办）</h3>

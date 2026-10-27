@@ -68,8 +68,8 @@ def test_persisted_plan_action_and_hard_fail_never_enable_execution(session) -> 
     overview = build_overview(persisted=project_persisted(session))
     assert overview["trade_execution_enabled"] is False
     assert len(overview["effective_plans"]) == 1
-    assert overview["effective_plans"][0]["invalidation_price"] == "9"
-    assert overview["effective_plans"][0]["first_target_price"] == "13"
+    assert Decimal(overview["effective_plans"][0]["invalidation_price"]) == Decimal(9)
+    assert Decimal(overview["effective_plans"][0]["first_target_price"]) == Decimal(13)
     assert overview["pending_actions"][0]["executable"] is False
     assert overview["audit_results"][0]["level"] == "hard_fail"
     assert overview["audit_results"][0]["executable"] is False

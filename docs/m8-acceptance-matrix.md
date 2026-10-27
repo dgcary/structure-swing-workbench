@@ -192,3 +192,10 @@
 - **状态：增量代码与自动测试已提交；M8 整体 FAIL。** `backend/app/workbench/account_snapshot_preview.py` 的隔离 CSV 每日清单核对新增 `outside_watermark_fill_count`。即使自报成交编号集合完全一致，只要同一上海市场交易日的任一成交时间**晚于**用户声明的 `complete_through`（按 UTC 绝对时间比较），就返回 `status=mismatch`，不再误标 `matched_unverified`。时间恰好等于水位不算越界。
 - `backend/tests/test_workbench_account_snapshot_preview.py` 覆盖相同编号但迟于水位的 +08:00 / UTC 两种时区表示、边界时刻等价，以及来源未认证、交易禁止的断言。
 - **证据边界**：此改动仅检查自报声明的内部时间一致性，不能证明券商独立导出身份、全量成交、逐日清算、真实账户 T+1 或正式 BROKEN 转仓。仍强制 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`；首页当日 T 次数与未闭环总数仍为 `unavailable`。独立 Gate 仍 FAIL，PR #19 保持 Draft；CI 以最新 HEAD 实际运行结果为准。
+
+
+### 2026-10-28 增量证据：自报成交水位不得提前宣称已覆盖收盘
+
+- `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：即使导出时间和覆盖水位处于允许的 5 分钟设备时钟偏差内，只要**实际当前时间尚未到达当日 15:00（上海时间）**，或导出/覆盖时间尚未真实发生，不能给出 `matched_unverified` 的完整交易日匹配标签；降为 `insufficient`。此限制只针对完整日声明，不改变既有未来时间过远时的 HTTP 422 拒绝。
+- `backend/tests/test_workbench_account_snapshot_preview.py`：新增实际 14:58 与声明 15:00/15:01、实际 15:02 后可显示自报一致，以及实际 15:02 但导出 15:04 尚未发生的反例。状态仍不得变为 `broker_reconciled=true`，也不得授权交易。
+- **验收边界**：自报编号匹配并不代表券商全量成交已证明，且没有真实账户/券商来源联调。仍需独立券商完整水位、T+1、日终正式转仓与重审、换仓、含 T 仓风险和移动端 Safari/TLS 实机。M8 Gate 仍 FAIL；PR #19 保持 Draft，禁止合并、部署或下发 M9。CI 必须核对本次最终 HEAD。

@@ -34,7 +34,7 @@ def recorded_t_cycles(
     """Reconcile fill legs per plan-independent symbol/key without guessing fills.
 
     An unkeyed T fill is explicitly conflicting. A key reused across days,
-    a wrong side, non-finite quantity, missing source/time or a closing leg
+    a wrong side, invalid quantity/price, missing source/time or a closing leg
     before its opening leg is never a completed T.
     """
     current = now or datetime.now(UTC)
@@ -87,7 +87,17 @@ def recorded_t_cycles(
                 and fill.quantity.is_finite()
                 and fill.quantity > 0
             )
-            if fill.side != side or not valid_quantity or not fill.source or not fill.source.strip():
+            # A recorded fill with an absent, zero or non-finite execution
+            # price cannot certify a completed cycle, even if legs balance.
+            valid_price = (
+                isinstance(getattr(fill, "price", None), Decimal)
+                and fill.price.is_finite()
+                and fill.price > 0
+            )
+            if (
+                fill.side != side or not valid_quantity or not valid_price
+                or not fill.source or not fill.source.strip()
+            ):
                 conflict = True
             sources.append(f"成交记录/{fill.id}/{fill.source}")
             if not valid_quantity:
@@ -139,7 +149,7 @@ def recorded_t_cycles(
             "broker_reconciled": False,
             "trade_execution_enabled": False,
             "warning": (
-                "成交方向、数量、日期或来源冲突；不可用于T次数核验。"
+                "成交方向、价格、数量、日期或来源冲突；不可用于T次数核验。"
                 if conflict else
                 "仅为数据库中已记录成交的单周期证据；未验证券商成交完整性、"
                 "日内总T次数及T+1可卖数量，不授权交易。"

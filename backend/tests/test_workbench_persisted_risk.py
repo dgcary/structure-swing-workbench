@@ -43,12 +43,12 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
                 with_plan=True, buckets_complete=True):
     snapshot = SimpleNamespace(
         id="snapshot-1", captured_at=snapshot_at, source="manual",
-        total_equity=Decimal("200000"), available_cash=Decimal("100000"),
+        total_equity=Decimal(200000), available_cash=Decimal(100000),
     )
     position = SimpleNamespace(
         id="position-1", instrument_code="600000",
-        total_quantity=Decimal("100"), market_value=Decimal("1200"),
-        broker_cost_price=Decimal("10"),
+        total_quantity=Decimal(100), market_value=Decimal(1200),
+        broker_cost_price=Decimal(10),
     )
     buckets = [
         SimpleNamespace(
@@ -66,7 +66,7 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
         id="version-1", version_number=1, state=PlanVersionState.EFFECTIVE,
         updated_at=version_at,
         structure_invalidation_price=Decimal(stop) if stop is not None else None,
-        first_target_price=Decimal("12"),
+        first_target_price=Decimal(12),
     ) if with_plan else None
     plan = SimpleNamespace(
         instrument_code="600000", instrument_name="人工指定标的",
@@ -88,7 +88,7 @@ def test_sourced_core_only_risk_is_historical_not_trade_permission():
     assert "账户快照/" in risk["source"] and "有效计划止损" in risk["source"]
     assert risk["as_of"] == AT.isoformat()
     plan = overview["effective_plans"][0]
-    assert Decimal(plan["current_risk"]) == Decimal("100")
+    assert Decimal(plan["current_risk"]) == Decimal(100)
     assert plan["initial_risk"] is None
     assert "历史快照" in plan["warning"]
     assert "账户快照/" in plan["source"]
@@ -120,10 +120,10 @@ def test_missing_or_mismatched_risk_facts_remain_unknown(kwargs):
 
 def test_invalid_numeric_core_risk_fails_closed():
     for quantity, cost, stop in [
-        (Decimal("0"), Decimal("10"), Decimal("9")),
-        (Decimal("NaN"), Decimal("10"), Decimal("9")),
-        (Decimal("100"), Decimal("Infinity"), Decimal("9")),
-        (Decimal("100"), Decimal("10"), Decimal("NaN")),
-        (Decimal("100"), Decimal("10"), Decimal("10")),
+        (Decimal(0), Decimal(10), Decimal(9)),
+        (Decimal("NaN"), Decimal(10), Decimal(9)),
+        (Decimal(100), Decimal("Infinity"), Decimal(9)),
+        (Decimal(100), Decimal(10), Decimal("NaN")),
+        (Decimal(100), Decimal(10), Decimal(10)),
     ]:
         assert _core_only_risk(quantity, cost, stop) is None

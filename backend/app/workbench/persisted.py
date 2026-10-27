@@ -5,7 +5,7 @@ A database row is not proof of a live broker connection.
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -195,7 +195,13 @@ def project_persisted(session: Session) -> dict[str, object]:
     actions = []
     audit_rows = []
     risk_by_symbol: dict[str, Decimal] = {}
+    # A version whose explicit validity date has passed is not an effective
+    # plan for today's workbench, even if its persisted flag was not cleared.
+    # Use the A-share market calendar date, not the server's UTC date.
+    market_today = datetime.now(timezone(timedelta(hours=8))).date()
     for version, plan in versions:
+        if version.valid_until is not None and version.valid_until < market_today:
+            continue
         source = f"正式计划版本/{version.id}"
         current_risk = None
         # Compare two dated facts, never apply a newer plan to an older snapshot.

@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import AuditResult, TradeAction, TradePlan, TradePlanVersion
+from app.db.models import AuditResult, ExecutionFill, TradeAction, TradePlan, TradePlanVersion
 from app.domain.enums import ActionStatus, PlanVersionState
 from app.workbench.persisted import _observed_at
 
@@ -57,6 +57,10 @@ def update_action_planned_date(
         raise HTTPException(status_code=409, detail="仅允许修改尚未审计的计划中动作日期")
     if session.scalar(select(AuditResult.id).where(AuditResult.action_id == action.id).limit(1)):
         raise HTTPException(status_code=409, detail="已有动作审计记录，禁止直接修改日期")
+    # A stale PLANNED status is not proof that no execution has happened.
+    # Preserve the original intended date once any confirmed fill is recorded.
+    if session.scalar(select(ExecutionFill.id).where(ExecutionFill.action_id == action.id).limit(1)):
+        raise HTTPException(status_code=409, detail="已有真实成交记录，禁止直接修改动作日期")
     version = session.get(TradePlanVersion, action.plan_version_id)
     plan = session.get(TradePlan, version.plan_id) if version is not None else None
     market_today = datetime.now(timezone(timedelta(hours=8))).date()

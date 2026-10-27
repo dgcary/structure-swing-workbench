@@ -41,6 +41,13 @@
 - 最新已核验 CI：提交 `2335ebdd11a0f15ad43589f29cd491192b3488f9` 对应 GitHub Actions `40474011692`（PR）与 `40474005578`（push）均完成 `success`；包括后端 pytest/ruff、前端构建/测试。未做真实 PostgreSQL 或移动端实机验收，CI 通过不等于 M8 Gate 通过。
 - **未完成实机证据**：手机宽度截图、全部导航入口人工点击、真实 PostgreSQL 时区/快照联调、真实 CSV 样例对账。不得把这些标记为 PASS。
 
+### 2026-10-27 增量证据：未来动作与未来审计不得冒充历史事实
+
+- `backend/app/workbench/persisted.py`：带时区且超出5分钟时钟容差的未来 `TradeAction.updated_at` 不再作为已记录未完成动作展示；对应动作审计也不会借该动作进入展示。
+- 同文件：带时区且超出容差的未来 `AuditResult.created_at` 不进入历史审计列表，也不参与“当前最高审计等级”的历史来源指标。
+- `backend/tests/test_workbench_persisted_future_records.py`：覆盖未来动作、未来审计、正常历史记录三种情况；继续断言 `executable=false`、`trade_execution_enabled=false`。
+- 本项属于 **时间来源可信度防护**，不等于已实现“今日待执行动作”日期语义，也不证明真实 PostgreSQL、T+1、T闭环、换仓或手机实机验收。最新提交的 Actions 必须另行核验，不能用旧 HEAD 的 CI 代替。
+
 ## 四、当前 Gate
 
 **M8 暂不通过，PR #19 保持 Draft，不合并、不部署、不启动 M9。**

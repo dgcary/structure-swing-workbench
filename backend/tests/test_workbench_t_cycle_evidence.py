@@ -283,3 +283,55 @@ def test_broker_reference_is_source_scoped_and_distinct_ids_still_close():
     cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
     assert cycle["state"] == "closed"
     assert cycle["broker_reconciled"] is False
+
+
+def test_t_execution_reference_reused_by_ordinary_trade_is_conflict():
+    """A non-T action must not hide a duplicated broker execution reference."""
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill(
+            "t-open", OrderSide.SELL, "10", 1,
+            source="broker-csv", external_id="same-execution")),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill(
+            "t-close", OrderSide.BUY, "10", 2,
+            source="broker-csv", external_id="unique-close")),
+        _record(ActionType.ORDINARY_ADD, _fill(
+            "ordinary", OrderSide.BUY, "10", 3,
+            source="broker-csv", external_id="same-execution")),
+    ]
+    cycles = recorded_t_cycles(rows, DAY, now=NOW)
+    assert len(cycles) == 1  # Ordinary actions are never projected as T cycles.
+    assert cycles[0]["state"] == "conflict"
+    assert cycles[0]["broker_reconciled"] is False
+    assert cycles[0]["trade_execution_enabled"] is False
+
+
+def test_duplicate_internal_fill_id_across_t_and_non_t_is_conflict():
+    rows = [
+        _record(ActionType.REVERSE_T_BUY, _fill(
+            "same-id", OrderSide.BUY, "10", 1)),
+        _record(ActionType.REVERSE_T_SELL, _fill(
+            "t-close", OrderSide.SELL, "10", 2)),
+        _record(ActionType.INITIAL_ENTRY, _fill(
+            "same-id", OrderSide.BUY, "10", 3)),
+    ]
+    cycles = recorded_t_cycles(rows, DAY, now=NOW)
+    assert len(cycles) == 1
+    assert cycles[0]["state"] == "conflict"
+
+
+def test_same_external_reference_in_different_sources_does_not_taint_t():
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill(
+            "t-open", OrderSide.SELL, "10", 1,
+            source="broker-a", external_id="123")),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill(
+            "t-close", OrderSide.BUY, "10", 2,
+            source="broker-a", external_id="456")),
+        _record(ActionType.ORDINARY_ADD, _fill(
+            "ordinary", OrderSide.BUY, "10", 3,
+            source="broker-b", external_id="123")),
+    ]
+    cycles = recorded_t_cycles(rows, DAY, now=NOW)
+    assert len(cycles) == 1
+    assert cycles[0]["state"] == "closed"
+    assert cycles[0]["broker_reconciled"] is False

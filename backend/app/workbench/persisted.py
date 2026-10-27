@@ -5,7 +5,7 @@ A database row is not proof of a live broker connection.
 """
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -29,7 +29,7 @@ def _observed_at(value: datetime | None) -> str | None:
         return None
     # Future-dated database rows are not observed facts. Allow only small
     # clock skew; never let an incorrect timestamp authenticate account data.
-    if value.astimezone(timezone.utc) > datetime.now(timezone.utc) + timedelta(minutes=5):
+    if value.astimezone(UTC) > datetime.now(UTC) + timedelta(minutes=5):
         return None
     return value.isoformat()
 

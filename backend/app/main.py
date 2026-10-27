@@ -1,7 +1,10 @@
 from fastapi import FastAPI
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.db.session import build_engine
 from app.research import parse_research_pack
 from app.research.sample import sample_zip
 from app.workbench.account_snapshot_preview import (
@@ -11,6 +14,7 @@ from app.workbench.account_snapshot_preview import (
 from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
 from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
 from app.workbench.overview import build_overview
+from app.workbench.persisted import project_persisted
 from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
 from app.workbench.t_cycle_preview import TCyclePreviewRequest, preview_t_cycle
 
@@ -47,7 +51,21 @@ def research_sample() -> dict[str, object]:
 
 @app.get("/workbench/overview", tags=["workbench"])
 def workbench_overview() -> dict[str, object]:
-    return build_overview()
+    if not settings.workbench_persisted_read_enabled:
+        return build_overview()
+    try:
+        engine = build_engine()
+        try:
+            with Session(engine) as session:
+                persisted = project_persisted(session)
+        finally:
+            engine.dispose()
+        return build_overview(persisted=persisted)
+    except SQLAlchemyError:
+        # No partial DB facts may masquerade as an available account.
+        result = build_overview()
+        result["notice"] += " 持久化数据源不可用；请检查数据库连接与迁移。"
+        return result
 
 
 @app.post("/workbench/plan-preview", tags=["workbench"])

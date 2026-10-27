@@ -298,7 +298,7 @@ export function App() {
                       <article className="holding-card" key={plan.id}>
                         <h3>{plan.symbol} · {plan.name} · 第{plan.version}版</h3>
                         <p>计划状态：{plan.state_zh} · 结构失效价：{plan.invalidation_price ?? "未知"}</p>
-                        <p>第一目标：{plan.first_target_price ?? "未知"} · 初始风险：{plan.initial_risk ?? "未核实"} · 当前风险：{plan.current_risk ?? "未核实"}</p>
+                        <p>第一目标：{plan.first_target_price ?? "未知"} · 初始风险：{plan.initial_risk ?? "未核实"} · 当前风险：{plan.current_risk === null ? "未核实" : `${plan.current_risk} 元（核心仓历史估算）`}</p>
                         <p>来源：{plan.source} · 数据时间：{plan.as_of ?? "未核实"}</p>
                         <p className="notice">{plan.warning}</p>
                       </article>

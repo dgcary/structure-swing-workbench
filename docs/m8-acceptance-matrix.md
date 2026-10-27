@@ -22,7 +22,7 @@
 
 | 验收项 | 证据 | 当前结论 |
 | --- | --- | --- |
-| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本；`App.tsx` 显示失效价、第一目标、版本与来源；在 CORE-only 且时序可核验时额外显示当前风险历史估算（元），初始风险仍未知 | 部分通过：缺真实 PostgreSQL 数据联调；T仓风险及初始风险未接入 |
+| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本，并按 A 股市场当日日期排除显式 `valid_until` 已过期版本；`App.tsx` 显示失效价、第一目标、版本与来源；CORE-only 且时序可核验时显示历史风险估算（元）；`test_workbench_persisted_risk.py::test_expired_effective_flag_does_not_publish_an_active_plan_or_risk` | 部分通过：过期版本不再冒充当前计划或提供风险指标；缺真实 PostgreSQL 数据联调、T仓风险及初始风险 |
 | 已记录未完成动作 | 从正式有效版本读取计划中/已审计/执行中/部分成交的动作；全部 `executable=false` | 部分通过：缺经核验的计划执行日期，**不能称为今日待办** |
 | 正式历史审计 | 从正式版本/动作关联的 `AuditResult` 读取；非通过项优先、通过项折叠；始终不可执行 | 部分通过：历史审计不等于当前实时审计，尚无完整可执行性判定 |
 | 核心仓/T仓 | 仅同一 `PositionSnapshot` 的 CORE、T 两类桶都存在、非负且数量严格对账时显示 | 部分通过：没有可卖数量/T+1 的来源验证 |
@@ -38,7 +38,7 @@
 - 本机草稿与复盘：`LocalPlanDrafts.tsx`、`LocalReview.tsx`；相关本机存储与版本测试位于 `frontend/tests/`。
 - 只读来源协议：`frontend/src/overviewContract.ts`、`frontend/tests/overviewContract.test.mjs`、`frontend/tests/persistedOverviewContract.test.mjs`。
 - 后端数据与无来源保护：`backend/tests/test_workbench_overview.py`、`test_workbench_holdings.py`、`test_workbench_persisted_projection.py`、`test_workbench_persisted_risk.py`（T仓/缺成本/缺计划/时序不一致均 fail-closed）。
-- 已核验的阶段 CI：提交 `233871ee` 对应的 Actions 成功，前端 88 项、后端 386 项通过；**最新 HEAD 仍须重新确认**。
+- 最新已核验 CI：提交 `1053ff3fbe47dff0e628ca200ae261f199512989` 对应 GitHub Actions `40472962652`（CI #618）完成 `success`；包括后端 pytest/ruff、前端构建/测试。未做真实 PostgreSQL 或移动端实机验收，CI 通过不等于 M8 Gate 通过。
 - **未完成实机证据**：手机宽度截图、全部导航入口人工点击、真实 PostgreSQL 时区/快照联调、真实 CSV 样例对账。不得把这些标记为 PASS。
 
 ## 四、当前 Gate

@@ -152,3 +152,10 @@
 - **单元测试**：`backend/tests/test_workbench_t_cycle_evidence.py` 新增 T/普通动作同来源重复外部编号、跨动作重复内部 ID 的反例，以及不同来源相同外部编号不误判的正例。
 - **隔离 PostgreSQL 实库测试**：`backend/tests/test_workbench_postgres_integration.py::test_postgres_recorded_t_cycle_fills_are_dated_but_not_broker_complete` 增加普通动作成交与 T 成交共享来源编号的数据库往返反例，必须使 T 周期冲突；测试事务回滚。
 - **限制 / Gate FAIL**：跨动作去重仅验证**已记录**数据，不能保证券商全量成交、每日完整性水位、日终未闭环转普通加减仓、日内换仓、T+1 可卖数量、含 T 仓独立风险、脱敏真实券商 CSV→PG 对账或手机 Safari/可信 TLS 实机验收。首页 `t_cycles_today`、`open_t_cycles` 仍为 `unavailable`，不发布交易许可；PR #19 保持 Draft。CI 须核验本次最新 HEAD，旧绿灯不可代替。
+
+
+### 2026-10-28 增量证据：日终未闭环 T 的只读待核验提示
+
+- `backend/app/workbench/t_cycle_evidence.py`：对**同一市场日、方向/成交时间/数量/来源无冲突**且仍有剩余第一腿的已记录 T 周期，在上海市场当日 15:00 及之后或后续日期，标注 `end_of_day_unclosed=true`、`residual_quantity`、`ordinary_effect`（正 T 剩余为「普通减仓待核验」，反 T 剩余为「普通加仓待核验」）和 `requires_reaudit=true`。收盘前不标注；已闭环和冲突数据不标注。只读状态仍为 `open`，不得把它冒充已完成数据库状态迁移。
+- `backend/tests/test_workbench_t_cycle_evidence.py::test_unclosed_t_at_day_end_only_exposes_unverified_ordinary_effect` 和 `test_closed_or_conflicting_t_never_claims_end_of_day_ordinary_conversion`：覆盖收盘前后、隔日、正反 T、部分闭环、已闭环与冲突反例，断言不启用交易。
+- **验收结论：部分实现，M8 Gate 仍 FAIL。** 这只是已记录成交的日终复核线索，未证明券商成交全量、真实 T+1 可卖数量、自动持仓桶转移、主计划风险重审、持久化 BROKEN 状态及手机端展示；不得以此作为已完成转仓或交易授权。

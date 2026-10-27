@@ -154,3 +154,29 @@ def test_unkeyed_fill_does_not_collide_with_user_key_matching_old_prefix():
     assert len(cycles) == 2
     assert {row["cycle_key"] for row in cycles} == {"unkeyed:42", None}
     assert all(row["state"] != "closed" for row in cycles)
+
+
+def test_nonfinite_or_nonpositive_fill_quantity_fails_closed_without_crashing():
+    """Malformed persisted NUMERIC values must not make the overview return 500."""
+    for bad_quantity in ("NaN", "Infinity", "-Infinity", "-1", "0"):
+        rows = [
+            _record(ActionType.POSITIVE_T_SELL,
+                    _fill("valid-open", OrderSide.SELL, "10", 1)),
+            _record(ActionType.POSITIVE_T_BUYBACK,
+                    _fill("invalid-close", OrderSide.BUY, bad_quantity, 2)),
+        ]
+        cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+        assert cycle["state"] == "conflict"
+        assert cycle["opening_quantity"] is None
+        assert cycle["closing_quantity"] is None
+        assert cycle["broker_reconciled"] is False
+
+
+def test_missing_fill_source_fails_closed_without_crashing():
+    rows = [
+        _record(ActionType.REVERSE_T_BUY,
+                _fill("missing-source", OrderSide.BUY, "10", 1, source=None)),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "conflict"
+    assert cycle["trade_execution_enabled"] is False

@@ -22,7 +22,7 @@
 
 | 验收项 | 证据 | 当前结论 |
 | --- | --- | --- |
-| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本，并按 A 股市场当日日期排除显式 `valid_until` 已过期版本；`App.tsx` 显示失效价、第一目标、版本与来源；CORE-only 且时序可核验时显示历史风险估算（元）；`test_workbench_persisted_risk.py::test_expired_effective_flag_does_not_publish_an_active_plan_or_risk`、`test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk` | 部分通过：已过期版本及时间戳明显超前的版本不再作为当前有效计划展示，也不提供账户风险指标；无时区的 SQLite 记录仍仅作未认证历史展示；缺真实 PostgreSQL 数据联调、T仓风险及初始风险 |
+| 正式有效计划 | `persisted.py` 只读取 `TradePlan.is_active` 与有效版本，并按 A 股市场当日日期排除显式 `valid_until` 已过期版本；`App.tsx` 显示失效价、第一目标、版本与来源；CORE-only 且时序可核验时仅显示独立标注的历史策略成本风险估算（元），不认证初始风险，也不冒充当前风险；`test_workbench_persisted_risk.py::test_expired_effective_flag_does_not_publish_an_active_plan_or_risk`、`test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk` | 部分通过：已过期版本及时间戳明显超前的版本不再作为当前有效计划展示，也不提供账户风险指标；无时区的 SQLite 记录仍仅作未认证历史展示；缺真实 PostgreSQL 数据联调、T仓风险及初始风险 |
 | 今日人工计划动作 | 新增 `TradeAction.planned_for_date` 可空人工指定 A 股市场日期（Alembic 0004）；仅当动作记录时间可信且该日期等于上海市场当日时标记为“今日人工计划”，其他动作单独展示；全部 `executable=false` | **部分通过**：日期语义不再由 `updated_at` 猜测；已新增默认关闭、管理员令牌保护的正式日期录入/保存/刷新路径及 PostgreSQL 合成数据往返验证，仍缺真实账户与手机端验收，不构成交易许可 |
 | 正式历史审计 | 从正式版本/动作关联的 `AuditResult` 读取；非通过项优先、通过项折叠；始终不可执行 | 部分通过：历史审计不等于当前实时审计，尚无完整可执行性判定 |
 | 核心仓/T仓 | 仅同一 `PositionSnapshot` 的 CORE、T 两类桶都存在、非负且数量严格对账时显示 | 部分通过：没有可卖数量/T+1 的来源验证 |
@@ -287,7 +287,7 @@
 ### 2026-10-28 增量证据：反T临时最大暴露的手工风险估算（非正式审计）
 
 - `backend/app/workbench/t_cycle_preview.py` 在原有单次 T 手工预览中增加**可选且必须完整填写**的反T风险假设：账户权益、核心仓数量/策略成本/主计划结构失效价、本次T独立止损价、既有T仓及其他持仓最大亏损合计。正T不得使用反T风险输入；独立T止损必须低于本次买入价；非有限值、负亏损、缺项拒绝。
-- 计算使用**反T先买后的临时最大暴露**，不因第二腿后来闭环而抹去当时风险。核心仓与本次新增T仓分别使用各自止损，合并其他持仓/既有T仓输入，再除以权益；严格按 `≤2% PASS / (2%,3%] WARNING / >3% HARD_FAIL` 作**数学分级**。所有金额均按用户输入计算，不自行判断结构或价格。
+- 计算使用**反T先买后的临时最大暴露**，不因第二腿后来闭环而抹去当时风险。核心仓、同票既有T仓与本次新增T仓分别使用各自止损后，只将**本票风险**除以权益，按 `≤2% PASS / (2%,3%] WARNING / >3% HARD_FAIL` 作**本次动作数学分级**；其他股票风险仅用于跨票账户合计展示，不触发额外账户级硬门槛。所有金额均按用户输入计算，不自行判断结构或价格。
 - `frontend/src/TCyclePreview.tsx` 增加中文可选风险表单，结果显式标注“手工最大暴露估算（非正式审计）”；`tCyclePreviewContract.ts` 验证返回的风险分级、数值与 `verified=false`，拒绝假冒已核验的结果。
 - `backend/tests/test_workbench_reverse_t_risk.py` 覆盖 2%/3% 分界、临时最大暴露、闭环后仍保留峰值、独立止损与输入缺失/非法值；`frontend/tests/tCyclePreviewContract.test.mjs` 覆盖来源与分级伪造的拒绝。
 - **本项只是可复核的手工数学预览，不是 M8 风险门禁完成。** 尚无券商独立账户/全量成交/持仓/T+1 昨日可卖数量认证，也未从真实账户自动读取 CORE/T 独立止损、当日换仓及完整风险事实；费用、滑点和真实动态暴露仍未核验。即使数学分级为 PASS，`verified=false`、`broker_reconciled=false`、`trade_execution_enabled=false` 均不变，不得执行或合并。
@@ -307,3 +307,11 @@
 - 输出 `projected_max_loss` / `projected_account_risk_pct` 现明确表示**本票/本次动作**风险，另提供 `account_total_max_loss` / `account_total_risk_pct`、其他持仓及既有T仓风险，前端中文分开显示「本次交易动作风险等级」与「账户风险合计（仅展示）」。
 - 回归：权益100000，本票 CORE 1000、反T 100、其他股票2500 → 本票1.1% PASS，跨票3.6%仅展示；本票自身 >3% 仍 HARD_FAIL；2%/3%边界、T买入峰值及前端契约不一致拒绝。所有输出继续 `verified=false`、`broker_reconciled=false`、`trade_execution_enabled=false`。
 - **本项仅修复跨票分级误用**，不提供真实账户认证、正式交易审计或执行授权。独立券商完整水位、真实CSV→隔离PG对账、BROKEN T正式转仓、日内换仓、T+1可卖数量、真实CORE/T风险、Safari/HTTPS实机仍未验收。M8 Gate FAIL，PR #19继续 Draft，不合并、不部署、不下发M9。最终CI需按新HEAD核实。
+
+
+### 2026-10-28 增量证据：§15.64 历史策略成本估算与当前风险严格隔离
+
+- `backend/app/workbench/persisted.py`：旧版以核心仓策略成本至失效价计算的历史估算不再写入 `effective_plans[].current_risk` 或首页 `metrics.account_risk`；新增单独字段 `historical_cost_risk_estimate`，仅在来源、数量、桶与计划时间关系可核验时展示，并明确不是经过历史成交与当时有效止损认证的初始风险。`initial_risk` 保持 `null`。
+- 当前持久化快照没有独立可核验的逐证券当前市价及完整 CORE/T 独立止损来源，`current_risk` 与 `account_risk` 均不可用；即使持仓快照带有市值，也不得倒推出当前市价冒充行情事实。前端分别显示「初始风险」「当前风险」「历史策略成本风险估算」，缺失显示「未核实」。
+- `backend/tests/test_workbench_persisted_risk.py`：旧历史成本被错误认证为当前风险的断言改为不可用；新增市值不可替代可信现价反例，保留极端合法 NUMERIC 下历史估算的高精度测试。
+- **本项为 P0 错误口径的安全隔离，不是 §15.64 正式双口径验收完成。** 尚须接入可核验的当前市价（来源、时间、价格）、当时有效止损与成交成本、完整 CORE/T 持仓及独立T止损，测试不同可信市价、跌破失效价人工确认、单票/账户金额和比例，并以隔离 PostgreSQL 和真实数据验证。M8 整体 Gate 仍 FAIL，PR 保持 Draft，不合并、不部署、不启动 M9。

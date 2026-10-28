@@ -1,5 +1,5 @@
 """Read-only, non-persistent preview of one manually entered T cycle."""
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -86,22 +86,27 @@ def _preview_reverse_t_risk(data: TCyclePreviewRequest) -> dict[str, object] | N
 
 
 def preview_t_cycle(data: TCyclePreviewRequest) -> dict[str, object]:
-    cycle = TCycle(data.direction, data.open_quantity, data.open_price)
-    if data.close_quantity > 0:
-        cycle.match(data.close_quantity, data.close_price)
-    closed = cycle.status is TCycleStatus.CLOSED
-    return {
-        "schema_version": "m8.t_cycle_preview.v1",
-        "symbol": data.symbol,
-        "direction": data.direction.value,
-        "cycle_status": cycle.status.value,
-        "remaining_quantity": str(cycle.remaining_quantity),
-        "realized_gross_pnl": str(cycle.matched_gross_pnl) if closed else None,
-        "pending_matched_gross_pnl": str(cycle.matched_gross_pnl) if not closed else None,
-        "projected_risk": _preview_reverse_t_risk(data),
-        "persisted": False,
-        "broker_reconciled": False,
-        "daily_cycle_limit_verified": False,
-        "trade_execution_enabled": False,
-        "notice": "仅本次手工输入的数学预览；未核验持仓、当日T次数或交易费用，不授权交易。",
-    }
+    # A NUMERIC(20,4) quantity multiplied by NUMERIC(18,4) price can
+    # exceed Decimal's default 28-digit precision. Preserve exact cents
+    # and threshold comparisons across the entire read-only preview.
+    with localcontext() as context:
+        context.prec = 64
+        cycle = TCycle(data.direction, data.open_quantity, data.open_price)
+        if data.close_quantity > 0:
+            cycle.match(data.close_quantity, data.close_price)
+        closed = cycle.status is TCycleStatus.CLOSED
+        return {
+            "schema_version": "m8.t_cycle_preview.v1",
+            "symbol": data.symbol,
+            "direction": data.direction.value,
+            "cycle_status": cycle.status.value,
+            "remaining_quantity": str(cycle.remaining_quantity),
+            "realized_gross_pnl": str(cycle.matched_gross_pnl) if closed else None,
+            "pending_matched_gross_pnl": str(cycle.matched_gross_pnl) if not closed else None,
+            "projected_risk": _preview_reverse_t_risk(data),
+            "persisted": False,
+            "broker_reconciled": False,
+            "daily_cycle_limit_verified": False,
+            "trade_execution_enabled": False,
+            "notice": "仅本次手工输入的数学预览；未核验持仓、当日T次数或交易费用，不授权交易。",
+        }

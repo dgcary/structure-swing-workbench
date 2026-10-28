@@ -168,3 +168,23 @@ test("repeated T identity and reused fill sources cannot inflate recorded cycle 
     assert.throws(() => assertReadOnlyOverview(overview(broken), "read_only"), /协议异常/);
   }
 });
+
+
+test("recorded T pair must have distinct evidence for both legs", () => {
+  // A single execution cannot certify both a sale and a buyback.
+  const singleSource = ["成交记录/one-fill/manual"];
+  for (const broken of [
+    { ...closed, sources: singleSource },
+    {
+      ...closed, state: "open", opening_quantity: "100",
+      closing_quantity: "40", sources: singleSource,
+    },
+  ]) {
+    assert.throws(() => assertReadOnlyOverview(overview([broken]), "read_only"), /协议异常/);
+  }
+  // One opening fill is sufficient to display an unclosed cycle, but not
+  // to certify a completed buy/sell pairing or authorize a trade.
+  assert.doesNotThrow(() => assertReadOnlyOverview(overview([{
+    ...closed, state: "open", closing_quantity: "0", sources: singleSource,
+  }]), "read_only"));
+});

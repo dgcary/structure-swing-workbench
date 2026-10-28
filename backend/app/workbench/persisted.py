@@ -188,8 +188,12 @@ def project_persisted(session: Session) -> dict[str, object]:
                         and row.market_value >= 0
                         for row in positions)
                 ):
-                    exposure = sum((row.market_value for row in positions), Decimal(0))
-                    ratio = exposure * Decimal(100) / snapshot.total_equity
+                    # M1 NUMERIC amounts may exceed the default 28-digit
+                    # Decimal context when summed and divided by equity.
+                    with localcontext() as context:
+                        context.prec = 64
+                        exposure = sum((row.market_value for row in positions), Decimal(0))
+                        ratio = exposure * Decimal(100) / snapshot.total_equity
                     if ratio <= 100:
                         metrics["position_ratio"] = _fact(
                             ratio, source + "/持仓市值", at
@@ -333,7 +337,13 @@ def project_persisted(session: Session) -> dict[str, object]:
         and snapshot_equity is not None and snapshot_equity > 0
         and snapshot_at is not None
     ):
-        account_risk = sum(risk_by_symbol.values(), Decimal(0)) * Decimal(100) / snapshot_equity
+        # Preserve full precision across the sum of separate holdings and
+        # the equity denominator; the per-position calculation alone is not enough.
+        with localcontext() as context:
+            context.prec = 64
+            account_risk = (
+                sum(risk_by_symbol.values(), Decimal(0)) * Decimal(100) / snapshot_equity
+            )
         metrics["account_risk"] = _fact(
             account_risk, snapshot_source + "/有效计划止损/核心仓策略成本",
             _observed_at(snapshot_at),

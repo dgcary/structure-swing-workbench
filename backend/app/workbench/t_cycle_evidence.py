@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import ExecutionFill, TradeAction
+from app.workbench.account_snapshot_preview import _market_session_status
 from app.domain.enums import ActionType, OrderSide
 
 MARKET_TZ = timezone(timedelta(hours=8))
@@ -38,6 +39,9 @@ def recorded_t_cycles(
     before its opening leg, or a fill dated in the future, is never a completed T.
     """
     current = now or datetime.now(UTC)
+    # Third-party calendar data may reject known closures, but can never
+    # authenticate an official session or the completeness of broker fills.
+    market_session_status = _market_session_status(market_day)
     # A user-entered cycle key is not globally unique. Never pair legs from
     # different plan versions, even if their symbol and key happen to match.
     # Keep missing keys structurally separate from user-entered strings.
@@ -98,7 +102,10 @@ def recorded_t_cycles(
         directions = set()
         sources = []
         timeline: list[tuple[datetime, str, Decimal]] = []
-        conflict = invalid_time or dates != {market_day} or key is None
+        conflict = (
+            invalid_time or dates != {market_day} or key is None
+            or market_session_status != "session"
+        )
         for action_type, fill in legs:
             direction, leg, side = T_LEGS[action_type]
             directions.add(direction)
@@ -208,6 +215,7 @@ def recorded_t_cycles(
             "cycle_key": key,
             "plan_version_id": plan_version_id,
             "market_date": market_day.isoformat(),
+            "market_calendar_status": market_session_status,
             "direction": next(iter(directions)) if len(directions) == 1 else None,
             "state": state,
             "opening_quantity": str(opening) if not conflict else None,

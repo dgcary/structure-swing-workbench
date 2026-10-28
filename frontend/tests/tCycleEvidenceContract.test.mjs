@@ -27,6 +27,7 @@ const closed = {
   cycle_key: "t-001",
   plan_version_id: "version-1",
   market_date: "2026-10-27",
+  market_calendar_status: "session",
   direction: "positive",
   state: "closed",
   opening_quantity: "100",
@@ -129,4 +130,41 @@ test("daily T limit warning is mandatory for three recorded closed pairs", () =>
       recorded_daily_limit_alert: null,
     }))), "read_only",
   ));
+});
+
+test("a closed T pair requires a keyed session, matching market date and source time", () => {
+  const conflict = {
+    ...closed, state: "conflict", cycle_key: null, direction: null,
+    opening_quantity: null, closing_quantity: null, as_of: null,
+    market_calendar_status: "closed",
+  };
+  assert.doesNotThrow(() => assertReadOnlyOverview(overview([conflict]), "read_only"));
+  for (const broken of [
+    { ...closed, market_calendar_status: "closed" },
+    { ...closed, market_calendar_status: "unknown" },
+    { ...closed, market_calendar_status: undefined },
+    { ...closed, cycle_key: null },
+    { ...closed, cycle_key: " " },
+    { ...closed, plan_version_id: null },
+    { ...closed, plan_version_id: " " },
+    { ...closed, as_of: "2026-10-28T00:01:00+08:00" },
+    { ...closed, market_date: "2026-10-26" },
+  ]) {
+    assert.throws(() => assertReadOnlyOverview(overview([broken]), "read_only"), /协议异常/);
+  }
+});
+
+test("repeated T identity and reused fill sources cannot inflate recorded cycle counts", () => {
+  const second = {
+    ...closed, cycle_key: "t-002",
+    sources: ["成交记录/fill-3/manual", "成交记录/fill-4/manual"],
+  };
+  assert.doesNotThrow(() => assertReadOnlyOverview(overview([closed, second]), "read_only"));
+  for (const broken of [
+    [closed, { ...closed }],
+    [closed, { ...second, sources: ["成交记录/fill-1/manual", "成交记录/fill-4/manual"] }],
+    [{ ...closed, sources: ["成交记录/fill-1/manual", "成交记录/fill-1/manual"] }],
+  ]) {
+    assert.throws(() => assertReadOnlyOverview(overview(broken), "read_only"), /协议异常/);
+  }
 });

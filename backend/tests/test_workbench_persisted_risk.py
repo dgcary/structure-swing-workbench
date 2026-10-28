@@ -54,18 +54,19 @@ class _ReadOnlySession:
 
 
 def _projection(*, core="100", t="0", cost="10", stop="9",
-                quantity="100", equity="200000",
+                quantity="100", equity="200000", market_value="1200", available_cash="100000",
                 snapshot_at=AT, version_at=AT - timedelta(hours=1),
                 with_plan=True, buckets_complete=True, zero_conflict=False,
                 valid_until=None, additional_version_stop=None,
                 additional_version_valid_until=None, snapshot_source="manual"):
     snapshot = SimpleNamespace(
         id="snapshot-1", captured_at=snapshot_at, source=snapshot_source,
-        total_equity=Decimal(equity), available_cash=Decimal(100000),
+        total_equity=Decimal(equity), available_cash=Decimal(available_cash),
     )
     position = SimpleNamespace(
         id="position-1", instrument_code="600000",
-        total_quantity=Decimal(quantity), market_value=Decimal(1200),
+        total_quantity=Decimal(quantity),
+        market_value=Decimal(market_value) if market_value is not None else None,
         broker_cost_price=Decimal(10),
     )
     buckets = [
@@ -305,4 +306,34 @@ def test_market_value_is_not_a_verified_current_quote():
     assert plan["initial_risk"] is None
     assert plan["current_risk"] is None
     assert _metric(overview, "account_risk")["status"] == "unavailable"
+    assert overview["trade_execution_enabled"] is False
+
+
+@pytest.mark.parametrize(("market_value", "expected_pct"), [
+    ("900", "90"),
+    ("1000", "100"),
+    ("1200", "120"),
+    ("1500", "150"),
+])
+def test_gross_exposure_snapshot_does_not_hide_over_100_percent(market_value, expected_pct):
+    # §15.48: over-limit gross exposure must remain visible for review.
+    # A sourced historical snapshot is not an execution authorization.
+    overview = _projection(
+        equity="1000", available_cash="0", market_value=market_value,
+    )
+    ratio = _metric(overview, "position_ratio")
+    assert ratio["status"] == "available"
+    assert Decimal(ratio["value"]) == Decimal(expected_pct)
+    assert "持仓市值" in ratio["source"]
+    assert ratio["as_of"] is not None
+    assert _metric(overview, "account_risk")["status"] == "unavailable"
+    assert overview["trade_execution_enabled"] is False
+
+
+@pytest.mark.parametrize("market_value", [None, "-1", "NaN"])
+def test_invalid_snapshot_market_value_cannot_publish_exposure(market_value):
+    overview = _projection(equity="1000", available_cash="0", market_value=market_value)
+    ratio = _metric(overview, "position_ratio")
+    assert ratio["status"] == "unavailable"
+    assert ratio["value"] is None
     assert overview["trade_execution_enabled"] is False

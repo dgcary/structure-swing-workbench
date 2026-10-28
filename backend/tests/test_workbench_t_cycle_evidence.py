@@ -21,11 +21,44 @@ def _fill(
         fee=Decimal(fee) if fee is not None else None,
         executed_at=at if at is not None else NOW.replace(hour=hour),
         external_execution_id=external_id,
+        # Most fixtures represent valid persisted actions. Tests that need
+        # malformed or cross-version identities override this explicitly.
+        action=SimpleNamespace(plan_version_id="test-version"),
     )
 
 
 def _record(action_type, fill, *, key="cycle-1", symbol="600000"):
     return (symbol, key, action_type, fill)
+
+
+
+def test_missing_or_ambiguous_plan_version_cannot_complete_a_t_pair():
+    # A T key alone is not a globally unique trade decision identity.
+    # Without a real plan version, unrelated fills could be paired, and the
+    # front-end read-only contract would reject the whole overview payload.
+    for invalid_version in (None, "", " ", " version-a "):
+        rows = [
+            _record(ActionType.POSITIVE_T_SELL,
+                    _fill("open", OrderSide.SELL, "10", 1)),
+            _record(ActionType.POSITIVE_T_BUYBACK,
+                    _fill("close", OrderSide.BUY, "10", 2)),
+        ]
+        for _, _, _, fill in rows:
+            fill.action.plan_version_id = invalid_version
+        cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+        assert cycle["state"] == "conflict"
+        assert cycle["opening_quantity"] is None
+        assert cycle["closing_quantity"] is None
+        assert cycle["recorded_daily_limit_alert"] is None
+        assert cycle["broker_reconciled"] is False
+        assert cycle["trade_execution_enabled"] is False
+
+    rows[0][3].action.plan_version_id = "version-a"
+    rows[1][3].action.plan_version_id = "version-a"
+    coherent = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert coherent["state"] == "closed"
+    assert coherent["plan_version_id"] == "version-a"
+    assert coherent["broker_reconciled"] is False
 
 
 def test_recorded_split_positive_t_closes_once_with_explicit_fill_sources():

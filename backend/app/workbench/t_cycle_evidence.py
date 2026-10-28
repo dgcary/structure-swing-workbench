@@ -162,12 +162,19 @@ def recorded_t_cycles(
         balance = Decimal(0)
         previous_stamp: datetime | None = None
         previous_leg: str | None = None
-        for stamp, leg, quantity in sorted(timeline, key=lambda item: item[0]):
+        ordered_timeline = sorted(timeline, key=lambda item: item[0])
+        for index, (stamp, leg, quantity) in enumerate(ordered_timeline):
             if (previous_stamp == stamp and previous_leg is not None
                     and previous_leg != leg):
                 conflict = True  # Same-timestamp legs have no reliable ordering.
             balance += quantity if leg == "open" else -quantity
             if balance < 0:
+                conflict = True
+            # A completed balance followed by another leg under the same
+            # cycle key represents a second trading decision, not a split
+            # fill of the original cycle. Do not merge multiple round trips
+            # into one apparently valid T cycle and hide the daily limit.
+            if balance == 0 and index < len(ordered_timeline) - 1:
                 conflict = True
             previous_stamp, previous_leg = stamp, leg
         state = "conflict" if conflict else "closed" if opening == closing else "open"

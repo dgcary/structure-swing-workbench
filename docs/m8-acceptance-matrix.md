@@ -263,3 +263,10 @@
 - **缺陷与修复**：此前 `recorded_t_cycles` 允许成交时间比当前时间最多提前 5 分钟，可能在第二腿实际时间尚未到来时，把数据库中的两腿标记为已记录完整配对。现在对单周期已记录成交要求 `executed_at <= now`（以 UTC 绝对时间比较）；只要任一腿在未来，即标记 `conflict`，不发布已记录配对数量或超限下界。等时间真实到达后，同一份内部一致的记录才允许显示为**未对账**配对。
 - **回归测试**：`backend/tests/test_workbench_t_cycle_evidence.py::test_near_future_fill_cannot_be_counted_before_it_occurs` 验证第二腿晚于当前 2 分钟时不得提前闭环，时间过去后才恢复 `closed`；两种状态始终 `broker_reconciled=false`、`trade_execution_enabled=false`。
 - **限制**：仅提高已记录 T 成交时间可信度，不能代替券商独立全量成交水位、真实 CSV→隔离 PostgreSQL、收盘 BROKEN 正式转仓、日内换仓、T+1 可卖数量、CORE/T 独立风险及 Safari/TLS 实机验收。首页完整 T 次数与未闭环总数继续 `unavailable`。M8 整体 Gate FAIL，PR #19 仍保持 Draft，不合并、不部署、不启动 M9。最终 CI 以本次 HEAD 的实际结果为准。
+
+
+### 2026-10-28 增量证据：休市日与交易日历不可用时的 T 成交门禁
+
+- `backend/app/workbench/t_cycle_evidence.py`：读取已有第三方 XSHG 交易日历状态；已知休市日或日历不可用时，即使同一证券、同一计划版本的两腿成交数量和时间完全配对，也只能显示 `conflict`，不得标记为已记录完整 T。响应增加 `market_calendar_status` 以区分 `session` / `closed` / `unknown`。该第三方日历**不能**证明临时停市状态或券商全量成交，正常交易日的 `closed` 仍仅是未对账记录。
+- `backend/tests/test_workbench_t_cycle_evidence.py`：新增已知节假日两腿配对、日历不可用两腿配对反例；均要求 `broker_reconciled=false`、`trade_execution_enabled=false`。原正常交易日配对测试保留。
+- **验收边界**：此项仅修复历史已记录 T 周期的休市日期误认，不实现独立券商认证、正式 BROKEN 转仓、换仓/T+1/CORE-T 风险或 Safari/TLS 实机验收。M8 整体 Gate 仍 FAIL，PR #19 不得合并；最新 HEAD CI 以 GitHub Actions 实际结果为准。

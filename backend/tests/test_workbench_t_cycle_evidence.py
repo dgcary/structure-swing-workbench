@@ -51,11 +51,11 @@ def test_split_fills_cannot_exceed_their_recorded_action_quantity():
     """Matching T legs do not excuse an opening action overfilled by split executions."""
     opening_action = SimpleNamespace(
         id="open-action", plan_version_id="version-a", side=OrderSide.SELL,
-        action_type=ActionType.POSITIVE_T_SELL, planned_quantity=Decimal("10"),
+        action_type=ActionType.POSITIVE_T_SELL, planned_quantity=Decimal(10),
     )
     closing_action = SimpleNamespace(
         id="close-action", plan_version_id="version-a", side=OrderSide.BUY,
-        action_type=ActionType.POSITIVE_T_BUYBACK, planned_quantity=Decimal("12"),
+        action_type=ActionType.POSITIVE_T_BUYBACK, planned_quantity=Decimal(12),
     )
     rows = [
         _record(ActionType.POSITIVE_T_SELL, _fill("open-1", OrderSide.SELL, "7", 1)),
@@ -74,7 +74,7 @@ def test_split_fills_cannot_exceed_their_recorded_action_quantity():
 
     # Exactly matching the action's recorded quantity is coherent evidence,
     # though it still does not certify a broker-complete trading day.
-    opening_action.planned_quantity = Decimal("12")
+    opening_action.planned_quantity = Decimal(12)
     matching = recorded_t_cycles(rows, DAY, now=NOW)[0]
     assert matching["state"] == "closed"
     assert matching["broker_reconciled"] is False

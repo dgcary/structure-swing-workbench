@@ -35,7 +35,7 @@ def recorded_t_cycles(
 
     An unkeyed T fill is explicitly conflicting. A key reused across days,
     a wrong side, invalid quantity/price, missing source/time or a closing leg
-    before its opening leg is never a completed T.
+    before its opening leg, or a fill dated in the future, is never a completed T.
     """
     current = now or datetime.now(UTC)
     # A user-entered cycle key is not globally unique. Never pair legs from
@@ -86,7 +86,7 @@ def recorded_t_cycles(
         for _, fill in legs:
             stamp = fill.executed_at
             if (stamp is None or stamp.tzinfo is None or stamp.utcoffset() is None
-                    or stamp.astimezone(UTC) > current + timedelta(minutes=5)):
+                    or stamp.astimezone(UTC) > current.astimezone(UTC)):
                 invalid_time = True
             else:
                 dates.add(stamp.astimezone(MARKET_TZ).date())

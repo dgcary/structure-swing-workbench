@@ -357,3 +357,10 @@
 - 同一证券、交易日、计划版本、周期键不得重复发布多个周期；非冲突周期不得复用同一成交来源记录（含周期内部重复），防止前端重复计数或错误显示“已记录完整配对”。
 - `frontend/tests/tCycleEvidenceContract.test.mjs` 新增交易日历缺失/休市、缺周期键/计划版本、成交时间跨日、重复周期及复用成交来源正反例。所有记录仍为 `broker_reconciled=false`、`trade_execution_enabled=false`；首页完整日内 T 次数仍为 `unavailable`。
 - **验收边界**：仅增强已有 T 成交证据的前端只读协议，不能替代独立券商全量成交水位、真实 CSV→PostgreSQL 对账、日终 BROKEN T 正式转仓、日内换仓、T+1 可卖量、CORE/T 当前风险或 Safari/可信 HTTPS 实机证据。M8 整体 Gate 仍 FAIL，PR #19 保持 Draft；CI 以最终 HEAD 为准。
+
+
+### 2026-10-29 增量证据：T 配对至少需要两条独立成交来源
+
+- `frontend/src/overviewContract.ts`：原只读协议允许 `state=closed` 或已部分回补的 `state=open` 仅携带一条成交来源，可能把单笔成交伪装成已记录的买卖配对。现在完整配对或已有第二腿成交的周期必须至少有两条来源；只有尚无第二腿成交的未闭环周期允许一条第一腿来源。已有来源唯一性检查仍然生效。
+- `frontend/tests/tCycleEvidenceContract.test.mjs`：增加单来源完整配对、单来源部分回补的拒绝反例，以及只有第一腿成交的正常未闭环对照。
+- **限制**：只增强前端正式成交只读协议，既不证明券商全量成交，也不提供真实日内 T 次数、T+1 可卖量或交易许可。独立券商身份与水位、真实 CSV→隔离 PostgreSQL 对账、正式日终转仓、换仓、CORE/T 可信风险及 Safari/HTTPS 实机验收仍待完成。M8 整体验收继续 FAIL，PR #19 保持 Draft；以本轮最终 HEAD 的 GitHub Actions 结果为准。

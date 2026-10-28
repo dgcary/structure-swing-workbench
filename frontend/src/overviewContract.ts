@@ -151,7 +151,8 @@ function validPlanRow(value: unknown): boolean {
     typeof value.version === "number" && Number.isSafeInteger(value.version) &&
     value.version > 0 && typeof value.state_zh === "string" &&
     value.state_zh.trim().length > 0 &&
-    ["invalidation_price", "first_target_price", "initial_risk", "current_risk"]
+    ["invalidation_price", "first_target_price", "initial_risk", "current_risk",
+       "historical_cost_risk_estimate"]
       .every((key) => optionalDecimal(value[key])) &&
     typeof value.warning === "string" && value.warning.trim().length > 0;
 }

@@ -14,8 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import ExecutionFill, TradeAction
-from app.workbench.account_snapshot_preview import _market_session_status
 from app.domain.enums import ActionType, OrderSide
+from app.workbench.account_snapshot_preview import _market_session_status
 
 MARKET_TZ = timezone(timedelta(hours=8))
 T_LEGS = {

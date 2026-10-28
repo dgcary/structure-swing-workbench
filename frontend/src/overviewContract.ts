@@ -199,6 +199,17 @@ function validAuditRow(value: unknown): boolean {
 }
 
 /** Recorded T legs are partial evidence, never a broker-complete daily count. */
+/** A fill's database ID is unique even when the recorded source label differs. */
+function recordedFillId(source: unknown): string | null {
+  if (typeof source !== "string" || !source.startsWith("成交记录/")) return null;
+  const remainder = source.slice("成交记录/".length);
+  const separator = remainder.indexOf("/");
+  if (separator <= 0 || separator === remainder.length - 1) return null;
+  const id = remainder.slice(0, separator);
+  const origin = remainder.slice(separator + 1);
+  return id.trim() === id && id.length > 0 && origin.trim().length > 0 ? id : null;
+}
+
 function validRecordedTCycle(value: unknown): boolean {
   if (!record(value) || typeof value.symbol !== "string" ||
       !A_SHARE_SYMBOL.test(value.symbol) ||
@@ -221,9 +232,7 @@ function validRecordedTCycle(value: unknown): boolean {
       value.trade_execution_enabled !== false ||
       typeof value.warning !== "string" || !value.warning.trim() ||
       !Array.isArray(value.sources) || value.sources.length === 0 ||
-      !value.sources.every((source: unknown) =>
-        typeof source === "string" && source.startsWith("成交记录/") &&
-        source.length > "成交记录/".length)) return false;
+      !value.sources.every((source: unknown) => recordedFillId(source) !== null)) return false;
   if (value.as_of !== null && !validObservedAt(value.as_of)) return false;
   // A closed pair necessarily contains an opening and a closing execution.
   // A partially closed open cycle also needs evidence of both legs. A single
@@ -342,7 +351,7 @@ export function assertReadOnlyOverview(
     // A repeated plan/version/day/cycle identity cannot represent another T
     // decision. Nor can a single fill certify two different non-conflict cycles.
     const identities = new Set<string>();
-    const acceptedFillSources = new Set<string>();
+    const acceptedFillIds = new Set<string>();
     for (const cycle of data.t_cycle_evidence) {
       if (cycle.cycle_key !== null) {
         const identity = JSON.stringify([
@@ -353,8 +362,11 @@ export function assertReadOnlyOverview(
       }
       if (cycle.state !== "conflict") {
         for (const source of cycle.sources) {
-          if (acceptedFillSources.has(source)) fail();
-          acceptedFillSources.add(source);
+          // The same database fill with a different source label is still one
+          // execution, never independent evidence for another T leg/cycle.
+          const fillId = recordedFillId(source);
+          if (fillId === null || acceptedFillIds.has(fillId)) fail();
+          acceptedFillIds.add(fillId);
         }
       }
     }

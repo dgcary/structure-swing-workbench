@@ -58,9 +58,9 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
                 snapshot_at=AT, version_at=AT - timedelta(hours=1),
                 with_plan=True, buckets_complete=True, zero_conflict=False,
                 valid_until=None, additional_version_stop=None,
-                additional_version_valid_until=None):
+                additional_version_valid_until=None, snapshot_source="manual"):
     snapshot = SimpleNamespace(
-        id="snapshot-1", captured_at=snapshot_at, source="manual",
+        id="snapshot-1", captured_at=snapshot_at, source=snapshot_source,
         total_equity=Decimal(equity), available_cash=Decimal(100000),
     )
     position = SimpleNamespace(
@@ -232,4 +232,15 @@ def test_expired_second_plan_does_not_invalidate_unique_current_risk():
     assert len(overview["effective_plans"]) == 1
     assert overview["effective_plans"][0]["current_risk"] == "100"
     assert _metric(overview, "account_risk")["status"] == "available"
+    assert overview["trade_execution_enabled"] is False
+
+@pytest.mark.parametrize("source", ["", " ", "\t"])
+def test_blank_snapshot_source_cannot_authenticate_account_facts(source):
+    overview = _projection(snapshot_source=source)
+    for key in ("equity", "available_cash", "position_count", "account_risk"):
+        metric = _metric(overview, key)
+        assert metric["status"] == "unavailable"
+        assert metric["value"] is None
+        assert metric["source"] is None
+    assert overview["holdings"] is None
     assert overview["trade_execution_enabled"] is False

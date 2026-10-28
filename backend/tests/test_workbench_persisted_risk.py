@@ -1,7 +1,7 @@
 """M8 historical risk projections require dated, complete CORE-only evidence."""
 
 from datetime import UTC, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from types import SimpleNamespace
 
 import pytest
@@ -177,6 +177,27 @@ def test_large_valid_core_risk_keeps_fractional_yuan_in_persisted_projection():
     account_risk = _metric(overview, "account_risk")
     assert account_risk["status"] == "available"
     assert Decimal(account_risk["value"]) == Decimal("9999999999999999.98")
+    assert overview["trade_execution_enabled"] is False
+
+
+def test_persisted_account_ratios_preserve_full_numeric_precision():
+    # Exact M1 NUMERIC bounds can require >28 digits during aggregation and
+    # division. The historical estimate must not silently round before display.
+    quantity = Decimal("9999999999999999.9999")
+    cost = Decimal("99999999999999.9999")
+    stop = Decimal("0.0001")
+    equity = Decimal("7777777777777777.7777")
+    with localcontext() as context:
+        context.prec = 64
+        expected_risk_pct = (quantity * (cost - stop)) * Decimal(100) / equity
+        expected_position_pct = Decimal(1200) * Decimal(100) / equity
+
+    overview = _projection(
+        quantity=str(quantity), core=str(quantity), cost=str(cost),
+        stop=str(stop), equity=str(equity),
+    )
+    assert _metric(overview, "account_risk")["value"] == str(expected_risk_pct)
+    assert _metric(overview, "position_ratio")["value"] == str(expected_position_pct)
     assert overview["trade_execution_enabled"] is False
 
 

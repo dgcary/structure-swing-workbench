@@ -8,6 +8,7 @@ const closed = () => ({
   symbol: "600000", direction: "positive", cycle_status: "closed",
   remaining_quantity: "0", realized_gross_pnl: "-200",
   pending_matched_gross_pnl: null,
+  projected_risk: null,
   notice: "仅为手工数学预览，不授权交易。",
   persisted: false, broker_reconciled: false,
   daily_cycle_limit_verified: false, trade_execution_enabled: false,
@@ -55,4 +56,28 @@ test("reject contradictory closed/open state and malformed displayed amounts", (
     assert.throws(() => assertTCyclePreview({ ...closed(), ...change }, input),
       /协议异常/);
   }
+});
+
+test("manual reverse-T risk requires unverified provenance and correct tier", () => {
+  const risk = {
+    projected_max_loss: "500", projected_account_risk_pct: "2",
+    core_max_loss: "350", new_t_max_loss: "50",
+    level: "PASS", verified: false, source: "用户手工假设",
+    warning: "未核验账户及T+1，不授权交易。",
+  };
+  const reverse = { ...closed(), direction: "reverse", projected_risk: risk };
+  const reverseInput = { symbol: "600000", direction: "reverse", expectRisk: true };
+  assert.doesNotThrow(() => assertTCyclePreview(reverse, reverseInput));
+  for (const change of [
+    { verified: true }, { level: "WARNING" }, { source: "" },
+    { warning: "" }, { projected_account_risk_pct: "NaN" },
+    { projected_max_loss: "-1" }, { new_t_max_loss: "Infinity" },
+  ]) {
+    assert.throws(() => assertTCyclePreview({
+      ...reverse, projected_risk: { ...risk, ...change },
+    }, reverseInput), /协议异常/);
+  }
+  assert.throws(() => assertTCyclePreview(reverse, input), /协议异常/);
+  assert.throws(() => assertTCyclePreview({ ...reverse, projected_risk: null },
+    reverseInput), /协议异常/);
 });

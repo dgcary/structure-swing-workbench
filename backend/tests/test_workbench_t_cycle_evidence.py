@@ -609,3 +609,50 @@ def test_daily_limit_lower_bound_is_per_symbol_not_per_plan_or_whole_account():
         cycle["recorded_daily_limit_alert"] is None
         for cycle in cycles if cycle["symbol"] == "000001"
     )
+
+
+def test_t_cycle_action_side_or_type_disagreement_is_conflicting_evidence():
+    # Even if the fills themselves have correct sides and balance, the
+    # persisted Action must not contradict its declared T trading intent.
+    for action_side, action_type in (
+        (OrderSide.BUY, ActionType.POSITIVE_T_SELL),
+        (OrderSide.SELL, ActionType.REVERSE_T_SELL),
+    ):
+        opening = _fill("open", OrderSide.SELL, "10", 1)
+        closing = _fill("close", OrderSide.BUY, "10", 2)
+        opening.action = SimpleNamespace(
+            plan_version_id="version-a", side=action_side, action_type=action_type,
+        )
+        closing.action = SimpleNamespace(
+            plan_version_id="version-a", side=OrderSide.BUY,
+            action_type=ActionType.POSITIVE_T_BUYBACK,
+        )
+        cycle = recorded_t_cycles([
+            _record(ActionType.POSITIVE_T_SELL, opening),
+            _record(ActionType.POSITIVE_T_BUYBACK, closing),
+        ], DAY, now=NOW)[0]
+        assert cycle["state"] == "conflict"
+        assert cycle["opening_quantity"] is None
+        assert cycle["recorded_daily_limit_alert"] is None
+        assert cycle["broker_reconciled"] is False
+        assert cycle["trade_execution_enabled"] is False
+
+
+def test_consistent_persisted_t_action_metadata_remains_recorded_only():
+    opening = _fill("open", OrderSide.SELL, "10", 1)
+    closing = _fill("close", OrderSide.BUY, "10", 2)
+    opening.action = SimpleNamespace(
+        plan_version_id="version-a", side=OrderSide.SELL,
+        action_type=ActionType.POSITIVE_T_SELL,
+    )
+    closing.action = SimpleNamespace(
+        plan_version_id="version-a", side=OrderSide.BUY,
+        action_type=ActionType.POSITIVE_T_BUYBACK,
+    )
+    cycle = recorded_t_cycles([
+        _record(ActionType.POSITIVE_T_SELL, opening),
+        _record(ActionType.POSITIVE_T_BUYBACK, closing),
+    ], DAY, now=NOW)[0]
+    assert cycle["state"] == "closed"
+    assert cycle["broker_reconciled"] is False
+    assert cycle["trade_execution_enabled"] is False

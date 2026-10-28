@@ -1,4 +1,4 @@
-"""M8 historical risk projections require dated, complete CORE-only evidence."""
+"""Historical CORE cost estimates must never impersonate current market risk."""
 
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal, localcontext
@@ -113,14 +113,13 @@ def _metric(overview, key):
 def test_sourced_core_only_risk_is_historical_not_trade_permission():
     overview = _projection()
     risk = _metric(overview, "account_risk")
-    assert risk["status"] == "available"
-    assert Decimal(risk["value"]) == Decimal("0.05")
-    assert "账户快照/" in risk["source"] and "有效计划止损" in risk["source"]
-    assert risk["as_of"] == AT.isoformat()
+    assert risk["status"] == "unavailable"
+    assert risk["value"] is None and risk["source"] is None
     plan = overview["effective_plans"][0]
-    assert Decimal(plan["current_risk"]) == Decimal(100)
+    assert plan["current_risk"] is None
     assert plan["initial_risk"] is None
-    assert "历史快照" in plan["warning"]
+    assert Decimal(plan["historical_cost_risk_estimate"]) == Decimal(100)
+    assert "缺可信当前市价" in plan["warning"]
     assert "账户快照/" in plan["source"]
     assert overview["trade_execution_enabled"] is False
     assert overview["pending_actions"] == []
@@ -147,12 +146,11 @@ def test_missing_or_mismatched_risk_facts_remain_unknown(kwargs):
     assert risk["source"] is None
     assert risk["as_of"] is None
     for plan in overview["effective_plans"]:
+        assert plan["current_risk"] is None
         if kwargs.get("equity") == "NaN":
-            # Per-position monetary risk is sourced even when the account
-            # denominator is invalid; percentage risk must remain unavailable.
-            assert Decimal(plan["current_risk"]) == Decimal(100)
-        else:
-            assert plan["current_risk"] is None
+            # A historical cost estimate may be displayed separately, but
+            # cannot certify initial or current risk.
+            assert Decimal(plan["historical_cost_risk_estimate"]) == Decimal(100)
     assert overview["trade_execution_enabled"] is False
 
 
@@ -172,11 +170,12 @@ def test_large_valid_core_risk_keeps_fractional_yuan_in_persisted_projection():
         equity="9999999999999999.9999",
     )
     plan = overview["effective_plans"][0]
-    assert plan["current_risk"] == exact
-    assert "历史快照" in plan["warning"]
+    assert plan["current_risk"] is None
+    assert plan["historical_cost_risk_estimate"] == exact
+    assert "缺可信当前市价" in plan["warning"]
     account_risk = _metric(overview, "account_risk")
-    assert account_risk["status"] == "available"
-    assert Decimal(account_risk["value"]) == Decimal("9999999999999999.98")
+    assert account_risk["status"] == "unavailable"
+    assert account_risk["value"] is None
     assert overview["trade_execution_enabled"] is False
 
 
@@ -189,14 +188,17 @@ def test_persisted_account_ratios_preserve_full_numeric_precision():
     equity = Decimal("7777777777777777.7777")
     with localcontext() as context:
         context.prec = 64
-        expected_risk_pct = (quantity * (cost - stop)) * Decimal(100) / equity
         expected_position_pct = Decimal(1200) * Decimal(100) / equity
 
     overview = _projection(
         quantity=str(quantity), core=str(quantity), cost=str(cost),
         stop=str(stop), equity=str(equity),
     )
-    assert _metric(overview, "account_risk")["value"] == str(expected_risk_pct)
+    assert _metric(overview, "account_risk")["status"] == "unavailable"
+    with localcontext() as context:
+        context.prec = 64
+        historical = quantity * (cost - stop)
+    assert overview["effective_plans"][0]["historical_cost_risk_estimate"] == str(historical)
     assert _metric(overview, "position_ratio")["value"] == str(expected_position_pct)
     assert overview["trade_execution_enabled"] is False
 
@@ -234,7 +236,8 @@ def test_expired_effective_flag_does_not_publish_an_active_plan_or_risk():
 
     still_valid = _projection(valid_until=market_today)
     assert len(still_valid["effective_plans"]) == 1
-    assert _metric(still_valid, "account_risk")["status"] == "available"
+    assert _metric(still_valid, "account_risk")["status"] == "unavailable"
+    assert still_valid["effective_plans"][0]["historical_cost_risk_estimate"] == "100"
 
 
 def test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk():
@@ -260,6 +263,7 @@ def test_two_effective_plans_for_one_symbol_block_account_risk(other_stop):
     overview = _projection(additional_version_stop=other_stop)
     assert len(overview["effective_plans"]) == 2
     assert all(plan["current_risk"] is None for plan in overview["effective_plans"])
+    assert all(plan["historical_cost_risk_estimate"] is None for plan in overview["effective_plans"])
     assert all("多份有效计划" in plan["warning"] for plan in overview["effective_plans"])
     risk = _metric(overview, "account_risk")
     assert risk["status"] == "unavailable"
@@ -275,8 +279,9 @@ def test_expired_second_plan_does_not_invalidate_unique_current_risk():
         additional_version_valid_until=market_today - timedelta(days=1),
     )
     assert len(overview["effective_plans"]) == 1
-    assert overview["effective_plans"][0]["current_risk"] == "100"
-    assert _metric(overview, "account_risk")["status"] == "available"
+    assert overview["effective_plans"][0]["current_risk"] is None
+    assert overview["effective_plans"][0]["historical_cost_risk_estimate"] == "100"
+    assert _metric(overview, "account_risk")["status"] == "unavailable"
     assert overview["trade_execution_enabled"] is False
 
 @pytest.mark.parametrize("source", ["", " ", "\t"])
@@ -288,4 +293,16 @@ def test_blank_snapshot_source_cannot_authenticate_account_facts(source):
         assert metric["value"] is None
         assert metric["source"] is None
     assert overview["holdings"] is None
+    assert overview["trade_execution_enabled"] is False
+
+
+def test_market_value_is_not_a_verified_current_quote():
+    # Snapshot market_value (1200 / 100 shares) may imply a price of 12,
+    # but lacks independent quote provenance/time and CORE/T stop completeness.
+    overview = _projection()
+    plan = overview["effective_plans"][0]
+    assert plan["historical_cost_risk_estimate"] == "100"
+    assert plan["initial_risk"] is None
+    assert plan["current_risk"] is None
+    assert _metric(overview, "account_risk")["status"] == "unavailable"
     assert overview["trade_execution_enabled"] is False

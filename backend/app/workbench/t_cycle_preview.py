@@ -16,10 +16,14 @@ class ReverseTRiskInputs(BaseModel):
     account_equity: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
     core_quantity: Decimal = Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
     core_cost_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
-    main_invalidation_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
+    main_invalidation_price: Decimal = Field(
+        gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4
+    )
     t_stop_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
     existing_t_max_loss: Decimal = Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
-    other_positions_max_loss: Decimal = Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
+    other_positions_max_loss: Decimal = Field(
+        ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4
+    )
 
 
 class TCyclePreviewRequest(BaseModel):
@@ -27,8 +31,12 @@ class TCyclePreviewRequest(BaseModel):
     direction: TDirection
     open_quantity: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
     open_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
-    close_quantity: Decimal = Field(default=Decimal(0), ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
-    close_price: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
+    close_quantity: Decimal = Field(
+        default=Decimal(0), ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4
+    )
+    close_price: Decimal | None = Field(
+        default=None, gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4
+    )
     risk_inputs: ReverseTRiskInputs | None = None
 
     @model_validator(mode="after")

@@ -292,3 +292,10 @@
 - `backend/tests/test_workbench_reverse_t_risk.py` 覆盖 2%/3% 分界、临时最大暴露、闭环后仍保留峰值、独立止损与输入缺失/非法值；`frontend/tests/tCyclePreviewContract.test.mjs` 覆盖来源与分级伪造的拒绝。
 - **本项只是可复核的手工数学预览，不是 M8 风险门禁完成。** 尚无券商独立账户/全量成交/持仓/T+1 昨日可卖数量认证，也未从真实账户自动读取 CORE/T 独立止损、当日换仓及完整风险事实；费用、滑点和真实动态暴露仍未核验。即使数学分级为 PASS，`verified=false`、`broker_reconciled=false`、`trade_execution_enabled=false` 均不变，不得执行或合并。
 - 最终验收以本次最新 HEAD 的后端/前端 CI 与真实券商、手机 Safari、HTTPS/TLS 实机证据为准，不能用本项单元测试替代。
+
+
+### 2026-10-28 增量证据：T 预览极端数值防溢出
+
+- `backend/app/workbench/t_cycle_preview.py`：全部 T 开平数量、成交价格和反 T 风险手工假设的 Decimal 输入与现有 M1 数据模型的 NUMERIC(20,4) 数量/金额、NUMERIC(18,4) 价格精度对齐；有限但指数极大的数值（如 `1e999999`）不再进入 Decimal 运算导致服务器异常，而是返回输入校验错误（HTTP 422）。这属于输入安全和数据一致性，不增加交易纪律阈值。
+- `backend/tests/test_workbench_t_cycle_preview.py`、`test_workbench_reverse_t_risk.py`：覆盖极端正负指数、超精度小数、越界价格与正常四位小数对照；保持 `verified=false`、`trade_execution_enabled=false`。
+- **边界**：本轮仅处理手工 T 数学预览，不认证券商成交、真实账户风险、T+1、日终正式转仓或移动端。M8 整体验收仍 FAIL；PR #19 保持 Draft。CI 以最终 HEAD 的实际检查为准。

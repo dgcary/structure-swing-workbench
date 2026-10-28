@@ -137,7 +137,7 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     after_full_exit = projected()
                     assert after_full_exit["effective_plans"] == []
                     assert after_full_exit["trade_execution_enabled"] is False
-                    assert after_full_exit["metrics"]["account_risk"]["status"] == "unavailable"
+                    assert next(metric for metric in after_full_exit["metrics"] if metric["key"] == "account_risk")["status"] == "unavailable"
                     late_sell_fill.quantity = Decimal(40)
                     session.flush()
                     assert projected()["effective_plans"] == []
@@ -187,7 +187,7 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     after_reconciliation = projected()
                     assert len(after_reconciliation["effective_plans"]) == 1
                     assert after_reconciliation["trade_execution_enabled"] is False
-                    assert after_reconciliation["metrics"]["account_risk"]["status"] == "unavailable"
+                    assert next(metric for metric in after_reconciliation["metrics"] if metric["key"] == "account_risk")["status"] == "unavailable"
                     session.delete(late_buy_fill)
                     session.delete(late_buy)
                     snapshot.captured_at = now - timedelta(minutes=10)

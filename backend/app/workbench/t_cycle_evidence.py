@@ -74,7 +74,9 @@ def recorded_t_cycles(
             seen_external_ids.add(reference)
     for symbol, key, action_type, fill in records:
         if action_type in T_LEGS:
-            group_key = key.strip() if key and key.strip() else None
+            # Preserve the exact user-entered identity. Trimming it here can
+            # pair two different T decisions into a fictitious closed cycle.
+            group_key = key if isinstance(key, str) and key.strip() else None
             action = getattr(fill, "action", None)
             plan_version_id = getattr(action, "plan_version_id", None)
             grouped[(
@@ -115,6 +117,7 @@ def recorded_t_cycles(
         )
         conflict = (
             invalid_time or dates != {market_day} or key is None
+            or not isinstance(key, str) or key != key.strip()
             or not valid_plan_version or market_session_status != "session"
         )
         for action_type, fill in legs:

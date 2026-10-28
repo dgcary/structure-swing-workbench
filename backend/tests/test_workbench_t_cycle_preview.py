@@ -50,3 +50,26 @@ def test_invalid_input():
         {"open_price": "NaN"}, {"open_quantity": "Infinity"},
     ):
         assert call(**invalid).status_code == 422, invalid
+
+
+def test_extreme_finite_decimal_exponents_and_precision_fail_with_422():
+    """Finite Decimal values may still overflow arithmetic without input bounds."""
+    for field, value in (
+        ("open_price", "1e999999"),
+        ("open_quantity", "1e999999"),
+        ("close_price", "1e999999"),
+        ("close_quantity", "1e999999"),
+        ("open_price", "1e-999999"),
+        ("open_quantity", "1e-999999"),
+        ("open_price", "100000000000000"),
+        ("open_price", "10.00001"),
+        ("open_quantity", "100.00001"),
+    ):
+        response = call(**{field: value})
+        assert response.status_code == 422, (field, value, response.text)
+    # Four fractional digits remain valid, and a legitimate preview is unchanged.
+    ok = call(open_quantity="100.0000", close_quantity="100.0000",
+              open_price="12.0000", close_price="10.0000")
+    assert ok.status_code == 200
+    assert ok.json()["realized_gross_pnl"] == "200.00000000"
+    assert ok.json()["trade_execution_enabled"] is False

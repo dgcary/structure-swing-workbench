@@ -349,3 +349,11 @@
 - `frontend/src/overviewContract.ts`：拒绝待核验列表冒充已核验、携带初始/当前/历史估算风险、重复编号、与有效计划重复、无正式来源或混入临时 CSV 预览。老版本缺省字段兼容，但任何提供的列表必须满足只读协议。
 - `backend/tests/test_workbench_entry_validity.py` PostgreSQL 正反例覆盖历史买入但快照后卖出→待核验、更新快照恢复有效→待核验清空、无首次买入→不得伪造历史持仓；`frontend/tests/persistedOverviewContract.test.mjs` 验证展示契约拒绝伪造。
 - **验收边界**：这只是对已有记录的历史归属疑点进行显式展示，**不是券商认证的历史持仓或当前清仓证明**。券商账户身份/逐日全量成交水位、真实 CSV→隔离 PG 对账、日终 BROKEN T 正式转仓、日内换仓、T+1 可卖量、可信现价与 CORE/T 风险、Safari/HTTPS 实机仍未完成。整体 Gate FAIL；PR #19 保持 Draft，不合并、不部署、不派发 M9。最终 CI 以最新 HEAD 检查为准。
+
+
+### 2026-10-29 增量证据：已记录 T 周期的前端来源与唯一性门禁
+
+- `frontend/src/overviewContract.ts`：正式 T 周期只有在第三方交易所日历标记为 `session`、周期键及计划版本编号非空、最后成交来源时间按上海市场日期落在该交易日时，才允许展示为内部一致的 `open/closed` 周期。休市或日历未知、时间与交易日不一致的记录不得在前端冒充完整 T 配对；`conflict` 仍可作为异常证据展示。
+- 同一证券、交易日、计划版本、周期键不得重复发布多个周期；非冲突周期不得复用同一成交来源记录（含周期内部重复），防止前端重复计数或错误显示“已记录完整配对”。
+- `frontend/tests/tCycleEvidenceContract.test.mjs` 新增交易日历缺失/休市、缺周期键/计划版本、成交时间跨日、重复周期及复用成交来源正反例。所有记录仍为 `broker_reconciled=false`、`trade_execution_enabled=false`；首页完整日内 T 次数仍为 `unavailable`。
+- **验收边界**：仅增强已有 T 成交证据的前端只读协议，不能替代独立券商全量成交水位、真实 CSV→PostgreSQL 对账、日终 BROKEN T 正式转仓、日内换仓、T+1 可卖量、CORE/T 当前风险或 Safari/可信 HTTPS 实机证据。M8 整体 Gate 仍 FAIL，PR #19 保持 Draft；CI 以最终 HEAD 为准。

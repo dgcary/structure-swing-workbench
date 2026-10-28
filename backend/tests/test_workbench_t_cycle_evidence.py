@@ -47,6 +47,42 @@ def test_recorded_split_positive_t_closes_once_with_explicit_fill_sources():
     assert cycle["trade_execution_enabled"] is False
 
 
+def test_non_session_recorded_t_legs_never_look_completed():
+    # Even balanced user-entered fills cannot certify a T on a known holiday.
+    holiday = date(2026, 10, 1)
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill(
+            "holiday-open", OrderSide.SELL, "10", 1,
+            at=datetime.fromisoformat("2026-10-01T10:00:00+08:00"))),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill(
+            "holiday-close", OrderSide.BUY, "10", 2,
+            at=datetime.fromisoformat("2026-10-01T11:00:00+08:00"))),
+    ]
+    cycle = recorded_t_cycles(rows, holiday, now=NOW)[0]
+    assert cycle["market_calendar_status"] == "closed"
+    assert cycle["state"] == "conflict"
+    assert cycle["opening_quantity"] is None
+    assert cycle["broker_reconciled"] is False
+    assert cycle["trade_execution_enabled"] is False
+
+
+def test_unknown_calendar_cannot_certify_a_recorded_t_pair(monkeypatch):
+    from app.workbench import t_cycle_evidence as module
+
+    monkeypatch.setattr(module, "_market_session_status", lambda _day: "unknown")
+    rows = [
+        _record(ActionType.REVERSE_T_BUY, _fill("open", OrderSide.BUY, "10", 1)),
+        _record(ActionType.REVERSE_T_SELL, _fill("close", OrderSide.SELL, "10", 2)),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["market_calendar_status"] == "unknown"
+    assert cycle["state"] == "conflict"
+    assert cycle["opening_quantity"] is None
+    assert cycle["recorded_daily_limit_alert"] is None
+    assert cycle["broker_reconciled"] is False
+    assert cycle["trade_execution_enabled"] is False
+
+
 def test_reused_cycle_key_cannot_hide_multiple_completed_round_trips():
     # Two separately completed T decisions must not be compressed into one
     # apparent closed cycle just because the user reused the same key.

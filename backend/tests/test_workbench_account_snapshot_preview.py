@@ -123,7 +123,7 @@ def test_daily_fill_manifest_matches_ids_but_never_certifies_broker_or_t_count()
 def test_daily_claim_with_other_day_csv_fills_is_insufficient(other_day_at):
     # A multi-day export cannot be silently trimmed to make a single-day
     # self-reported manifest appear to cover the uploaded CSV.
-    extra = f"B01,600000,BUY,10,10,{other_day_at}\\n"
+    extra = f"B01,600000,BUY,10,10,{other_day_at}\n"
     response = client.post("/workbench/account-snapshot-preview", json={
         "fills": FILL_CSV + extra,
         "daily_fill_claim": _daily_claim(),
@@ -145,7 +145,7 @@ def test_daily_claim_with_other_day_csv_fills_is_insufficient(other_day_at):
 
 
 def test_cross_day_upload_does_not_hide_same_day_manifest_mismatch():
-    extra = "B01,600000,BUY,10,10,2026-10-15T10:00:00+08:00\\n"
+    extra = "B01,600000,BUY,10,10,2026-10-15T10:00:00+08:00\n"
     response = client.post("/workbench/account-snapshot-preview", json={
         "fills": FILL_CSV + extra,
         "daily_fill_claim": _daily_claim(expected_fill_ids=["A01"]),

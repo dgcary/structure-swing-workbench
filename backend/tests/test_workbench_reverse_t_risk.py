@@ -1,5 +1,7 @@
 """Reverse-T maximum exposure is illustrative until broker and T+1 reconciliation."""
 
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -39,7 +41,7 @@ def test_reverse_t_risk_uses_peak_inventory_and_separate_stops():
     assert risk["core_max_loss"] == "350.0"
     assert risk["new_t_max_loss"] == "50.0"
     assert risk["projected_max_loss"] == "500.0"
-    assert risk["projected_account_risk_pct"] == "2.000"
+    assert Decimal(risk["projected_account_risk_pct"]) == Decimal("2")
     assert risk["level"] == "PASS"
     assert risk["verified"] is False
     assert risk["source"] == "用户手工假设"
@@ -55,11 +57,11 @@ def test_reverse_t_risk_uses_peak_inventory_and_separate_stops():
 def test_reverse_t_risk_levels_use_confirmed_two_and_three_percent_boundaries():
     warning = preview(risk_inputs={**RISK, "account_equity": "20000"}).json()
     assert warning["projected_risk"]["level"] == "WARNING"
-    assert warning["projected_risk"]["projected_account_risk_pct"] == "2.500"
+    assert Decimal(warning["projected_risk"]["projected_account_risk_pct"]) == Decimal("2.5")
     at_three = preview(risk_inputs={
         **RISK, "account_equity": "20000", "other_positions_max_loss": "200",
     }).json()
-    assert at_three["projected_risk"]["projected_account_risk_pct"] == "3.000"
+    assert Decimal(at_three["projected_risk"]["projected_account_risk_pct"]) == Decimal("3")
     assert at_three["projected_risk"]["level"] == "WARNING"
     over_three = preview(risk_inputs={**RISK, "account_equity": "10000"}).json()
     assert over_three["projected_risk"]["level"] == "HARD_FAIL"

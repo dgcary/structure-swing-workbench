@@ -52,6 +52,7 @@ def build_overview(
             persisted.get("holdings") if persisted is not None else None
         ),
         "effective_plans": persisted.get("effective_plans") if persisted is not None else None,
+        "attribution_pending_plans": persisted.get("attribution_pending_plans") if persisted is not None else None,
         "pending_actions": persisted.get("pending_actions") if persisted is not None else None,
         "audit_results": persisted.get("audit_results") if persisted is not None else None,
         "t_cycle_evidence": persisted.get("t_cycle_evidence") if persisted is not None else None,

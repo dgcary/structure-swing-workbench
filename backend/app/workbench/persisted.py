@@ -80,7 +80,9 @@ def _recorded_plan_holding_matches_snapshot(
     Compare all recorded fills from every version of this plan, not just its
     first buy. A complete exit, partial/unknown inventory, conflicting fills,
     or fills from another plan for this symbol cannot keep an expired entry
-    plan on the *effective* list. This is still NOT broker certification.
+    plan on the *effective* list. Post-snapshot fills must be reconciled by a
+    newer snapshot; historical agreement cannot certify current ownership.
+    This is still NOT broker certification.
     """
     if not snapshot_qty.is_finite() or snapshot_qty <= 0:
         return False
@@ -88,10 +90,8 @@ def _recorded_plan_holding_matches_snapshot(
         select(ExecutionFill, TradeAction)
         .join(TradeAction, ExecutionFill.action_id == TradeAction.id)
         .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
-        .where(
-            TradePlanVersion.plan_id == plan.id,
-            ExecutionFill.executed_at <= snapshot_at,
-        ).order_by(ExecutionFill.executed_at, ExecutionFill.id)
+        .where(TradePlanVersion.plan_id == plan.id)
+        .order_by(ExecutionFill.executed_at, ExecutionFill.id)
     ))
     if not rows:
         return False
@@ -107,6 +107,10 @@ def _recorded_plan_holding_matches_snapshot(
                 or not fill.fee.is_finite() or fill.fee < 0
                 or not isinstance(fill.source, str) or not fill.source.strip()
                 or _observed_at(fill.executed_at) is None
+                # A snapshot only proves inventory at its capture time. Any
+                # later recorded fill invalidates its claim about *current*
+                # plan ownership until a newer snapshot reconciles that fill.
+                or fill.executed_at.astimezone(UTC) > snapshot_at.astimezone(UTC)
             ):
                 return False
             if action.action_type == ActionType.INITIAL_ENTRY:
@@ -132,7 +136,6 @@ def _recorded_plan_holding_matches_snapshot(
         .where(
             TradePlan.instrument_code == plan.instrument_code,
             TradePlan.id != plan.id,
-            ExecutionFill.executed_at <= snapshot_at,
         ).limit(1)
     )
     return other_plan_fill is None

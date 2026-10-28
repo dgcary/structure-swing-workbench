@@ -215,8 +215,9 @@ def project_persisted(session: Session) -> dict[str, object]:
     plans = []
     actions = []
     audit_rows = []
-    # A version whose explicit validity date has passed is not an effective
-    # plan for today's workbench, even if its persisted flag was not cleared.
+    # Before initial entry, an expired entry deadline excludes the plan.
+    # After a recorded initial buy with a positive holding, §15.43 preserves
+    # the main plan; neither historical fact grants execution permission.
     # Use the A-share market calendar date, not the server's UTC date.
     market_today = datetime.now(timezone(timedelta(hours=8))).date()
     eligible_versions = []
@@ -301,7 +302,7 @@ def project_persisted(session: Session) -> dict[str, object]:
                 if historical_cost_risk_estimate is not None else
                 "同一证券存在多份有效计划，无法唯一对应持仓止损；风险未核验，不授权交易。"
                 if effective_plan_counts[plan.instrument_code] > 1 else
-                "已记录首次买入且快照仍有持仓；入场有效期不再自动终止主计划。"
+                "已记录首次买入且历史快照记录持仓；入场有效期不再自动终止主计划。"
                 "本地成交与持仓未获券商认证，风险及最新审计仍须核验。"
                 if version.id in held_after_entry_versions else
                 "仅为已存储的计划状态；风险来源不足，未验证完整账户及最新审计。"

@@ -109,6 +109,15 @@ def recorded_t_cycles(
         for action_type, fill in legs:
             direction, leg, side = T_LEGS[action_type]
             directions.add(direction)
+            # The persisted Action's declared side must agree with its T intent
+            # and the fill. A matching fill alone cannot repair a contradictory
+            # Action record; do not count such evidence as a closed T cycle.
+            action = getattr(fill, "action", None)
+            if action is not None and (
+                getattr(action, "side", side) != side
+                or getattr(action, "action_type", action_type) != action_type
+            ):
+                conflict = True
             stamp = fill.executed_at
             source = getattr(fill, "source", None)
             external_id = getattr(fill, "external_execution_id", None)

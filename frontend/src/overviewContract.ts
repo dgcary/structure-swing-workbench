@@ -158,6 +158,15 @@ function validPlanRow(value: unknown): boolean {
     typeof value.warning === "string" && value.warning.trim().length > 0;
 }
 
+/** Excluded historical plans are review evidence, never current inventory. */
+function validAttributionPendingPlanRow(value: unknown): boolean {
+  return validPlanRow(value) && record(value) &&
+    value.attribution_status === "unverified" &&
+    value.initial_risk === null && value.current_risk === null &&
+    value.historical_cost_risk_estimate === null &&
+    typeof value.warning === "string" && value.warning.includes("归属待核验");
+}
+
 function validCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(value + "T00:00:00Z");
@@ -252,14 +261,28 @@ function validPersistedSections(
   data: Record<string, unknown>, mode: "read_only" | "isolated_csv_preview",
 ): boolean {
   const keys = ["effective_plans", "pending_actions", "audit_results"] as const;
-  if (mode === "isolated_csv_preview") return keys.every((key) => data[key] === null);
-  if (keys.every((key) => data[key] === null)) return true;
+  const pending = data.attribution_pending_plans;
+  if (mode === "isolated_csv_preview") {
+    return keys.every((key) => data[key] === null) &&
+      (pending === null || pending === undefined);
+  }
+  if (keys.every((key) => data[key] === null)) {
+    return pending === null || pending === undefined;
+  }
+  if (!(pending === undefined || pending === null ||
+        (Array.isArray(pending) && pending.every(validAttributionPendingPlanRow) &&
+         new Set(pending.map((row: Record<string, unknown>) => row.id)).size === pending.length))) {
+    return false;
+  }
   const validators = [validPlanRow, validActionRow, validAuditRow];
-  return keys.every((key, index) => {
+  if (!keys.every((key, index) => {
     const rows = data[key];
     return Array.isArray(rows) && rows.every(validators[index]) &&
       new Set(rows.map((row: Record<string, unknown>) => row.id)).size === rows.length;
-  });
+  })) return false;
+  return !Array.isArray(pending) || !Array.isArray(data.effective_plans) ||
+    !pending.some((row: Record<string, unknown>) =>
+      data.effective_plans.some((active: Record<string, unknown>) => active.id === row.id));
 }
 
 /** Both live and uploaded CSV overviews are read-only; neither authorizes trading. */

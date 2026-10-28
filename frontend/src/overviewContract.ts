@@ -250,7 +250,9 @@ function validRecordedTCycle(value: unknown): boolean {
     // internally coherent. A holiday or unknown session remains a conflict.
     if (value.market_calendar_status !== "session" ||
         typeof value.cycle_key !== "string" || !value.cycle_key.trim() ||
+        value.cycle_key !== value.cycle_key.trim() ||
         typeof value.plan_version_id !== "string" || !value.plan_version_id.trim() ||
+        value.plan_version_id !== value.plan_version_id.trim() ||
         value.direction === null || value.as_of === null ||
         new Date(Date.parse(value.as_of) + 8 * 60 * 60 * 1000)
           .toISOString().slice(0, 10) !== value.market_date ||

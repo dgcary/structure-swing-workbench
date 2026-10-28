@@ -379,3 +379,11 @@
 - **修复**：`backend/app/workbench/t_cycle_evidence.py::recorded_t_cycles` 对空值、空字符串、空白及首尾空格的计划版本编号统一降级为 `conflict`，不计入已记录闭环或单日 T 超限下界。保留有明确相同版本的完整配对展示。
 - **测试**：`backend/tests/test_workbench_t_cycle_evidence.py::test_missing_or_ambiguous_plan_version_cannot_complete_a_t_pair` 覆盖四类无效版本和有效版本正例；既有 T 拆单、跨版本、成交时间及重复编号测试继续作为回归门禁。
 - **验收边界**：这只是数据库内部成交归属一致性，不是券商独立全量成交证明；`broker_reconciled=false`、`trade_execution_enabled=false` 保持不变。仍缺真实券商全量流水与账户身份、日终 BROKEN 正式转仓、T+1、换仓、CORE/T 独立风险、真实 CSV→隔离 PG 及手机 Safari/HTTPS 实机。M8 整体 Gate **FAIL**，PR #19 继续 Draft，不合并/部署/进入 M9。最终 CI 以最新提交的实际结果为准。
+
+
+### 2026-10-29 增量证据：T 周期键不可静默裁剪合并
+
+- **缺陷**：原只读聚合在分组前对人工填写的 `t_cycle_key` 直接 `strip()`，可能将「cycle-1」与「 cycle-1」视为同一交易决策并错误配成完整 T。前端协议还允许非冲突周期携带首尾空格的周期键或正式计划版本编号。
+- **修复**：后端保留周期键原文用于分组，带首尾空格的周期只能进入 `conflict`，不计入完整配对或已记录次数下界；前端非冲突周期要求周期键和计划版本编号均为非空、无首尾空格的规范标识。有效原样键继续只读展示。
+- **测试**：后端 `test_whitespace_cycle_keys_never_merge_into_a_false_closed_t_pair` 覆盖不同空格键误配与同一带空格键；前端 `tCycleEvidenceContract.test.mjs` 新增周期键、计划版本编号前后空格反例。
+- **验收边界**：仅保证内部记录标识不会被静默合并，不是券商账户/逐日全量成交证明。仍缺真实 CSV→隔离 PG 对账、正式日终 BROKEN T 转仓、日内换仓/T+1、可信现价与 CORE/T 独立风险、手机 Safari/HTTPS 实机。M8 整体 Gate **FAIL**，PR #19 保持 Draft，不合并/部署/启动 M9。

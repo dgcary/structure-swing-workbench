@@ -270,3 +270,10 @@
 - `backend/app/workbench/t_cycle_evidence.py`：读取已有第三方 XSHG 交易日历状态；已知休市日或日历不可用时，即使同一证券、同一计划版本的两腿成交数量和时间完全配对，也只能显示 `conflict`，不得标记为已记录完整 T。响应增加 `market_calendar_status` 以区分 `session` / `closed` / `unknown`。该第三方日历**不能**证明临时停市状态或券商全量成交，正常交易日的 `closed` 仍仅是未对账记录。
 - `backend/tests/test_workbench_t_cycle_evidence.py`：新增已知节假日两腿配对、日历不可用两腿配对反例；均要求 `broker_reconciled=false`、`trade_execution_enabled=false`。原正常交易日配对测试保留。
 - **验收边界**：此项仅修复历史已记录 T 周期的休市日期误认，不实现独立券商认证、正式 BROKEN 转仓、换仓/T+1/CORE-T 风险或 Safari/TLS 实机验收。M8 整体 Gate 仍 FAIL，PR #19 不得合并；最新 HEAD CI 以 GitHub Actions 实际结果为准。
+
+
+### 2026-10-28 增量证据：T Action 元数据与成交方向必须一致
+
+- `backend/app/workbench/t_cycle_evidence.py::recorded_t_cycles`：对有持久化 Action 关联的 T 成交，除核对成交 `side` 外，额外核对 Action 自身的 `side` 和 `action_type` 与对应正/反 T 腿是否一致。即使两腿成交数量、价格和时间看似能够闭环，只要 Action 方向或类型自相矛盾，就标记为 `conflict`，不认证单周期数量，也不用于单日完整 T 下限告警。
+- `backend/tests/test_workbench_t_cycle_evidence.py`：新增 Action 方向错误、Action 类型错误两种反例，以及元数据一致时仍只返回 `closed`（已记录配对、未对账）的对照。
+- **限制**：这是数据库内部事实一致性门禁，不是独立券商成交认证；`broker_reconciled=false`、`trade_execution_enabled=false` 不变。券商全量流水、日终正式 BROKEN 转仓、T+1/CORE-T 风险及 Safari/TLS 实机证据仍缺，M8 整体验收保持 FAIL，PR #19 不合并、不部署。

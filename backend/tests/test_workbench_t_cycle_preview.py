@@ -73,3 +73,17 @@ def test_extreme_finite_decimal_exponents_and_precision_fail_with_422():
     assert ok.status_code == 200
     assert ok.json()["realized_gross_pnl"] == "200.00000000"
     assert ok.json()["trade_execution_enabled"] is False
+
+
+def test_db_precision_extremes_do_not_round_away_small_price_difference():
+    """20-digit quantity × 18-digit price needs more than 28 Decimal digits."""
+    result = call(
+        open_quantity="9999999999999999.9999",
+        close_quantity="9999999999999999.9999",
+        open_price="99999999999999.9999",
+        close_price="99999999999999.9998",
+    )
+    assert result.status_code == 200
+    assert result.json()["realized_gross_pnl"] == "999999999999.99999999"
+    assert result.json()["broker_reconciled"] is False
+    assert result.json()["trade_execution_enabled"] is False

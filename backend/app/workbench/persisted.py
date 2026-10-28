@@ -75,7 +75,12 @@ def project_persisted(session: Session) -> dict[str, object]:
     snapshot_source = ""
     if snapshot is not None:
         at = _observed_at(snapshot.captured_at)
-        source = f"账户快照/{snapshot.source}/{snapshot.id}"
+        # A database row without a non-blank origin is not traceable evidence.
+        # Do not turn an empty source into a seemingly valid labelled fact.
+        source_name = snapshot.source.strip() if isinstance(snapshot.source, str) else ""
+        if not source_name:
+            at = None
+        source = f"账户快照/{source_name}/{snapshot.id}" if source_name else ""
         snapshot_at = snapshot.captured_at if at is not None else None
         snapshot_equity = snapshot.total_equity
         snapshot_source = source

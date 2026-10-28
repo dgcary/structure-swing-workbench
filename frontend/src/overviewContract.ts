@@ -76,7 +76,8 @@ function validMetric(value: unknown): boolean {
     const numeric = Number(value.value);
     if (COUNT_METRICS.has(value.key) &&
         (!Number.isSafeInteger(numeric) || !exactInteger(value.value))) return false;
-    if (value.key === "position_ratio" && numeric > 100) return false;
+    // §15.48: a sourced historical snapshot can legitimately show >100%
+    // gross exposure. Never hide an over-limit value at the UI boundary.
     return true;
   }
   // Missing values must not carry a supposedly verified source or timestamp.

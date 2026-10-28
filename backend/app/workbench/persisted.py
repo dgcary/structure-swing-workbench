@@ -91,7 +91,7 @@ def _recorded_plan_holding_matches_snapshot(
         .where(
             TradePlanVersion.plan_id == plan.id,
             ExecutionFill.executed_at <= snapshot_at,
-        )
+        ).order_by(ExecutionFill.executed_at, ExecutionFill.id)
     ))
     if not rows:
         return False
@@ -113,9 +113,12 @@ def _recorded_plan_holding_matches_snapshot(
                 if action.side != OrderSide.BUY:
                     return False
                 saw_initial_buy = True
+            elif not saw_initial_buy:
+                return False
             net += fill.quantity if fill.side == OrderSide.BUY else -fill.quantity
-            # A recorded sell cannot dispose of more of this plan than it owns.
-            if net < 0:
+            # A completed exit closes this plan; later re-entry requires a
+            # new plan ID under §15.38, not resurrection of the old one.
+            if net <= 0:
                 return False
     if not saw_initial_buy or net <= 0 or net != snapshot_qty:
         return False

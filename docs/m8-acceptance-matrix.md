@@ -364,3 +364,10 @@
 - `frontend/src/overviewContract.ts`：原只读协议允许 `state=closed` 或已部分回补的 `state=open` 仅携带一条成交来源，可能把单笔成交伪装成已记录的买卖配对。现在完整配对或已有第二腿成交的周期必须至少有两条来源；只有尚无第二腿成交的未闭环周期允许一条第一腿来源。已有来源唯一性检查仍然生效。
 - `frontend/tests/tCycleEvidenceContract.test.mjs`：增加单来源完整配对、单来源部分回补的拒绝反例，以及只有第一腿成交的正常未闭环对照。
 - **限制**：只增强前端正式成交只读协议，既不证明券商全量成交，也不提供真实日内 T 次数、T+1 可卖量或交易许可。独立券商身份与水位、真实 CSV→隔离 PostgreSQL 对账、正式日终转仓、换仓、CORE/T 可信风险及 Safari/HTTPS 实机验收仍待完成。M8 整体验收继续 FAIL，PR #19 保持 Draft；以本轮最终 HEAD 的 GitHub Actions 结果为准。
+
+
+### 2026-10-29 增量证据：T 成交编号跨来源重复不得伪装成两笔
+
+- `frontend/src/overviewContract.ts`：只读协议不再只以完整「成交记录/编号/来源」字符串判断独立性。现在要求成交编号和来源均非空，按**成交记录唯一编号**检查同一已记录 T 周期的买卖腿及不同非冲突周期，拒绝相同编号搭配不同来源标签伪装成两笔成交。
+- `frontend/tests/tCycleEvidenceContract.test.mjs`：新增同编号跨来源伪配对、跨周期复用编号、缺编号、缺来源及空白字段反例，保留正常不同编号正例。该门禁只校验前端接收的内部已记录成交，不是独立券商成交编号认证。
+- **未完成验收**：券商身份/逐日全量成交水位、脱敏真实 CSV→隔离 PostgreSQL 对账、正式日终 BROKEN T 转仓、日内换仓/T+1、可信当前市价与 CORE/T 独立风险、手机 Safari/HTTPS 实机。M8 整体 Gate 仍 FAIL，PR #19 保持 Draft；CI 以最终 HEAD 的实际检查为准。

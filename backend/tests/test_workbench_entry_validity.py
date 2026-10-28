@@ -116,6 +116,85 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     assert held["effective_plans"][0]["current_risk"] is None
                     assert held["trade_execution_enabled"] is False
 
+                    # A historical snapshot cannot certify ownership after
+                    # subsequent fills. Both full and partial exits invalidate
+                    # its as-of quantity, even when the snapshot still says 100.
+                    late_sell = TradeAction(
+                        plan_version_id=version.id,
+                        action_type=ActionType.REDUCE,
+                        side=OrderSide.SELL, status=ActionStatus.FILLED,
+                    )
+                    session.add(late_sell)
+                    session.flush()
+                    late_sell_fill = ExecutionFill(
+                        action_id=late_sell.id, side=OrderSide.SELL,
+                        quantity=Decimal(100), price=Decimal(11),
+                        fee=Decimal(0), executed_at=now - timedelta(minutes=5),
+                        source="manual",
+                    )
+                    session.add(late_sell_fill)
+                    session.flush()
+                    after_full_exit = projected()
+                    assert after_full_exit["effective_plans"] == []
+                    assert after_full_exit["trade_execution_enabled"] is False
+                    assert after_full_exit["metrics"]["account_risk"]["status"] == "unavailable"
+                    late_sell_fill.quantity = Decimal(40)
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    session.delete(late_sell_fill)
+                    session.delete(late_sell)
+                    session.flush()
+                    assert len(projected()["effective_plans"]) == 1
+
+                    # A later same-plan buy is also unaccounted for. Compare
+                    # instants in UTC, not their differing timezone offsets.
+                    late_buy = TradeAction(
+                        plan_version_id=version.id,
+                        action_type=ActionType.ADD,
+                        side=OrderSide.BUY, status=ActionStatus.FILLED,
+                    )
+                    session.add(late_buy)
+                    session.flush()
+                    late_buy_fill = ExecutionFill(
+                        action_id=late_buy.id, side=OrderSide.BUY,
+                        quantity=Decimal(20), price=Decimal(11),
+                        fee=Decimal(0),
+                        executed_at=(
+                            snapshot.captured_at.astimezone(
+                                timezone(timedelta(hours=8))
+                            ) + timedelta(microseconds=1)
+                        ),
+                        source="manual",
+                    )
+                    session.add(late_buy_fill)
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    # Exact snapshot-time fills may be reconciled if the
+                    # snapshot quantity already includes them.
+                    late_buy_fill.executed_at = snapshot.captured_at
+                    position.total_quantity = Decimal(120)
+                    session.flush()
+                    assert len(projected()["effective_plans"]) == 1
+                    late_buy_fill.executed_at = (
+                        snapshot.captured_at + timedelta(microseconds=1)
+                    )
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    # A newer snapshot that covers every recorded fill restores
+                    # the historical as-of attribution (not broker certification).
+                    snapshot.captured_at = now - timedelta(minutes=1)
+                    session.flush()
+                    after_reconciliation = projected()
+                    assert len(after_reconciliation["effective_plans"]) == 1
+                    assert after_reconciliation["trade_execution_enabled"] is False
+                    assert after_reconciliation["metrics"]["account_risk"]["status"] == "unavailable"
+                    session.delete(late_buy_fill)
+                    session.delete(late_buy)
+                    snapshot.captured_at = now - timedelta(minutes=10)
+                    position.total_quantity = Decimal(100)
+                    session.flush()
+                    assert len(projected()["effective_plans"]) == 1
+
                     # A matching symbol is insufficient when plan inventory
                     # cannot be reconciled with the recorded fills.
                     position.total_quantity = Decimal(120)
@@ -173,6 +252,11 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                         source="manual",
                     )
                     session.add(other_fill)
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    # Cross-plan activity *after* the latest snapshot must
+                    # also prevent an old plan being shown as currently held.
+                    other_fill.executed_at = now - timedelta(minutes=5)
                     session.flush()
                     assert projected()["effective_plans"] == []
                     session.delete(other_fill)

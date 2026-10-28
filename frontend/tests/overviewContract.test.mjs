@@ -226,3 +226,25 @@ test("sourced holdings require well-formed A-share symbols", () => {
     ), /协议异常/, symbol);
   }
 });
+
+
+test("historical strategy-cost estimate is a separate nullable plan fact", () => {
+  const data = baseline();
+  const plan = {
+    id: "plan-1", symbol: "600000", name: "测试标的", version: 1,
+    state_zh: "已生效", invalidation_price: "9", first_target_price: "12",
+    initial_risk: null, current_risk: null,
+    historical_cost_risk_estimate: "100",
+    source: "正式计划版本/plan-1 + 账户快照/手工/snapshot-1/核心仓",
+    as_of: "2026-10-28T14:00:00+08:00",
+    warning: "历史成本估算不等于已认证初始风险或当前风险。",
+  };
+  data.effective_plans = [plan];
+  data.pending_actions = [];
+  data.audit_results = [];
+  assert.doesNotThrow(() => assertReadOnlyOverview(data, "read_only"));
+  for (const historical_cost_risk_estimate of ["NaN", "-Infinity", undefined]) {
+    const bad = { ...data, effective_plans: [{ ...plan, historical_cost_risk_estimate }] };
+    assert.throws(() => assertReadOnlyOverview(bad, "read_only"), /协议异常/);
+  }
+});

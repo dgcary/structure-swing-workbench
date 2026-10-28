@@ -75,6 +75,9 @@ def _preview_daily_fill_coverage(
         if fill.executed_at.astimezone(MARKET_TZ).date() == claim.market_date
     ]
     recorded = {fill.fill_id for fill in day_fills}
+    # A single-day self-report cannot describe the scope of a multi-day CSV.
+    # Do not silently ignore the other dates and call the upload matched.
+    outside_claimed_day = len(ledger.fills) - len(day_fills)
     # A self-reported watermark cannot cover a fill executed after that instant.
     # Count such rows even when the self-reported ID set matches exactly.
     outside_watermark = sum(
@@ -101,6 +104,9 @@ def _preview_daily_fill_coverage(
         and claim.exported_at.astimezone(UTC) <= now.astimezone(UTC)
         and claim.complete_through.astimezone(UTC) <= now.astimezone(UTC)
         and bool(expected)
+        # Multi-day exports need separately scoped daily claims; this is
+        # insufficient evidence, not proof that the other-day fills are bad.
+        and not outside_claimed_day
     )
     mismatch = bool(missing or unexpected or duplicate_rows or outside_watermark)
     status = (
@@ -111,6 +117,8 @@ def _preview_daily_fill_coverage(
         "上传成交与自报清单编号不一致、CSV 重复，或存在晚于自报水位的成交；"
         "必须核对原始券商流水。"
         if mismatch else
+        "上传 CSV 含其他交易日成交，单日自报清单未覆盖整个文件；请按交易日分别核对，不能认证当日T次数。"
+        if outside_claimed_day else
         "上传成交与自报清单编号一致，但交易日历可能为休市/不可核验、未到实际收盘、导出/覆盖时间尚未发生，或缺少完整覆盖声明/有效成交；不能认证当日T次数。"
         if not claimed_full_day else
         "仅与用户自报成交清单逐笔编号一致；没有独立券商来源认证，"
@@ -129,6 +137,7 @@ def _preview_daily_fill_coverage(
         "unexpected_fill_count": len(unexpected),
         "duplicate_csv_rows": duplicate_rows,
         "outside_watermark_fill_count": outside_watermark,
+        "outside_claimed_day_fill_count": outside_claimed_day,
         "broker_reconciled": False,
         "trade_execution_enabled": False,
         "warning": warning,

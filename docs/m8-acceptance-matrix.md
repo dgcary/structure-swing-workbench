@@ -227,3 +227,9 @@
 - `backend/app/workbench/account_snapshot_preview.py::_market_session_status`：在已有缺包、无效日期和超范围处理之外，明确处理交易日历提供方的 `LookupError`（含 `KeyError` / `IndexError`）、`RuntimeError` 与 `OSError`。日历查询异常时返回 `unknown`，即使自报清单与 CSV 编号一致也只能 `insufficient`，不将异常误判为有效交易日。
 - `backend/tests/test_workbench_account_snapshot_preview.py::test_calendar_provider_failure_fails_closed_without_hiding_csv_discrepancy`：4 类提供方异常 × 2 类清单，验证日历未知时不能升级为 `matched_unverified`，但缺失/额外成交仍优先 `mismatch`；始终保持 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`。
 - **证据边界**：本项只增强第三方日历失效时的只读预览可靠性，不是官方临时休市验证，也不是独立券商账户或全量成交认证。可信日终 BROKEN 转仓、换仓、T+1、CORE/T 风险、真实 CSV→隔离 PostgreSQL 及移动 Safari/TLS 实机验收仍未完成。最终 CI 以本轮 HEAD 为准，PR #19 保持 Draft，M8 整体 Gate 仍 FAIL。
+
+### 2026-10-28 增量证据：T 成交费用完整性门禁
+
+- `backend/app/workbench/t_cycle_evidence.py::recorded_t_cycles`：在既有成交价格、数量和时间校验基础上，要求正式成交的费用为**存在、有限且非负**的十进制数。费用缺失、负数、`NaN` 或无穷值时，相关周期必须为 `conflict`，不能仅凭两腿数量相等展示为已记录完整 T 配对。零费用与正常正费用不误判；不计算利润、不推断交易方向、不写入交易状态。
+- `backend/tests/test_workbench_t_cycle_evidence.py::test_invalid_execution_fee_never_certifies_a_completed_t_cycle`、`test_zero_and_positive_fees_preserve_unverified_recorded_t_pair`：覆盖开腿/闭腿异常费用与零费/正费对照；所有情形 `broker_reconciled=false`、`trade_execution_enabled=false`。
+- **边界**：费用格式完整不等于费用与券商流水一致，也不代表已完成券商全量成交认证、日终 BROKEN 转仓、日内换仓、T+1 可卖量、CORE/T 独立风险、真实账户 CSV→PostgreSQL 或手机 Safari/可信 TLS 实机验收。M8 整体 Gate 仍 FAIL；PR #19 保持 Draft，禁止合并/部署/进入 M9。最终 CI 须按最新 HEAD 独立核验。

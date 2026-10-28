@@ -58,6 +58,7 @@ def test_expired_unentered_plan_is_not_shown_as_effective(session):
     _expired_plan(session)
     overview = build_overview(persisted=project_persisted(session))
     assert overview["effective_plans"] == []
+    assert overview["attribution_pending_plans"] == []
     assert overview["trade_execution_enabled"] is False
 
 
@@ -111,6 +112,7 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
 
                     held = projected()
                     assert len(held["effective_plans"]) == 1
+                    assert held["attribution_pending_plans"] == []
                     assert held["effective_plans"][0]["id"] == version.id
                     assert "入场有效期不再自动终止" in held["effective_plans"][0]["warning"]
                     assert held["effective_plans"][0]["current_risk"] is None
@@ -136,6 +138,12 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     session.flush()
                     after_full_exit = projected()
                     assert after_full_exit["effective_plans"] == []
+                    pending = after_full_exit["attribution_pending_plans"]
+                    assert len(pending) == 1
+                    assert pending[0]["id"] == version.id
+                    assert pending[0]["attribution_status"] == "unverified"
+                    assert pending[0]["current_risk"] is None
+                    assert "归属待核验" in pending[0]["warning"]
                     assert after_full_exit["trade_execution_enabled"] is False
                     assert next(metric for metric in after_full_exit["metrics"] if metric["key"] == "account_risk")["status"] == "unavailable"
                     late_sell_fill.quantity = Decimal(40)
@@ -186,6 +194,7 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     session.flush()
                     after_reconciliation = projected()
                     assert len(after_reconciliation["effective_plans"]) == 1
+                    assert after_reconciliation["attribution_pending_plans"] == []
                     assert after_reconciliation["trade_execution_enabled"] is False
                     assert next(metric for metric in after_reconciliation["metrics"] if metric["key"] == "account_risk")["status"] == "unavailable"
                     session.delete(late_buy_fill)
@@ -303,7 +312,9 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     # A positive snapshot alone is not proof of an initial buy.
                     session.delete(session.get(ExecutionFill, fill.id))
                     session.flush()
-                    assert projected()["effective_plans"] == []
+                    no_first_buy = projected()
+                    assert no_first_buy["effective_plans"] == []
+                    assert no_first_buy["attribution_pending_plans"] == []
 
                     # A future fill cannot justify a historical holding.
                     future = ExecutionFill(

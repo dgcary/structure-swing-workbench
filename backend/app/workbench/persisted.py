@@ -23,7 +23,12 @@ from app.db.models import (
     TradePlanVersion,
 )
 from app.domain.enums import (
-    ActionStatus, ActionType, AuditLevel, OrderSide, PlanVersionState, PositionBucketType,
+    ActionStatus,
+    ActionType,
+    AuditLevel,
+    OrderSide,
+    PlanVersionState,
+    PositionBucketType,
 )
 from app.workbench.t_cycle_evidence import project_recorded_t_cycles
 

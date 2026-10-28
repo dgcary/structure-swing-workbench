@@ -41,7 +41,7 @@ def test_reverse_t_risk_uses_peak_inventory_and_separate_stops():
     assert risk["core_max_loss"] == "350.0"
     assert risk["new_t_max_loss"] == "50.0"
     assert risk["projected_max_loss"] == "500.0"
-    assert Decimal(risk["projected_account_risk_pct"]) == Decimal("2")
+    assert Decimal(risk["projected_account_risk_pct"]) == Decimal(2)
     assert risk["level"] == "PASS"
     assert risk["verified"] is False
     assert risk["source"] == "用户手工假设"
@@ -61,7 +61,7 @@ def test_reverse_t_risk_levels_use_confirmed_two_and_three_percent_boundaries():
     at_three = preview(risk_inputs={
         **RISK, "account_equity": "20000", "other_positions_max_loss": "200",
     }).json()
-    assert Decimal(at_three["projected_risk"]["projected_account_risk_pct"]) == Decimal("3")
+    assert Decimal(at_three["projected_risk"]["projected_account_risk_pct"]) == Decimal(3)
     assert at_three["projected_risk"]["level"] == "WARNING"
     over_three = preview(risk_inputs={**RISK, "account_equity": "10000"}).json()
     assert over_three["projected_risk"]["level"] == "HARD_FAIL"

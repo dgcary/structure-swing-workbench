@@ -297,5 +297,6 @@
 ### 2026-10-28 增量证据：T 预览极端数值防溢出
 
 - `backend/app/workbench/t_cycle_preview.py`：全部 T 开平数量、成交价格和反 T 风险手工假设的 Decimal 输入与现有 M1 数据模型的 NUMERIC(20,4) 数量/金额、NUMERIC(18,4) 价格精度对齐；有限但指数极大的数值（如 `1e999999`）不再进入 Decimal 运算导致服务器异常，而是返回输入校验错误（HTTP 422）。这属于输入安全和数据一致性，不增加交易纪律阈值。
-- `backend/tests/test_workbench_t_cycle_preview.py`、`test_workbench_reverse_t_risk.py`：覆盖极端正负指数、超精度小数、越界价格与正常四位小数对照；保持 `verified=false`、`trade_execution_enabled=false`。
+- `backend/app/workbench/t_cycle_preview.py`：计算时使用局部 64 位十进制精度，避免现有 NUMERIC(20,4) 数量乘 NUMERIC(18,4) 价格超过默认 28 位精度后静默舍入 T 损益或风险。仅影响本次预览的数学精度，不修改账户或成交数据。
+- `backend/tests/test_workbench_t_cycle_preview.py`、`test_workbench_reverse_t_risk.py`：覆盖极端正负指数、超精度小数、越界价格、正常四位小数及数据库数值上限下的小价差精确损益/风险对照；保持 `verified=false`、`trade_execution_enabled=false`。
 - **边界**：本轮仅处理手工 T 数学预览，不认证券商成交、真实账户风险、T+1、日终正式转仓或移动端。M8 整体验收仍 FAIL；PR #19 保持 Draft。CI 以最终 HEAD 的实际检查为准。

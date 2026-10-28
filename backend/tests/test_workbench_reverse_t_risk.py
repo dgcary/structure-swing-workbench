@@ -56,7 +56,10 @@ def test_reverse_t_risk_levels_use_confirmed_two_and_three_percent_boundaries():
     warning = preview(risk_inputs={**RISK, "account_equity": "20000"}).json()
     assert warning["projected_risk"]["level"] == "WARNING"
     assert warning["projected_risk"]["projected_account_risk_pct"] == "2.500"
-    at_three = preview(risk_inputs={**RISK, "account_equity": "16666.6666666667"}).json()
+    at_three = preview(risk_inputs={
+        **RISK, "account_equity": "20000", "other_positions_max_loss": "200",
+    }).json()
+    assert at_three["projected_risk"]["projected_account_risk_pct"] == "3.000"
     assert at_three["projected_risk"]["level"] == "WARNING"
     over_three = preview(risk_inputs={**RISK, "account_equity": "10000"}).json()
     assert over_three["projected_risk"]["level"] == "HARD_FAIL"

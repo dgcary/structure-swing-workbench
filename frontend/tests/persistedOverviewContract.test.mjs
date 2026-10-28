@@ -19,7 +19,7 @@ const baseline = () => ({
 const plan = {
   id: "plan-v1", symbol: "600000", name: "人工计划", version: 1,
   state_zh: "生效", invalidation_price: "10.00", first_target_price: "13.00",
-  initial_risk: null, current_risk: null,
+  initial_risk: null, current_risk: null, historical_cost_risk_estimate: null,
   source: "正式计划版本/plan-v1", as_of: null, warning: "历史计划，未核实",
 };
 const action = {

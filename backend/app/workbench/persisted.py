@@ -184,10 +184,13 @@ def project_persisted(session: Session) -> dict[str, object]:
                         context.prec = 64
                         exposure = sum((row.market_value for row in positions), Decimal(0))
                         ratio = exposure * Decimal(100) / snapshot.total_equity
-                    if ratio <= 100:
-                        metrics["position_ratio"] = _fact(
-                            ratio, source + "/持仓市值", at
-                        )
+                    # Do not hide overexposure. Section 15.48 requires the
+                    # actual gross position ratio to remain visible even when
+                    # it exceeds the default 100% limit. This is a labelled
+                    # snapshot fact, NOT a broker-verified execution audit.
+                    metrics["position_ratio"] = _fact(
+                        ratio, source + "/持仓市值", at
+                    )
 
     versions = list(session.execute(
         select(TradePlanVersion, TradePlan)

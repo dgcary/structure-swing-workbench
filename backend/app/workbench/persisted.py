@@ -15,13 +15,16 @@ from sqlalchemy.orm import Session
 from app.db.models import (
     AccountSnapshot,
     AuditResult,
+    ExecutionFill,
     PositionBucketSnapshot,
     PositionSnapshot,
     TradeAction,
     TradePlan,
     TradePlanVersion,
 )
-from app.domain.enums import ActionStatus, AuditLevel, PlanVersionState, PositionBucketType
+from app.domain.enums import (
+    ActionStatus, ActionType, AuditLevel, OrderSide, PlanVersionState, PositionBucketType,
+)
 from app.workbench.t_cycle_evidence import project_recorded_t_cycles
 
 
@@ -74,6 +77,7 @@ def project_persisted(session: Session) -> dict[str, object]:
     holdings: list[dict] | None = None
     # Risk is never inferred from broker display cost or an unverified T stop.
     risk_inventory: dict[str, tuple[Decimal, Decimal]] = {}
+    positive_snapshot_quantities: dict[str, Decimal] = {}
     snapshot_at: datetime | None = None
     snapshot_source = ""
     if snapshot is not None:
@@ -169,6 +173,10 @@ def project_persisted(session: Session) -> dict[str, object]:
                     "unanchored_fill_delta": None,
                 })
             if valid and at is not None:
+                positive_snapshot_quantities = {
+                    row.instrument_code: row.total_quantity
+                    for row in positions if row.total_quantity > 0
+                }
                 metrics["position_count"] = _fact(
                     sum(row.total_quantity > 0 for row in positions), source, at
                 )
@@ -212,10 +220,37 @@ def project_persisted(session: Session) -> dict[str, object]:
     # Use the A-share market calendar date, not the server's UTC date.
     market_today = datetime.now(timezone(timedelta(hours=8))).date()
     eligible_versions = []
+    held_after_entry_versions: set[str] = set()
     for version, plan in versions:
         valid_until = getattr(version, "valid_until", None)
         if valid_until is not None and valid_until < market_today:
-            continue
+            # §15.43: valid_until is an entry deadline, not an automatic
+            # expiry for a plan with an already executed initial buy and
+            # a still-positive holding. Require BOTH recorded entry evidence
+            # and a dated position snapshot; neither alone proves ownership.
+            if (snapshot_at is None or
+                    positive_snapshot_quantities.get(plan.instrument_code, Decimal(0)) <= 0):
+                continue
+            entry_fills = session.scalars(
+                select(ExecutionFill)
+                .join(TradeAction, ExecutionFill.action_id == TradeAction.id)
+                .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
+                .where(
+                    TradePlanVersion.plan_id == plan.id,
+                    TradeAction.action_type == ActionType.INITIAL_ENTRY,
+                    TradeAction.side == OrderSide.BUY,
+                    ExecutionFill.side == OrderSide.BUY,
+                    ExecutionFill.executed_at <= snapshot_at,
+                )
+            )
+            if not any(
+                fill.quantity.is_finite() and fill.quantity > 0
+                and isinstance(fill.source, str) and bool(fill.source.strip())
+                and _observed_at(fill.executed_at) is not None
+                for fill in entry_fills
+            ):
+                continue
+            held_after_entry_versions.add(version.id)
         # Future-dated versions cannot certify effective plans; timezone-naive
         # legacy records remain display-only, never risk-authenticating facts.
         updated_at = version.updated_at
@@ -266,6 +301,9 @@ def project_persisted(session: Session) -> dict[str, object]:
                 if historical_cost_risk_estimate is not None else
                 "同一证券存在多份有效计划，无法唯一对应持仓止损；风险未核验，不授权交易。"
                 if effective_plan_counts[plan.instrument_code] > 1 else
+                "已记录首次买入且快照仍有持仓；入场有效期不再自动终止主计划。"
+                "本地成交与持仓未获券商认证，风险及最新审计仍须核验。"
+                if version.id in held_after_entry_versions else
                 "仅为已存储的计划状态；风险来源不足，未验证完整账户及最新审计。"
             ),
         })

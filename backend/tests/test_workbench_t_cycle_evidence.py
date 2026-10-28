@@ -61,6 +61,28 @@ def test_missing_or_ambiguous_plan_version_cannot_complete_a_t_pair():
     assert coherent["broker_reconciled"] is False
 
 
+def test_whitespace_cycle_keys_never_merge_into_a_false_closed_t_pair():
+    # A padded user-entered key is not the same authenticated decision as
+    # its unpadded form. Neither may be silently normalized into a pairing.
+    for first_key, second_key in (
+        (" cycle-1", "cycle-1"),
+        ("cycle-1 ", "cycle-1"),
+        (" cycle-1 ", " cycle-1 "),
+    ):
+        rows = [
+            _record(ActionType.POSITIVE_T_SELL,
+                    _fill("open", OrderSide.SELL, "10", 1), key=first_key),
+            _record(ActionType.POSITIVE_T_BUYBACK,
+                    _fill("close", OrderSide.BUY, "10", 2), key=second_key),
+        ]
+        cycles = recorded_t_cycles(rows, DAY, now=NOW)
+        assert len(cycles) == (1 if first_key == second_key else 2)
+        assert all(cycle["state"] == "conflict" for cycle in cycles)
+        assert all(cycle["recorded_daily_limit_alert"] is None for cycle in cycles)
+        assert all(cycle["broker_reconciled"] is False for cycle in cycles)
+        assert all(cycle["trade_execution_enabled"] is False for cycle in cycles)
+
+
 def test_recorded_split_positive_t_closes_once_with_explicit_fill_sources():
     rows = [
         _record(ActionType.POSITIVE_T_SELL, _fill("sell-1", OrderSide.SELL, "30", 1)),

@@ -2,6 +2,7 @@
 export type TCyclePreviewInput = {
   symbol: string;
   direction: "positive" | "reverse";
+  expectRisk?: boolean;
 };
 export type TCyclePreviewResult = {
   schema_version: "m8.t_cycle_preview.v1";
@@ -12,6 +13,16 @@ export type TCyclePreviewResult = {
   realized_gross_pnl: string | null;
   pending_matched_gross_pnl: string | null;
   notice: string;
+  projected_risk: null | {
+    projected_max_loss: string;
+    projected_account_risk_pct: string;
+    core_max_loss: string;
+    new_t_max_loss: string;
+    level: "PASS" | "WARNING" | "HARD_FAIL";
+    verified: false;
+    source: string;
+    warning: string;
+  };
   persisted: false;
   broker_reconciled: false;
   daily_cycle_limit_verified: false;
@@ -42,6 +53,23 @@ export function assertTCyclePreview(
       data.trade_execution_enabled !== false ||
       typeof data.notice !== "string" || !data.notice.trim() ||
       !finiteAmount(data.remaining_quantity, true)) fail();
+  if (data.projected_risk === null) {
+    if (input.expectRisk) fail();
+  } else {
+    if (!input.expectRisk || input.direction !== "reverse" ||
+        !isRecord(data.projected_risk)) fail();
+    const risk = data.projected_risk as Record<string, unknown>;
+    if (risk.verified !== false ||
+        typeof risk.source !== "string" || !risk.source.trim() ||
+        typeof risk.warning !== "string" || !risk.warning.trim() ||
+        !finiteAmount(risk.projected_max_loss, true) ||
+        !finiteAmount(risk.projected_account_risk_pct, true) ||
+        !finiteAmount(risk.core_max_loss, true) ||
+        !finiteAmount(risk.new_t_max_loss, true)) fail();
+    const pct = Number(risk.projected_account_risk_pct);
+    const expectedLevel = pct <= 2 ? "PASS" : pct <= 3 ? "WARNING" : "HARD_FAIL";
+    if (risk.level !== expectedLevel) fail();
+  }
   if (data.cycle_status === "closed") {
     if (Number(data.remaining_quantity) !== 0 ||
         !finiteAmount(data.realized_gross_pnl, false) ||

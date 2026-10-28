@@ -256,3 +256,10 @@
 - `backend/tests/test_workbench_persisted_risk.py`：新增空/空格/制表符来源反例、两份有效计划同/不同止损价反例，以及第二份计划已过期时保留单一有效计划风险的正例。全程只读，`trade_execution_enabled=false`。
 - 已核验本增量代码 HEAD `35f04bf70cecd670ecaee01b415ad1bb6cc6963a` 对应 [PR CI #40628044435](https://github.com/dgcary/structure-swing-workbench/actions/runs/40628044435) completed/success：后端 506 passed（另有 64 条已有测试警告）、Ruff 通过、PostgreSQL 16/Alembic 迁移通过；前端 95 项测试及生产构建通过。该结果只证明合成/静态数据门禁，不证明真实券商全量成交、实际 T+1 可卖量或真实手机/TLS 验收。
 - **M8 Gate 仍 FAIL**：券商独立账户身份与逐日成交完整水位、官方临时休市状态、真实脱敏 CSV→PostgreSQL 对账、日终未闭环 T 正式转仓与重审、日内换仓、T+1 可卖量、含 T 仓独立止损及最大风险、手机 Safari/HTTPS 实机证据均未完成。PR #19 保持 Draft，不合并/部署、不启动 M9。
+
+
+### 2026-10-28 增量证据：未来两分钟内的 T 成交不得提前形成闭环
+
+- **缺陷与修复**：此前 `recorded_t_cycles` 允许成交时间比当前时间最多提前 5 分钟，可能在第二腿实际时间尚未到来时，把数据库中的两腿标记为已记录完整配对。现在对单周期已记录成交要求 `executed_at <= now`（以 UTC 绝对时间比较）；只要任一腿在未来，即标记 `conflict`，不发布已记录配对数量或超限下界。等时间真实到达后，同一份内部一致的记录才允许显示为**未对账**配对。
+- **回归测试**：`backend/tests/test_workbench_t_cycle_evidence.py::test_near_future_fill_cannot_be_counted_before_it_occurs` 验证第二腿晚于当前 2 分钟时不得提前闭环，时间过去后才恢复 `closed`；两种状态始终 `broker_reconciled=false`、`trade_execution_enabled=false`。
+- **限制**：仅提高已记录 T 成交时间可信度，不能代替券商独立全量成交水位、真实 CSV→隔离 PostgreSQL、收盘 BROKEN 正式转仓、日内换仓、T+1 可卖数量、CORE/T 独立风险及 Safari/TLS 实机验收。首页完整 T 次数与未闭环总数继续 `unavailable`。M8 整体 Gate FAIL，PR #19 仍保持 Draft，不合并、不部署、不启动 M9。最终 CI 以本次 HEAD 的实际结果为准。

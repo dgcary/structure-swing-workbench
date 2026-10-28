@@ -82,3 +82,20 @@ def test_missing_or_untrusted_risk_assumptions_never_become_verified():
         {"direction": "positive"},
     ):
         assert preview(**invalid).status_code == 422, invalid
+
+
+def test_extreme_finite_reverse_t_risk_assumptions_return_422_not_server_error():
+    """Pydantic must reject exponent overflow before Decimal risk arithmetic."""
+    for field in RISK:
+        for invalid in ("1e999999", "1e-999999"):
+            response = preview(risk_inputs={**RISK, field: invalid})
+            assert response.status_code == 422, (field, invalid, response.text)
+    for field in ("core_cost_price", "main_invalidation_price", "t_stop_price"):
+        response = preview(risk_inputs={**RISK, field: "100000000000000"})
+        assert response.status_code == 422, (field, response.text)
+    # DB-compatible four-place prices and quantities still produce a preview.
+    ok = preview(open_quantity="100.0000", open_price="10.0000",
+                 risk_inputs={**RISK, "t_stop_price": "9.5000"})
+    assert ok.status_code == 200
+    assert ok.json()["projected_risk"]["verified"] is False
+    assert ok.json()["trade_execution_enabled"] is False

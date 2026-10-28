@@ -340,3 +340,12 @@
 - `backend/app/workbench/persisted.py::_recorded_plan_holding_matches_snapshot`：取消仅检索 `executed_at <= snapshot_at` 的时序盲区，读取同一计划全部版本已记录的成交；任何晚于最新有源持仓快照的本计划成交均令历史归属校验失败。其他计划同证券的成交也不再受快照时间上限过滤，避免后续换计划买入仍把旧计划列为当前有效。所有时间比较统一转换为 UTC，时间戳缺失、非法或未来成交均不产生归属认证。
 - `backend/tests/test_workbench_entry_validity.py` 的 PostgreSQL 实库测试覆盖：快照后全部卖出、部分卖出、同计划追加买入、另一计划同证券成交、恰好在快照时刻的成交边界、+1微秒与 +08:00 时区表示，以及覆盖全部成交的更新快照恢复历史时点归属。风险仍显示未核实、`trade_execution_enabled=false`。
 - **证据边界**：这是“已记录成交不得晚于当前引用的持仓快照”的保守一致性校验；快照时点一致仍不等于券商认证的实时持仓或全量成交。归属不明的过期计划暂不进入当前有效集合，后续仍须独立“历史/归属待核验”入口；不能自动把计划改成已清仓。M8 整体 Gate 继续 FAIL；正式券商水位/真实CSV对账、BROKEN T转仓、日内换仓、T+1、§15.64 当前风险及 Safari/HTTPS 实机验收仍缺，PR #19 继续 Draft、禁止合并/部署/启动 M9。CI 以本次 HEAD 实际结果为准。
+
+
+### 2026-10-29 增量证据：§15.43 历史计划归属待核验独立入口
+
+- `backend/app/workbench/persisted.py`：过期入场期限的正式有效版本若存在有来源、有时间的历史首次买入，但无法通过最新已记录成交与持仓快照归属一致性校验，不再静默消失，也**不**进入 `effective_plans`。改在只读 `attribution_pending_plans` 列表展示，状态固定 `unverified`，全部风险为 `null`；完全没有历史首次买入的过期计划不被错误标为曾经持仓。未来时间的正式版本仍排除。
+- `backend/app/workbench/overview.py` 与 `frontend/src/App.tsx`：总览显示中文待核验提醒，历史计划页提供独立列表、来源与时间、失效价和目标；明确“可能已清仓或仍持仓”，不改数据库计划状态，不推断当前仓位，不生成交易许可。
+- `frontend/src/overviewContract.ts`：拒绝待核验列表冒充已核验、携带初始/当前/历史估算风险、重复编号、与有效计划重复、无正式来源或混入临时 CSV 预览。老版本缺省字段兼容，但任何提供的列表必须满足只读协议。
+- `backend/tests/test_workbench_entry_validity.py` PostgreSQL 正反例覆盖历史买入但快照后卖出→待核验、更新快照恢复有效→待核验清空、无首次买入→不得伪造历史持仓；`frontend/tests/persistedOverviewContract.test.mjs` 验证展示契约拒绝伪造。
+- **验收边界**：这只是对已有记录的历史归属疑点进行显式展示，**不是券商认证的历史持仓或当前清仓证明**。券商账户身份/逐日全量成交水位、真实 CSV→隔离 PG 对账、日终 BROKEN T 正式转仓、日内换仓、T+1 可卖量、可信现价与 CORE/T 风险、Safari/HTTPS 实机仍未完成。整体 Gate FAIL；PR #19 保持 Draft，不合并、不部署、不派发 M9。最终 CI 以最新 HEAD 检查为准。

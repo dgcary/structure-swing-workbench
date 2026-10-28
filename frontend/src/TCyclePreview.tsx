@@ -87,9 +87,10 @@ export function TCyclePreview() {
       {result.projected_risk && <div>
         <strong>反T买入后的手工最大暴露估算（非正式审计）</strong>
         <p>核心仓最大亏损：{result.projected_risk.core_max_loss} 元；本次T仓最大亏损：{result.projected_risk.new_t_max_loss} 元</p>
-        <p>假设合计最大亏损：{result.projected_risk.projected_max_loss} 元；占输入权益：{result.projected_risk.projected_account_risk_pct}%</p>
-        <p>仅数学分级：{result.projected_risk.level === "PASS" ? "常规范围（≤2%）" :
-          result.projected_risk.level === "WARNING" ? "风险提醒（2%～3%）" : "超过硬性上限（>3%）"}</p>
+        <p>本票（含既有T仓）最大亏损：{result.projected_risk.projected_max_loss} 元；占输入权益：{result.projected_risk.projected_account_risk_pct}%</p>
+        <p>本次交易动作风险等级（仅数学分级）：{result.projected_risk.level === "PASS" ? "常规范围（≤2%）" :
+          result.projected_risk.level === "WARNING" ? "风险提醒（>2%～3%）" : "本票超过硬性上限（>3%）"}</p>
+        <p>其他股票最大亏损：{result.projected_risk.other_positions_max_loss} 元；账户风险合计（仅展示）：{result.projected_risk.account_total_max_loss} 元，占输入权益 {result.projected_risk.account_total_risk_pct}%（不参与本票风险分级）</p>
         <p>{result.projected_risk.warning}</p>
       </div>}
       <p>{result.notice}</p>

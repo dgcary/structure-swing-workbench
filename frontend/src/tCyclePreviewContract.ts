@@ -15,7 +15,11 @@ export type TCyclePreviewResult = {
   notice: string;
   projected_risk: null | {
     projected_max_loss: string;
-    projected_account_risk_pct: string;
+    projected_account_risk_pct: string; // One security/plan as % of account equity
+    account_total_max_loss: string; // Across stocks: display only, never a tier
+    account_total_risk_pct: string;
+    other_positions_max_loss: string;
+    existing_t_max_loss: string;
     core_max_loss: string;
     new_t_max_loss: string;
     level: "PASS" | "WARNING" | "HARD_FAIL";
@@ -64,9 +68,24 @@ export function assertTCyclePreview(
         typeof risk.warning !== "string" || !risk.warning.trim() ||
         !finiteAmount(risk.projected_max_loss, true) ||
         !finiteAmount(risk.projected_account_risk_pct, true) ||
+        !finiteAmount(risk.account_total_max_loss, true) ||
+        !finiteAmount(risk.account_total_risk_pct, true) ||
+        !finiteAmount(risk.other_positions_max_loss, true) ||
+        !finiteAmount(risk.existing_t_max_loss, true) ||
         !finiteAmount(risk.core_max_loss, true) ||
         !finiteAmount(risk.new_t_max_loss, true)) fail();
     const pct = Number(risk.projected_account_risk_pct);
+    const planLoss = Number(risk.projected_max_loss);
+    const totalLoss = Number(risk.account_total_max_loss);
+    const otherLoss = Number(risk.other_positions_max_loss);
+    const existingTLoss = Number(risk.existing_t_max_loss);
+    const expectedPlanLoss = Number(risk.core_max_loss) +
+      Number(risk.new_t_max_loss) + existingTLoss;
+    const near = (a: number, b: number) =>
+      Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+    if (!near(planLoss, expectedPlanLoss) ||
+        !near(totalLoss, planLoss + otherLoss) ||
+        !near(Number(risk.account_total_risk_pct) * planLoss, pct * totalLoss)) fail();
     const expectedLevel = pct <= 2 ? "PASS" : pct <= 3 ? "WARNING" : "HARD_FAIL";
     if (risk.level !== expectedLevel) fail();
   }

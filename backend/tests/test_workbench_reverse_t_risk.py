@@ -40,32 +40,63 @@ def test_reverse_t_risk_uses_peak_inventory_and_separate_stops():
     risk = body["projected_risk"]
     assert risk["core_max_loss"] == "350.0"
     assert risk["new_t_max_loss"] == "50.0"
-    assert risk["projected_max_loss"] == "500.0"
-    assert Decimal(risk["projected_account_risk_pct"]) == Decimal(2)
+    assert risk["existing_t_max_loss"] == "0"
+    assert risk["other_positions_max_loss"] == "100"
+    assert risk["projected_max_loss"] == "400.0"
+    assert Decimal(risk["projected_account_risk_pct"]) == Decimal("1.6")
+    assert risk["account_total_max_loss"] == "500.0"
+    assert Decimal(risk["account_total_risk_pct"]) == Decimal("2")
     assert risk["level"] == "PASS"
     assert risk["verified"] is False
     assert risk["source"] == "用户手工假设"
     assert body["broker_reconciled"] is False
     assert body["trade_execution_enabled"] is False
 
-    # Even a completed same-day sell leg does not erase peak intraday risk.
+    # A same-day sell leg never erases peak intraday exposure.
     closed = preview(close_quantity="100", close_price="11").json()
     assert closed["cycle_status"] == "closed"
     assert closed["projected_risk"] == risk
 
 
 def test_reverse_t_risk_levels_use_confirmed_two_and_three_percent_boundaries():
-    warning = preview(risk_inputs={**RISK, "account_equity": "20000"}).json()
-    assert warning["projected_risk"]["level"] == "WARNING"
+    at_two = preview(risk_inputs={**RISK, "account_equity": "20000"}).json()
+    assert Decimal(at_two["projected_risk"]["projected_account_risk_pct"]) == Decimal(2)
+    assert at_two["projected_risk"]["level"] == "PASS"
+
+    warning = preview(risk_inputs={**RISK, "account_equity": "16000"}).json()
     assert Decimal(warning["projected_risk"]["projected_account_risk_pct"]) == Decimal("2.5")
+    assert warning["projected_risk"]["level"] == "WARNING"
+
     at_three = preview(risk_inputs={
-        **RISK, "account_equity": "20000", "other_positions_max_loss": "200",
+        **RISK, "account_equity": "20000", "existing_t_max_loss": "200",
     }).json()
     assert Decimal(at_three["projected_risk"]["projected_account_risk_pct"]) == Decimal(3)
     assert at_three["projected_risk"]["level"] == "WARNING"
+    assert Decimal(at_three["projected_risk"]["account_total_risk_pct"]) == Decimal("3.5")
+
     over_three = preview(risk_inputs={**RISK, "account_equity": "10000"}).json()
     assert over_three["projected_risk"]["level"] == "HARD_FAIL"
+    assert Decimal(over_three["projected_risk"]["projected_account_risk_pct"]) == Decimal(4)
     assert over_three["trade_execution_enabled"] is False
+
+
+def test_other_stocks_cannot_trigger_a_new_account_level_hard_fail():
+    # §15.63: 1.1% for this plan, 3.6% across stocks, no account-level gate.
+    risk = preview(open_quantity="100", open_price="10", risk_inputs={
+        **RISK,
+        "account_equity": "100000",
+        "core_quantity": "1000",
+        "core_cost_price": "10",
+        "main_invalidation_price": "9",
+        "t_stop_price": "9",
+        "other_positions_max_loss": "2500",
+    }).json()["projected_risk"]
+    assert risk["projected_max_loss"] == "1100"
+    assert Decimal(risk["projected_account_risk_pct"]) == Decimal("1.1")
+    assert risk["level"] == "PASS"
+    assert risk["account_total_max_loss"] == "3600"
+    assert Decimal(risk["account_total_risk_pct"]) == Decimal("3.6")
+    assert risk["verified"] is False
 
 
 def test_missing_or_untrusted_risk_assumptions_never_become_verified():
@@ -115,4 +146,5 @@ def test_large_valid_reverse_t_inputs_preserve_fractional_risk():
     risk = result.json()["projected_risk"]
     assert risk["core_max_loss"] == "999999999999.99999999"
     assert risk["projected_max_loss"] == "1000000000049.99999999"
+    assert risk["account_total_max_loss"] == "1000000000049.99999999"
     assert risk["verified"] is False

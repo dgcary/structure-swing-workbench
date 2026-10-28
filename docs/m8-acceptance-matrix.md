@@ -300,3 +300,10 @@
 - `backend/app/workbench/t_cycle_preview.py`：计算时使用局部 64 位十进制精度，避免现有 NUMERIC(20,4) 数量乘 NUMERIC(18,4) 价格超过默认 28 位精度后静默舍入 T 损益或风险。仅影响本次预览的数学精度，不修改账户或成交数据。
 - `backend/tests/test_workbench_t_cycle_preview.py`、`test_workbench_reverse_t_risk.py`：覆盖极端正负指数、超精度小数、越界价格、正常四位小数及数据库数值上限下的小价差精确损益/风险对照；保持 `verified=false`、`trade_execution_enabled=false`。
 - **边界**：本轮仅处理手工 T 数学预览，不认证券商成交、真实账户风险、T+1、日终正式转仓或移动端。M8 整体验收仍 FAIL；PR #19 保持 Draft。CI 以最终 HEAD 的实际检查为准。
+
+### 2026-10-28 增量证据：§15.63 跨票账户风险只展示，不参与单笔硬门槛
+
+- 修复 `backend/app/workbench/t_cycle_preview.py`：反T买入后的本票风险 = 核心仓风险 + 同票既有T仓风险 + 本次T独立止损风险；按本票风险/账户权益独立执行 `≤2% PASS / (2%,3%] WARNING / >3% HARD_FAIL`。其他股票风险只计入账户跨票合计，不新增账户级2%/3%门槛。
+- 输出 `projected_max_loss` / `projected_account_risk_pct` 现明确表示**本票/本次动作**风险，另提供 `account_total_max_loss` / `account_total_risk_pct`、其他持仓及既有T仓风险，前端中文分开显示「本次交易动作风险等级」与「账户风险合计（仅展示）」。
+- 回归：权益100000，本票 CORE 1000、反T 100、其他股票2500 → 本票1.1% PASS，跨票3.6%仅展示；本票自身 >3% 仍 HARD_FAIL；2%/3%边界、T买入峰值及前端契约不一致拒绝。所有输出继续 `verified=false`、`broker_reconciled=false`、`trade_execution_enabled=false`。
+- **本项仅修复跨票分级误用**，不提供真实账户认证、正式交易审计或执行授权。独立券商完整水位、真实CSV→隔离PG对账、BROKEN T正式转仓、日内换仓、T+1可卖数量、真实CORE/T风险、Safari/HTTPS实机仍未验收。M8 Gate FAIL，PR #19继续 Draft，不合并、不部署、不下发M9。最终CI需按新HEAD核实。

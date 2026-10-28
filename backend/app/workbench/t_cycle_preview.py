@@ -57,29 +57,34 @@ def _preview_reverse_t_risk(data: TCyclePreviewRequest) -> dict[str, object] | N
     inputs = data.risk_inputs
     if inputs is None:
         return None
-    # Core and new reverse-T inventory use independent stops. Both existing
-    # T inventory and other positions must be explicitly accounted for.
+    # Core and T inventory of this security use independent stops.
+    # Other securities are included in the account-wide display only (§15.63).
     core_loss = max(
         Decimal(0),
         (inputs.core_cost_price - inputs.main_invalidation_price) * inputs.core_quantity,
     )
     new_t_loss = (data.open_price - inputs.t_stop_price) * data.open_quantity
-    projected_loss = (
-        core_loss + new_t_loss + inputs.existing_t_max_loss
-        + inputs.other_positions_max_loss
-    )
-    percent = projected_loss * Decimal(100) / inputs.account_equity
-    level = "PASS" if percent <= 2 else "WARNING" if percent <= 3 else "HARD_FAIL"
+    plan_loss = core_loss + new_t_loss + inputs.existing_t_max_loss
+    account_total_loss = plan_loss + inputs.other_positions_max_loss
+    plan_percent = plan_loss * Decimal(100) / inputs.account_equity
+    account_total_percent = account_total_loss * Decimal(100) / inputs.account_equity
+    # The 2%/3% audit tiers apply to one plan/action, never the cross-stock sum.
+    level = "PASS" if plan_percent <= 2 else "WARNING" if plan_percent <= 3 else "HARD_FAIL"
     return {
-        "projected_max_loss": str(projected_loss),
-        "projected_account_risk_pct": str(percent),
+        "projected_max_loss": str(plan_loss),
+        "projected_account_risk_pct": str(plan_percent),
+        "account_total_max_loss": str(account_total_loss),
+        "account_total_risk_pct": str(account_total_percent),
+        "other_positions_max_loss": str(inputs.other_positions_max_loss),
+        "existing_t_max_loss": str(inputs.existing_t_max_loss),
         "core_max_loss": str(core_loss),
         "new_t_max_loss": str(new_t_loss),
         "level": level,
         "verified": False,
         "source": "用户手工假设",
         "warning": (
-            "仅按输入的核心仓、既有T仓及其他持仓风险计算反T买入后的最大暴露；"
+            "本票风险按核心仓、同票既有T仓及本次反T买入峰值计算；"
+            "其他股票风险仅计入跨票合计展示，不参与本票2%/3%分级。"
             "未核验真实账户、昨日可卖数量、全部成交及仓位分配，不构成审计或交易许可。"
         ),
     }

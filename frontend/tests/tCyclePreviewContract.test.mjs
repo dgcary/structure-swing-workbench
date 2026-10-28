@@ -60,7 +60,9 @@ test("reject contradictory closed/open state and malformed displayed amounts", (
 
 test("manual reverse-T risk requires unverified provenance and correct tier", () => {
   const risk = {
-    projected_max_loss: "500", projected_account_risk_pct: "2",
+    projected_max_loss: "400", projected_account_risk_pct: "1.6",
+    account_total_max_loss: "500", account_total_risk_pct: "2",
+    other_positions_max_loss: "100", existing_t_max_loss: "0",
     core_max_loss: "350", new_t_max_loss: "50",
     level: "PASS", verified: false, source: "用户手工假设",
     warning: "未核验账户及T+1，不授权交易。",
@@ -72,6 +74,8 @@ test("manual reverse-T risk requires unverified provenance and correct tier", ()
     { verified: true }, { level: "WARNING" }, { source: "" },
     { warning: "" }, { projected_account_risk_pct: "NaN" },
     { projected_max_loss: "-1" }, { new_t_max_loss: "Infinity" },
+    { account_total_max_loss: "400" }, { account_total_risk_pct: "3" },
+    { other_positions_max_loss: "0" }, { existing_t_max_loss: "10" },
   ]) {
     assert.throws(() => assertTCyclePreview({
       ...reverse, projected_risk: { ...risk, ...change },
@@ -80,4 +84,31 @@ test("manual reverse-T risk requires unverified provenance and correct tier", ()
   assert.throws(() => assertTCyclePreview(reverse, input), /协议异常/);
   assert.throws(() => assertTCyclePreview({ ...reverse, projected_risk: null },
     reverseInput), /协议异常/);
+});
+
+test("cross-stock total above 3% does not create a hard fail for one plan", () => {
+  const crossStock = {
+    ...closed(), direction: "reverse",
+    projected_risk: {
+      projected_max_loss: "1100", projected_account_risk_pct: "1.1",
+      account_total_max_loss: "3600", account_total_risk_pct: "3.6",
+      other_positions_max_loss: "2500", existing_t_max_loss: "0",
+      core_max_loss: "1000", new_t_max_loss: "100",
+      level: "PASS", verified: false, source: "用户手工假设",
+      warning: "跨票合计仅展示，不参与单笔审计分级。",
+    },
+  };
+  const reverseInput = { symbol: "600000", direction: "reverse", expectRisk: true };
+  assert.doesNotThrow(() => assertTCyclePreview(crossStock, reverseInput));
+  assert.throws(() => assertTCyclePreview({
+    ...crossStock, projected_risk: { ...crossStock.projected_risk, level: "HARD_FAIL" },
+  }, reverseInput), /协议异常/);
+  assert.doesNotThrow(() => assertTCyclePreview({
+    ...crossStock, projected_risk: {
+      ...crossStock.projected_risk,
+      projected_max_loss: "3100", projected_account_risk_pct: "3.1",
+      account_total_max_loss: "5600", account_total_risk_pct: "5.6",
+      core_max_loss: "3000", level: "HARD_FAIL",
+    },
+  }, reverseInput));
 });

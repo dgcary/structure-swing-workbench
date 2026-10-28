@@ -169,7 +169,7 @@ test("available numeric metrics reject negative, fractional counts and impossibl
   });
   for (const [key, value] of [
     ["equity", "-1"], ["available_cash", "-0.01"],
-    ["position_ratio", "-1"], ["position_ratio", "100.01"],
+    ["position_ratio", "-1"],
     ["account_risk", "-0.1"], ["position_count", "1.5"],
     ["t_cycles_today", "-1"], ["t_cycles_today", "0.5"],
     ["open_t_cycles", "-1"], ["open_t_cycles", "2.2"],
@@ -183,6 +183,13 @@ test("available numeric metrics reject negative, fractional counts and impossibl
   valid.metrics[keys.indexOf("position_count")] = sourced("position_count", "2");
   valid.metrics[keys.indexOf("position_ratio")] = sourced("position_ratio", "100");
   assert.doesNotThrow(() => assertReadOnlyOverview(valid, "read_only"));
+  // §15.48: exceeding the default 100% limit is evidence of overexposure,
+  // not a malformed metric. It must remain visible to the user.
+  for (const exposure of ["100.01", "120", "150", "1.5E+2"]) {
+    valid.metrics[keys.indexOf("position_ratio")] = sourced("position_ratio", exposure);
+    assert.doesNotThrow(() => assertReadOnlyOverview(valid, "read_only"), exposure);
+    assert.equal(valid.trade_execution_enabled, false);
+  }
 });
 
 test("unavailable metric cannot retain a verified source or observation time", () => {

@@ -102,6 +102,9 @@ def recorded_t_cycles(
         directions = set()
         sources = []
         timeline: list[tuple[datetime, str, Decimal]] = []
+        # Compare split fills with the recorded quantity of their own action.
+        # Equal opening/closing totals alone cannot validate an overfilled order.
+        action_totals: dict[str, tuple[Decimal, Decimal]] = {}
         conflict = (
             invalid_time or dates != {market_day} or key is None
             or market_session_status != "session"
@@ -159,6 +162,21 @@ def recorded_t_cycles(
             sources.append(f"成交记录/{fill.id}/{source}")
             if not valid_quantity:
                 continue
+            action_id = getattr(fill, "action_id", None) or getattr(action, "id", None)
+            planned_quantity = getattr(action, "planned_quantity", None)
+            if action_id is not None and planned_quantity is not None:
+                if (not isinstance(planned_quantity, Decimal)
+                        or not planned_quantity.is_finite() or planned_quantity <= 0):
+                    conflict = True
+                else:
+                    action_key = str(action_id)
+                    previous = action_totals.get(action_key)
+                    if previous is not None and previous[0] != planned_quantity:
+                        conflict = True
+                    cumulative = (previous[1] if previous is not None else Decimal(0))
+                    action_totals[action_key] = (
+                        planned_quantity, cumulative + fill.quantity
+                    )
             if stamp is not None and stamp.tzinfo is not None and stamp.utcoffset() is not None:
                 timeline.append((stamp, leg, fill.quantity))
             if leg == "open":
@@ -169,6 +187,8 @@ def recorded_t_cycles(
                 closing += fill.quantity
                 if stamp is not None and stamp.tzinfo is not None and stamp.utcoffset() is not None:
                     first_close = min(first_close, stamp) if first_close else stamp
+        if any(total > planned for planned, total in action_totals.values()):
+            conflict = True
         if (len(directions) != 1 or opening <= 0 or closing > opening
                 or (first_close is not None and
                     (first_open is None or first_close < first_open))):

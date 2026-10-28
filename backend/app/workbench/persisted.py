@@ -74,9 +74,7 @@ def project_persisted(session: Session) -> dict[str, object]:
     holdings: list[dict] | None = None
     # Risk is never inferred from broker display cost or an unverified T stop.
     risk_inventory: dict[str, tuple[Decimal, Decimal]] = {}
-    risk_complete = False
     snapshot_at: datetime | None = None
-    snapshot_equity: Decimal | None = None
     snapshot_source = ""
     if snapshot is not None:
         at = _observed_at(snapshot.captured_at)
@@ -87,7 +85,6 @@ def project_persisted(session: Session) -> dict[str, object]:
             at = None
         source = f"账户快照/{source_name}/{snapshot.id}" if source_name else ""
         snapshot_at = snapshot.captured_at if at is not None else None
-        snapshot_equity = snapshot.total_equity
         snapshot_source = source
         for key, value in (
             ("equity", snapshot.total_equity),
@@ -112,7 +109,6 @@ def project_persisted(session: Session) -> dict[str, object]:
             holdings = []
             valid = all(row.total_quantity.is_finite() and row.total_quantity >= 0
                         for row in positions)
-            risk_complete = valid and snapshot.total_equity.is_finite() and snapshot.total_equity > 0
             for position in positions:
                 buckets = list(session.scalars(
                     select(PositionBucketSnapshot).where(
@@ -134,7 +130,6 @@ def project_persisted(session: Session) -> dict[str, object]:
                     core = t_qty = None
                     # Even a zero-share row with conflicting CORE/T buckets
                     # invalidates the snapshot as a complete risk inventory.
-                    risk_complete = False
                 # An exact CORE/T split is necessary but insufficient for risk:
                 # any T quantity requires a separate T stop absent from M1 snapshots.
                 if position.total_quantity.is_finite() and position.total_quantity > 0:
@@ -151,9 +146,6 @@ def project_persisted(session: Session) -> dict[str, object]:
                     ):
                         risk_inventory[position.instrument_code] = (core, core_cost)
                     else:
-                        risk_complete = False
-                if not position.total_quantity.is_finite():
-                    risk_complete = False
                 conflict = (
                     not position.total_quantity.is_finite()
                     or position.total_quantity < 0
@@ -214,7 +206,6 @@ def project_persisted(session: Session) -> dict[str, object]:
     plans = []
     actions = []
     audit_rows = []
-    risk_by_symbol: dict[str, Decimal] = {}
     # A version whose explicit validity date has passed is not an effective
     # plan for today's workbench, even if its persisted flag was not cleared.
     # Use the A-share market calendar date, not the server's UTC date.
@@ -240,21 +231,20 @@ def project_persisted(session: Session) -> dict[str, object]:
     effective_plan_counts = Counter(plan.instrument_code for _, plan in eligible_versions)
     for version, plan in eligible_versions:
         source = f"正式计划版本/{version.id}"
-        current_risk = None
+        historical_cost_risk_estimate = None
+        # Historical strategy cost is not a current market quote. Keep the
+        # estimate separate from initial/current risk (Notion section 15.64).
         # Compare two dated facts, never apply a newer plan to an older snapshot.
         if (
             snapshot_at is not None and _observed_at(version.updated_at) is not None
             and version.updated_at <= snapshot_at
             and plan.instrument_code in risk_inventory
             and effective_plan_counts[plan.instrument_code] == 1
-            and plan.instrument_code not in risk_by_symbol
         ):
             quantity, cost = risk_inventory[plan.instrument_code]
-            current_risk = _core_only_risk(
+            historical_cost_risk_estimate = _core_only_risk(
                 quantity, cost, version.structure_invalidation_price
             )
-            if current_risk is not None:
-                risk_by_symbol[plan.instrument_code] = current_risk
         plans.append({
             "id": version.id, "symbol": plan.instrument_code,
             "name": plan.instrument_name,
@@ -262,13 +252,17 @@ def project_persisted(session: Session) -> dict[str, object]:
             "state_zh": version.state.label_zh,
             "invalidation_price": _number(version.structure_invalidation_price),
             "first_target_price": _number(version.first_target_price),
-            "initial_risk": None, "current_risk": _number(current_risk),
-            "source": source + (f" + {snapshot_source}/核心仓" if current_risk is not None else ""),
+            "initial_risk": None, "current_risk": None,
+            "historical_cost_risk_estimate": _number(historical_cost_risk_estimate),
+            "source": source + (
+                f" + {snapshot_source}/核心仓"
+                if historical_cost_risk_estimate is not None else ""
+            ),
             "as_of": _observed_at(version.updated_at),
             "warning": (
-                "当前风险为历史快照的核心仓价差估算（元）；"
-                "不含未核验T仓、费用或实时变化，不构成交易许可。"
-                if current_risk is not None else
+                "历史策略成本至现有失效价的估算（元），非经核验初始风险；"
+                "缺可信当前市价及完整CORE/T仓事实，当前风险不可用，不构成交易许可。"
+                if historical_cost_risk_estimate is not None else
                 "同一证券存在多份有效计划，无法唯一对应持仓止损；风险未核验，不授权交易。"
                 if effective_plan_counts[plan.instrument_code] > 1 else
                 "仅为已存储的计划状态；风险来源不足，未验证完整账户及最新审计。"
@@ -330,24 +324,9 @@ def project_persisted(session: Session) -> dict[str, object]:
             select(AuditResult).where(AuditResult.plan_version_id == version.id)
         ))
 
-    # Never label a partial risk sum as total account risk.
-    if (
-        risk_complete and risk_inventory
-        and len(risk_by_symbol) == len(risk_inventory)
-        and snapshot_equity is not None and snapshot_equity > 0
-        and snapshot_at is not None
-    ):
-        # Preserve full precision across the sum of separate holdings and
-        # the equity denominator; the per-position calculation alone is not enough.
-        with localcontext() as context:
-            context.prec = 64
-            account_risk = (
-                sum(risk_by_symbol.values(), Decimal(0)) * Decimal(100) / snapshot_equity
-            )
-        metrics["account_risk"] = _fact(
-            account_risk, snapshot_source + "/有效计划止损/核心仓策略成本",
-            _observed_at(snapshot_at),
-        )
+    # No independently verified, timestamped market quote or complete CORE/T
+    # stop inventory is available in M1 snapshots. Never publish a historical
+    # cost-based estimate as the live account-risk percentage.
 
     audits = []
     for row in sorted(audit_rows, key=lambda item: (item.created_at, item.id)):

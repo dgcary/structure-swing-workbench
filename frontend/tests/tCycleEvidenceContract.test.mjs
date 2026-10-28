@@ -145,8 +145,12 @@ test("a closed T pair requires a keyed session, matching market date and source 
     { ...closed, market_calendar_status: undefined },
     { ...closed, cycle_key: null },
     { ...closed, cycle_key: " " },
+    { ...closed, cycle_key: " t-001" },
+    { ...closed, cycle_key: "t-001 " },
     { ...closed, plan_version_id: null },
     { ...closed, plan_version_id: " " },
+    { ...closed, plan_version_id: " version-1" },
+    { ...closed, plan_version_id: "version-1 " },
     { ...closed, as_of: "2026-10-28T00:01:00+08:00" },
     { ...closed, market_date: "2026-10-26" },
   ]) {

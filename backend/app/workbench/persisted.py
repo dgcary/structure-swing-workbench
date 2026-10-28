@@ -5,6 +5,7 @@ A database row is not proof of a live broker connection.
 """
 
 import re
+from collections import Counter
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -204,13 +205,13 @@ def project_persisted(session: Session) -> dict[str, object]:
     # plan for today's workbench, even if its persisted flag was not cleared.
     # Use the A-share market calendar date, not the server's UTC date.
     market_today = datetime.now(timezone(timedelta(hours=8))).date()
+    eligible_versions = []
     for version, plan in versions:
         valid_until = getattr(version, "valid_until", None)
         if valid_until is not None and valid_until < market_today:
             continue
-        # A future-dated version update cannot certify an effective plan.
-        # Preserve the existing fail-closed handling of timezone-naive SQLite
-        # records (display-only, no timestamp-based risk authentication).
+        # Future-dated versions cannot certify effective plans; timezone-naive
+        # legacy records remain display-only, never risk-authenticating facts.
         updated_at = version.updated_at
         if (
             updated_at is not None and updated_at.tzinfo is not None
@@ -218,6 +219,12 @@ def project_persisted(session: Session) -> dict[str, object]:
             and _observed_at(updated_at) is None
         ):
             continue
+        eligible_versions.append((version, plan))
+    # Multiple independently effective plans for one symbol have no unique
+    # stop-loss assignment to the broker's aggregate position snapshot.
+    # Do not pick an arbitrary first plan and certify a partial risk total.
+    effective_plan_counts = Counter(plan.instrument_code for _, plan in eligible_versions)
+    for version, plan in eligible_versions:
         source = f"正式计划版本/{version.id}"
         current_risk = None
         # Compare two dated facts, never apply a newer plan to an older snapshot.
@@ -225,6 +232,7 @@ def project_persisted(session: Session) -> dict[str, object]:
             snapshot_at is not None and _observed_at(version.updated_at) is not None
             and version.updated_at <= snapshot_at
             and plan.instrument_code in risk_inventory
+            and effective_plan_counts[plan.instrument_code] == 1
             and plan.instrument_code not in risk_by_symbol
         ):
             quantity, cost = risk_inventory[plan.instrument_code]
@@ -247,6 +255,8 @@ def project_persisted(session: Session) -> dict[str, object]:
                 "当前风险为历史快照的核心仓价差估算（元）；"
                 "不含未核验T仓、费用或实时变化，不构成交易许可。"
                 if current_risk is not None else
+                "同一证券存在多份有效计划，无法唯一对应持仓止损；风险未核验，不授权交易。"
+                if effective_plan_counts[plan.instrument_code] > 1 else
                 "仅为已存储的计划状态；风险来源不足，未验证完整账户及最新审计。"
             ),
         })

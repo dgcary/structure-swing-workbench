@@ -156,6 +156,30 @@ def test_missing_or_mismatched_risk_facts_remain_unknown(kwargs):
     assert overview["trade_execution_enabled"] is False
 
 
+def test_large_valid_core_risk_keeps_fractional_yuan_in_persisted_projection():
+    # A NUMERIC(20,4) quantity times a NUMERIC(18,4) stop distance can
+    # require 38 significant digits. Never silently round a sourced risk fact.
+    quantity = "9999999999999999.9999"
+    cost = "99999999999999.9999"
+    stop = "0.0001"
+    exact = "999999999999999997990000000000.00000002"
+    assert str(_core_only_risk(
+        Decimal(quantity), Decimal(cost), Decimal(stop)
+    )) == exact
+
+    overview = _projection(
+        quantity=quantity, core=quantity, cost=cost, stop=stop,
+        equity="9999999999999999.9999",
+    )
+    plan = overview["effective_plans"][0]
+    assert plan["current_risk"] == exact
+    assert "历史快照" in plan["warning"]
+    account_risk = _metric(overview, "account_risk")
+    assert account_risk["status"] == "available"
+    assert Decimal(account_risk["value"]) == Decimal("9999999999999999.98")
+    assert overview["trade_execution_enabled"] is False
+
+
 def test_invalid_numeric_core_risk_fails_closed():
     for quantity, cost, stop in [
         (Decimal(0), Decimal(10), Decimal(9)),

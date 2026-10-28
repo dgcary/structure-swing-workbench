@@ -225,6 +225,14 @@ function validRecordedTCycle(value: unknown): boolean {
         typeof source === "string" && source.startsWith("成交记录/") &&
         source.length > "成交记录/".length)) return false;
   if (value.as_of !== null && !validObservedAt(value.as_of)) return false;
+  // A closed pair necessarily contains an opening and a closing execution.
+  // A partially closed open cycle also needs evidence of both legs. A single
+  // source must never be presented as a recorded buy/sell pairing.
+  if (value.state !== "conflict" && value.sources.length < 2 &&
+      (value.state === "closed" ||
+       (decimalText(value.closing_quantity) && Number(value.closing_quantity) > 0))) {
+    return false;
+  }
   if (value.state === "conflict") {
     if (value.opening_quantity !== null || value.closing_quantity !== null ||
         value.end_of_day_unclosed || value.requires_reaudit) return false;

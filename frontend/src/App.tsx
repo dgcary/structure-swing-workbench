@@ -76,6 +76,7 @@ type Overview = {
   metrics: Metric[];
   holdings: Holding[] | null;
   effective_plans: PersistedPlan[] | null;
+  attribution_pending_plans?: (PersistedPlan & { attribution_status: "unverified" })[] | null;
   pending_actions: PersistedAction[] | null;
   audit_results: PersistedAudit[] | null;
   t_cycle_evidence?: RecordedTCycle[] | null;
@@ -425,6 +426,14 @@ export function App() {
                     ))}
                   </div>
                 ) : <Unavailable title="正式有效计划未接入" detail="未读取到可追溯的正式有效计划；本机草稿不能替代正式计划。" />}
+                {(overview?.attribution_pending_plans?.length ?? 0) > 0 && (
+                  <div role="status" className="audit-unknown">
+                    有 {overview?.attribution_pending_plans?.length} 份历史计划归属待核验；未列入有效计划不代表已清仓。
+                    <button className="back-button" type="button" onClick={() => setSection("历史计划")}>
+                      查看历史归属待核验
+                    </button>
+                  </div>
+                )}
                 <h3>本机人工计划草稿（未审计）</h3>
                 {localDraftError ? <p role="alert">本机草稿读取异常，已停止展示；请核对原数据。</p> :
                   localDraftSummary && localDraftSummary.latest.length > 0 ? <>
@@ -531,7 +540,26 @@ export function App() {
           </section>
           <TCyclePreview />
         </>}
-        {section === "历史计划" && <LocalPlanDrafts history />}
+        {section === "历史计划" && <>
+          <section className="panel">
+            <h2>正式历史计划 · 归属待核验</h2>
+            <p className="notice">此处仅列出有历史首次买入记录、但无法确认当前归属的过期入场计划。可能已清仓，也可能仍有持仓；不得自动修改计划状态或作为交易依据。</p>
+            {overview?.mode === "read_only" && overview.attribution_pending_plans?.length ? (
+              <div className="holding-list">
+                {overview.attribution_pending_plans.map((plan) => (
+                  <article className="holding-card" key={plan.id} role="status">
+                    <h3>{plan.symbol} · {plan.name} · 第{plan.version}版 · 归属待核验</h3>
+                    <p>原计划状态：{plan.state_zh} · 结构失效价：{plan.invalidation_price ?? "未核实"} · 第一目标：{plan.first_target_price ?? "未核实"}</p>
+                    <p>当前持仓与风险：未核实 · 不可据此执行</p>
+                    <p>来源：{plan.source} · 计划记录时间：{plan.as_of ?? "未核实"}</p>
+                    <p className="audit-unknown">{plan.warning}</p>
+                  </article>
+                ))}
+              </div>
+            ) : <Unavailable title="暂无可核验的正式历史归属记录" detail="没有记录不代表已经清仓；需与券商全量成交及持仓核对。" />}
+          </section>
+          <LocalPlanDrafts history />
+        </>}
         {section === "复盘" && <LocalReview />}
         {section === "研究样例" && <ResearchDemo />}
         {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && section !== "T仓" && section !== "历史计划" && section !== "复盘" && (

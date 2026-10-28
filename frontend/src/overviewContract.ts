@@ -365,8 +365,12 @@ export function assertReadOnlyOverview(
           // The same database fill with a different source label is still one
           // execution, never independent evidence for another T leg/cycle.
           const fillId = recordedFillId(source);
-          if (fillId === null || acceptedFillIds.has(fillId)) fail();
-          acceptedFillIds.add(fillId);
+          if (fillId !== null) {
+            if (acceptedFillIds.has(fillId)) fail();
+            acceptedFillIds.add(fillId);
+          } else {
+            fail();
+          }
         }
       }
     }

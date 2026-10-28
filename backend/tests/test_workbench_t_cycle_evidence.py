@@ -47,6 +47,43 @@ def test_recorded_split_positive_t_closes_once_with_explicit_fill_sources():
     assert cycle["trade_execution_enabled"] is False
 
 
+def test_split_fills_cannot_exceed_their_recorded_action_quantity():
+    """Matching T legs do not excuse an opening action overfilled by split executions."""
+    opening_action = SimpleNamespace(
+        id="open-action", plan_version_id="version-a", side=OrderSide.SELL,
+        action_type=ActionType.POSITIVE_T_SELL, planned_quantity=Decimal("10"),
+    )
+    closing_action = SimpleNamespace(
+        id="close-action", plan_version_id="version-a", side=OrderSide.BUY,
+        action_type=ActionType.POSITIVE_T_BUYBACK, planned_quantity=Decimal("12"),
+    )
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("open-1", OrderSide.SELL, "7", 1)),
+        _record(ActionType.POSITIVE_T_SELL, _fill("open-2", OrderSide.SELL, "5", 2)),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("close", OrderSide.BUY, "12", 3)),
+    ]
+    for _, _, _, fill in rows[:2]:
+        fill.action = opening_action
+    rows[2][3].action = closing_action
+
+    overfilled = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert overfilled["state"] == "conflict"
+    assert overfilled["opening_quantity"] is None
+    assert overfilled["broker_reconciled"] is False
+    assert overfilled["trade_execution_enabled"] is False
+
+    # Exactly matching the action's recorded quantity is coherent evidence,
+    # though it still does not certify a broker-complete trading day.
+    opening_action.planned_quantity = Decimal("12")
+    matching = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert matching["state"] == "closed"
+    assert matching["broker_reconciled"] is False
+
+    for invalid in ("NaN", "0", "-1"):
+        opening_action.planned_quantity = Decimal(invalid)
+        assert recorded_t_cycles(rows, DAY, now=NOW)[0]["state"] == "conflict"
+
+
 def test_non_session_recorded_t_legs_never_look_completed():
     # Even balanced user-entered fills cannot certify a T on a known holiday.
     holiday = date(2026, 10, 1)

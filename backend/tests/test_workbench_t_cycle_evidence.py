@@ -47,6 +47,53 @@ def test_recorded_split_positive_t_closes_once_with_explicit_fill_sources():
     assert cycle["trade_execution_enabled"] is False
 
 
+def test_reused_cycle_key_cannot_hide_multiple_completed_round_trips():
+    # Two separately completed T decisions must not be compressed into one
+    # apparent closed cycle just because the user reused the same key.
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("open-a", OrderSide.SELL, "10", 1)),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("close-a", OrderSide.BUY, "10", 2)),
+        _record(ActionType.POSITIVE_T_SELL, _fill("open-b", OrderSide.SELL, "20", 3)),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("close-b", OrderSide.BUY, "20", 4)),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "conflict"
+    assert cycle["opening_quantity"] is None
+    assert cycle["closing_quantity"] is None
+    assert cycle["recorded_daily_limit_alert"] is None
+    assert cycle["broker_reconciled"] is False
+    assert cycle["trade_execution_enabled"] is False
+
+
+def test_reused_cycle_key_after_completed_leg_cannot_appear_as_one_open_cycle():
+    rows = [
+        _record(ActionType.REVERSE_T_BUY, _fill("open-a", OrderSide.BUY, "10", 1)),
+        _record(ActionType.REVERSE_T_SELL, _fill("close-a", OrderSide.SELL, "10", 2)),
+        _record(ActionType.REVERSE_T_BUY, _fill("open-b", OrderSide.BUY, "5", 3)),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "conflict"
+    assert cycle["residual_quantity"] is None
+    assert cycle["requires_reaudit"] is False
+
+
+def test_distinct_cycle_keys_keep_two_recorded_round_trips_separate():
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("open-a", OrderSide.SELL, "10", 1),
+                key="cycle-a"),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("close-a", OrderSide.BUY, "10", 2),
+                key="cycle-a"),
+        _record(ActionType.POSITIVE_T_SELL, _fill("open-b", OrderSide.SELL, "20", 3),
+                key="cycle-b"),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill("close-b", OrderSide.BUY, "20", 4),
+                key="cycle-b"),
+    ]
+    cycles = recorded_t_cycles(rows, DAY, now=NOW)
+    assert len(cycles) == 2
+    assert {cycle["state"] for cycle in cycles} == {"closed"}
+    assert all(cycle["broker_reconciled"] is False for cycle in cycles)
+
+
 def test_partial_reverse_t_is_open_not_a_completed_cycle():
     rows = [
         _record(ActionType.REVERSE_T_BUY, _fill("buy", OrderSide.BUY, "100", 1)),

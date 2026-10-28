@@ -6,25 +6,29 @@ from pydantic import BaseModel, Field, model_validator
 from app.position import TCycle, TCycleStatus, TDirection
 
 
+# Match M1 persisted NUMERIC(20,4) quantity/money and NUMERIC(18,4)
+# price boundaries. Without precision bounds, finite values such as 1e999999
+# pass Decimal validation but can overflow the arithmetic context (HTTP 500).
+# These are input-integrity limits, not additional trading strategy rules.
 class ReverseTRiskInputs(BaseModel):
     """Explicit user assumptions, never independently verified account facts."""
 
-    account_equity: Decimal = Field(gt=0, allow_inf_nan=False)
-    core_quantity: Decimal = Field(ge=0, allow_inf_nan=False)
-    core_cost_price: Decimal = Field(gt=0, allow_inf_nan=False)
-    main_invalidation_price: Decimal = Field(gt=0, allow_inf_nan=False)
-    t_stop_price: Decimal = Field(gt=0, allow_inf_nan=False)
-    existing_t_max_loss: Decimal = Field(ge=0, allow_inf_nan=False)
-    other_positions_max_loss: Decimal = Field(ge=0, allow_inf_nan=False)
+    account_equity: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
+    core_quantity: Decimal = Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
+    core_cost_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
+    main_invalidation_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
+    t_stop_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
+    existing_t_max_loss: Decimal = Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
+    other_positions_max_loss: Decimal = Field(ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
 
 
 class TCyclePreviewRequest(BaseModel):
     symbol: str = Field(pattern=r"^[0-9]{6}$")
     direction: TDirection
-    open_quantity: Decimal = Field(gt=0)
-    open_price: Decimal = Field(gt=0)
-    close_quantity: Decimal = Field(default=Decimal(0), ge=0)
-    close_price: Decimal | None = Field(default=None, gt=0)
+    open_quantity: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
+    open_price: Decimal = Field(gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
+    close_quantity: Decimal = Field(default=Decimal(0), ge=0, allow_inf_nan=False, max_digits=20, decimal_places=4)
+    close_price: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False, max_digits=18, decimal_places=4)
     risk_inputs: ReverseTRiskInputs | None = None
 
     @model_validator(mode="after")

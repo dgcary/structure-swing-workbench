@@ -142,6 +142,31 @@ def test_cross_day_close_and_close_before_open_never_count():
         assert recorded_t_cycles(rows, DAY, now=NOW)[0]["state"] == "conflict"
 
 
+def test_near_future_fill_cannot_be_counted_before_it_occurs():
+    # A five-minute clock-skew allowance must not make an unobserved close
+    # look like an already completed T cycle.
+    close_time = NOW + timedelta(minutes=2)
+    rows = [
+        _record(ActionType.POSITIVE_T_SELL, _fill("open", OrderSide.SELL, "10", 1)),
+        _record(ActionType.POSITIVE_T_BUYBACK, _fill(
+            "close", OrderSide.BUY, "10", 2, at=close_time)),
+    ]
+    premature = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert premature["state"] == "conflict"
+    assert premature["opening_quantity"] is None
+    assert premature["closing_quantity"] is None
+    assert premature["recorded_daily_limit_alert"] is None
+    assert premature["broker_reconciled"] is False
+    assert premature["trade_execution_enabled"] is False
+
+    # Once the timestamp has actually passed, the same internally coherent
+    # recorded legs may be shown as an unverified pair, never broker-certified.
+    observed = recorded_t_cycles(rows, DAY, now=NOW + timedelta(minutes=3))[0]
+    assert observed["state"] == "closed"
+    assert observed["broker_reconciled"] is False
+    assert observed["trade_execution_enabled"] is False
+
+
 def test_future_and_timezone_naive_fills_fail_closed():
     for timestamp in [NOW + timedelta(days=1), NOW.replace(tzinfo=None)]:
         rows = [

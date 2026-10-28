@@ -88,7 +88,7 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
         first_target_price=Decimal(12),
     ) if with_plan else None
     plan = SimpleNamespace(
-        instrument_code="600000", instrument_name="人工指定标的",
+        id="plan-1", instrument_code="600000", instrument_name="人工指定标的",
     )
     session = _ReadOnlySession(
         snapshot, position, buckets, version, plan, zero_conflict=zero_conflict
@@ -226,7 +226,7 @@ def test_zero_quantity_with_conflicting_buckets_blocks_total_risk():
 
 
 def test_expired_effective_flag_does_not_publish_an_active_plan_or_risk():
-    # The plan's explicit validity date wins over a stale is_effective flag.
+    # With no recorded initial buy, an expired entry plan cannot remain effective.
     market_today = datetime.now(timezone(timedelta(hours=8))).date()
     expired = _projection(valid_until=market_today - timedelta(days=1))
     assert expired["effective_plans"] == []

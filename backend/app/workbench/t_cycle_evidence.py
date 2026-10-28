@@ -105,9 +105,17 @@ def recorded_t_cycles(
         # Compare split fills with the recorded quantity of their own action.
         # Equal opening/closing totals alone cannot validate an overfilled order.
         action_totals: dict[str, tuple[Decimal, Decimal]] = {}
+        # Without a non-empty plan version, two unrelated recorded actions
+        # can share a user-entered T key and appear as a completed pair.
+        # The UI also requires this identity for any non-conflicting cycle.
+        valid_plan_version = (
+            isinstance(plan_version_id, str)
+            and bool(plan_version_id.strip())
+            and plan_version_id == plan_version_id.strip()
+        )
         conflict = (
             invalid_time or dates != {market_day} or key is None
-            or market_session_status != "session"
+            or not valid_plan_version or market_session_status != "session"
         )
         for action_type, fill in legs:
             direction, leg, side = T_LEGS[action_type]

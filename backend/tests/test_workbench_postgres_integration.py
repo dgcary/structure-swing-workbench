@@ -117,11 +117,15 @@ def test_postgres_migrated_read_only_projection_preserves_timezone_and_fails_clo
                     overview = build_overview(persisted=project_persisted(session))
                     metrics = {row["key"]: row for row in overview["metrics"]}
                     assert metrics["equity"]["value"] == "200000.0000"
-                    assert Decimal(metrics["account_risk"]["value"]) == Decimal("0.05")
-                    assert metrics["account_risk"]["status"] == "available"
+                    assert metrics["account_risk"]["status"] == "unavailable"
+                    assert metrics["account_risk"]["value"] is None
                     assert overview["holdings"][0]["core_quantity"] == "100.0000"
                     assert overview["holdings"][0]["t_quantity"] == "0.0000"
-                    assert Decimal(overview["effective_plans"][0]["current_risk"]) == Decimal(100)
+                    assert overview["effective_plans"][0]["current_risk"] is None
+                    assert overview["effective_plans"][0]["initial_risk"] is None
+                    assert Decimal(
+                        overview["effective_plans"][0]["historical_cost_risk_estimate"]
+                    ) == Decimal(100)
                     assert overview["trade_execution_enabled"] is False
 
                     # A future timestamp cannot certify a real account fact.

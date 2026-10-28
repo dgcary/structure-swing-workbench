@@ -141,6 +141,27 @@ def _recorded_plan_holding_matches_snapshot(
     return other_plan_fill is None
 
 
+def _has_recorded_initial_buy(session: Session, plan: TradePlan) -> bool:
+    """Only a sourced historical first buy can enter the attribution-review list."""
+    fills = session.scalars(
+        select(ExecutionFill)
+        .join(TradeAction, ExecutionFill.action_id == TradeAction.id)
+        .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
+        .where(
+            TradePlanVersion.plan_id == plan.id,
+            TradeAction.action_type == ActionType.INITIAL_ENTRY,
+            TradeAction.side == OrderSide.BUY,
+            ExecutionFill.side == OrderSide.BUY,
+        )
+    )
+    return any(
+        fill.quantity is not None and fill.quantity.is_finite() and fill.quantity > 0
+        and isinstance(fill.source, str) and bool(fill.source.strip())
+        and _observed_at(fill.executed_at) is not None
+        for fill in fills
+    )
+
+
 def project_persisted(session: Session) -> dict[str, object]:
     """Read only existing records; no migrations, writes or synthetic data."""
     snapshot = session.scalar(
@@ -288,6 +309,7 @@ def project_persisted(session: Session) -> dict[str, object]:
         .order_by(TradePlan.instrument_code)
     ))
     plans = []
+    attribution_pending_plans = []
     actions = []
     audit_rows = []
     # Before initial entry, an expired entry deadline excludes the plan.
@@ -298,23 +320,7 @@ def project_persisted(session: Session) -> dict[str, object]:
     eligible_versions = []
     held_after_entry_versions: set[str] = set()
     for version, plan in versions:
-        valid_until = getattr(version, "valid_until", None)
-        if valid_until is not None and valid_until < market_today:
-            # §15.43: valid_until is an entry deadline, not an automatic
-            # expiry for a plan with an already executed initial buy and
-            # a still-positive holding. Require BOTH recorded entry evidence
-            # and a dated position snapshot; neither alone proves ownership.
-            if (snapshot_at is None or
-                    positive_snapshot_quantities.get(plan.instrument_code, Decimal(0)) <= 0):
-                continue
-            if not _recorded_plan_holding_matches_snapshot(
-                session, plan, snapshot_at,
-                positive_snapshot_quantities[plan.instrument_code],
-            ):
-                continue
-            held_after_entry_versions.add(version.id)
-        # Future-dated versions cannot certify effective plans; timezone-naive
-        # legacy records remain display-only, never risk-authenticating facts.
+        # Never surface future-dated plan versions as effective or historical.
         updated_at = version.updated_at
         if (
             updated_at is not None and updated_at.tzinfo is not None
@@ -322,6 +328,46 @@ def project_persisted(session: Session) -> dict[str, object]:
             and _observed_at(updated_at) is None
         ):
             continue
+        valid_until = getattr(version, "valid_until", None)
+        if valid_until is not None and valid_until < market_today:
+            # An expired entry deadline does not close a held plan. However,
+            # local fills and a historical snapshot cannot certify ownership.
+            snapshot_qty = positive_snapshot_quantities.get(
+                plan.instrument_code, Decimal(0)
+            )
+            attributed = (
+                snapshot_at is not None and snapshot_qty > 0
+                and _recorded_plan_holding_matches_snapshot(
+                    session, plan, snapshot_at, snapshot_qty
+                )
+            )
+            if not attributed:
+                # Do not silently equate an excluded plan with a full exit.
+                # An expired plan without any recorded first buy is simply
+                # expired; only a sourced historical buy merits review.
+                if _has_recorded_initial_buy(session, plan):
+                    attribution_pending_plans.append({
+                        "id": version.id, "symbol": plan.instrument_code,
+                        "name": plan.instrument_name,
+                        "version": version.version_number,
+                        "state_zh": version.state.label_zh,
+                        "invalidation_price": _number(
+                            version.structure_invalidation_price
+                        ),
+                        "first_target_price": _number(version.first_target_price),
+                        "initial_risk": None, "current_risk": None,
+                        "historical_cost_risk_estimate": None,
+                        "attribution_status": "unverified",
+                        "source": f"正式计划版本/{version.id}",
+                        "as_of": _observed_at(version.updated_at),
+                        "warning": (
+                            "历史首次建仓记录存在，但当前计划归属待核验；"
+                            "可能已清仓、发生后续成交或缺少可信持仓快照。"
+                            "不可据此推断当前持仓、风险或交易许可。"
+                        ),
+                    })
+                continue
+            held_after_entry_versions.add(version.id)
         eligible_versions.append((version, plan))
     # Multiple independently effective plans for one symbol have no unique
     # stop-loss assignment to the broker's aggregate position snapshot.
@@ -466,6 +512,7 @@ def project_persisted(session: Session) -> dict[str, object]:
         "metrics": metrics,
         "holdings": holdings,
         "effective_plans": plans,
+        "attribution_pending_plans": attribution_pending_plans,
         "pending_actions": actions,
         "audit_results": audits,
         # Recorded T legs are partial evidence, not a broker-complete daily count.

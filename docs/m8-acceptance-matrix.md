@@ -233,3 +233,10 @@
 - `backend/app/workbench/t_cycle_evidence.py::recorded_t_cycles`：在既有成交价格、数量和时间校验基础上，要求正式成交的费用为**存在、有限且非负**的十进制数。费用缺失、负数、`NaN` 或无穷值时，相关周期必须为 `conflict`，不能仅凭两腿数量相等展示为已记录完整 T 配对。零费用与正常正费用不误判；不计算利润、不推断交易方向、不写入交易状态。
 - `backend/tests/test_workbench_t_cycle_evidence.py::test_invalid_execution_fee_never_certifies_a_completed_t_cycle`、`test_zero_and_positive_fees_preserve_unverified_recorded_t_pair`：覆盖开腿/闭腿异常费用与零费/正费对照；所有情形 `broker_reconciled=false`、`trade_execution_enabled=false`。
 - **边界**：费用格式完整不等于费用与券商流水一致，也不代表已完成券商全量成交认证、日终 BROKEN 转仓、日内换仓、T+1 可卖量、CORE/T 独立风险、真实账户 CSV→PostgreSQL 或手机 Safari/可信 TLS 实机验收。M8 整体 Gate 仍 FAIL；PR #19 保持 Draft，禁止合并/部署/进入 M9。最终 CI 须按最新 HEAD 独立核验。
+
+
+### 2026-10-28 增量证据：单日自报清单不得静默忽略跨日 CSV 成交
+
+- `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：此前仅抽取声明日的成交编号核对，上传 CSV 即使还包含其他交易日的成交，也可能显示 `matched_unverified`。现在显式返回 `outside_claimed_day_fill_count`；非零时即使声明日编号完全一致，也降级为 `insufficient` 并给出按交易日分别核对的中文提示。跨日文件不必然错误，因此不直接当成成交编号冲突；若声明日仍有缺失/额外/重复/超水位成交，`mismatch` 优先。
+- `backend/tests/test_workbench_account_snapshot_preview.py`：新增跨日 +08:00/UTC 等价时间、跨日文件同时有当日编号冲突、同一上海市场日 UTC 时间不误判的正反例。确认所有路径仍 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`，首页 `t_cycles_today` 不可用。
+- **边界**：仅加强用户上传 CSV 与自报清单的内部范围一致性，不是独立券商账户身份、完整成交水位或官方临时休市认证。真实脱敏券商 CSV→隔离 PostgreSQL 对账、日终 BROKEN 转仓、日内换仓、T+1、CORE/T 风险和手机 Safari/TLS 实机仍缺；M8 整体 Gate FAIL，PR #19 保持 Draft，不合并、不部署、不进入 M9。CI 必须以本次最新 HEAD 的 Actions 为准。

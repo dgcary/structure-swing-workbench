@@ -125,8 +125,18 @@ def recorded_t_cycles(
                 and fill.price.is_finite()
                 and fill.price > 0
             )
+            # Fees are recorded execution facts, not optional plan values.
+            # A non-finite, negative or absent fee makes the pair unsuitable
+            # as a coherent recorded T cycle, even when prices/quantities match.
+            fee = getattr(fill, "fee", None)
+            valid_fee = (
+                isinstance(fee, Decimal)
+                and fee.is_finite()
+                and fee >= 0
+            )
             if (
                 fill.side != side or not valid_quantity or not valid_price
+                or not valid_fee
                 or not isinstance(source, str) or not source.strip()
             ):
                 conflict = True
@@ -200,7 +210,7 @@ def recorded_t_cycles(
             "broker_reconciled": False,
             "trade_execution_enabled": False,
             "warning": (
-                "成交方向、价格、数量、日期、来源或重复成交编号冲突；不可用于T次数核验。"
+                "成交方向、价格、费用、数量、日期、来源或重复成交编号冲突；不可用于T次数核验。"
                 if conflict else
                 "已过当日收盘且记录中仍有未闭环T；剩余第一腿仅提示待核验的普通加减仓，"
                 "必须核对券商全量成交、主计划与风险后重新审计；未自动转仓或授权交易。"

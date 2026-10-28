@@ -188,3 +188,23 @@ test("recorded T pair must have distinct evidence for both legs", () => {
     ...closed, state: "open", closing_quantity: "0", sources: singleSource,
   }]), "read_only"));
 });
+
+test("recorded T fills require a complete ID/source and one unique fill ID", () => {
+  const second = {
+    ...closed, cycle_key: "t-002",
+    sources: ["成交记录/fill-3/manual", "成交记录/fill-4/manual"],
+  };
+  assert.doesNotThrow(() => assertReadOnlyOverview(overview([closed, second]), "read_only"));
+
+  // Two labels do not make the same persisted fill two independent executions.
+  for (const broken of [
+    [{ ...closed, sources: ["成交记录/same/manual", "成交记录/same/import"] }],
+    [closed, { ...second, sources: ["成交记录/fill-1/import", "成交记录/fill-4/manual"] }],
+    [{ ...closed, sources: ["成交记录//manual", "成交记录/fill-2/manual"] }],
+    [{ ...closed, sources: ["成交记录/fill-1/", "成交记录/fill-2/manual"] }],
+    [{ ...closed, sources: ["成交记录/ /manual", "成交记录/fill-2/manual"] }],
+    [{ ...closed, sources: ["成交记录/fill-1/ ", "成交记录/fill-2/manual"] }],
+  ]) {
+    assert.throws(() => assertReadOnlyOverview(overview(broken), "read_only"), /协议异常/);
+  }
+});

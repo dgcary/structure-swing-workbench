@@ -247,3 +247,12 @@
 - `backend/tests/test_workbench_t_cycle_evidence.py`：覆盖同标识两个完整闭环、闭环后再次开仓、不同标识的两个独立闭环；既有拆单/部分成交测试继续保护合法单周期的多笔成交。
 - 这是**已记录成交身份一致性门禁**，不是对用户既定「完整闭环计一次 T、单票每日最多两次」规则的修改。冲突记录仍不能作为完整 T 次数或日终正式转仓依据；`broker_reconciled=false`、`trade_execution_enabled=false`，首页完整 T 次数仍不可用。
 - 本项不能代替券商全量成交与逐日水位、BROKEN 持久化、T+1、CORE/T 风险、真实账户对账及 Safari/TLS 实机验收；最终 CI 和独立 Gate 仍需按最新 HEAD 核验。
+
+
+### 2026-10-28 增量证据：账户来源缺失及多有效计划歧义的风险门禁
+
+- `backend/app/workbench/persisted.py`：账户快照的 `source` 为空或只有空白时，不再通过拼接“账户快照//ID”生成表面上有来源的事实；权益、可用资金、持仓和账户总风险均保持 `unavailable` / `null`，不得把来源缺失解释为零或认证事实。
+- 同文件：只读投影对**同证券多份同时有效计划**执行防御性歧义检测，拒绝任取一份止损价计算并认证整仓风险；仍可显示计划，但各计划当前风险及账户总风险保持未知。正常数据库的唯一有效计划索引是第一道防线，此处防护历史异常读取/损坏数据，不代表正常业务允许重复有效计划。
+- `backend/tests/test_workbench_persisted_risk.py`：新增空/空格/制表符来源反例、两份有效计划同/不同止损价反例，以及第二份计划已过期时保留单一有效计划风险的正例。全程只读，`trade_execution_enabled=false`。
+- 已核验本增量代码 HEAD `35f04bf70cecd670ecaee01b415ad1bb6cc6963a` 对应 [PR CI #40628044435](https://github.com/dgcary/structure-swing-workbench/actions/runs/40628044435) completed/success：后端 506 passed（另有 64 条已有测试警告）、Ruff 通过、PostgreSQL 16/Alembic 迁移通过；前端 95 项测试及生产构建通过。该结果只证明合成/静态数据门禁，不证明真实券商全量成交、实际 T+1 可卖量或真实手机/TLS 验收。
+- **M8 Gate 仍 FAIL**：券商独立账户身份与逐日成交完整水位、官方临时休市状态、真实脱敏 CSV→PostgreSQL 对账、日终未闭环 T 正式转仓与重审、日内换仓、T+1 可卖量、含 T 仓独立止损及最大风险、手机 Safari/HTTPS 实机证据均未完成。PR #19 保持 Draft，不合并/部署、不启动 M9。

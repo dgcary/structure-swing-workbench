@@ -283,3 +283,12 @@
 - `backend/app/workbench/t_cycle_evidence.py`：当正式 T 动作填写了 `planned_quantity`，同一动作的多笔实际成交数量之和不得超过该记录数量；数量无效（NaN、零、负数）或同一动作数量记录矛盾时，该周期为 `conflict`，不能将两腿碰巧相等的成交误认作可信闭环。未填写计划数量时沿用原有成交证据规则，不据此自动推断计划。
 - `backend/tests/test_workbench_t_cycle_evidence.py::test_split_fills_cannot_exceed_their_recorded_action_quantity`：覆盖开仓动作计划 10 股但拆单累计成交 12 股的冲突，以及计划 12 股与成交 12 股的一致对照、非法计划数量反例。
 - **验收边界**：这只是持久化动作与成交的内部一致性检查；不证明券商全量成交、正式日终转仓、日内换仓、T+1 可卖数量或核心/T 仓独立风险，不能生成交易许可。仍须核对本轮最新 HEAD 的 GitHub Actions；M8 Gate 保持 FAIL，PR #19 保持 Draft，不合并、不部署、不启动 M9。
+
+### 2026-10-28 增量证据：反T临时最大暴露的手工风险估算（非正式审计）
+
+- `backend/app/workbench/t_cycle_preview.py` 在原有单次 T 手工预览中增加**可选且必须完整填写**的反T风险假设：账户权益、核心仓数量/策略成本/主计划结构失效价、本次T独立止损价、既有T仓及其他持仓最大亏损合计。正T不得使用反T风险输入；独立T止损必须低于本次买入价；非有限值、负亏损、缺项拒绝。
+- 计算使用**反T先买后的临时最大暴露**，不因第二腿后来闭环而抹去当时风险。核心仓与本次新增T仓分别使用各自止损，合并其他持仓/既有T仓输入，再除以权益；严格按 `≤2% PASS / (2%,3%] WARNING / >3% HARD_FAIL` 作**数学分级**。所有金额均按用户输入计算，不自行判断结构或价格。
+- `frontend/src/TCyclePreview.tsx` 增加中文可选风险表单，结果显式标注“手工最大暴露估算（非正式审计）”；`tCyclePreviewContract.ts` 验证返回的风险分级、数值与 `verified=false`，拒绝假冒已核验的结果。
+- `backend/tests/test_workbench_reverse_t_risk.py` 覆盖 2%/3% 分界、临时最大暴露、闭环后仍保留峰值、独立止损与输入缺失/非法值；`frontend/tests/tCyclePreviewContract.test.mjs` 覆盖来源与分级伪造的拒绝。
+- **本项只是可复核的手工数学预览，不是 M8 风险门禁完成。** 尚无券商独立账户/全量成交/持仓/T+1 昨日可卖数量认证，也未从真实账户自动读取 CORE/T 独立止损、当日换仓及完整风险事实；费用、滑点和真实动态暴露仍未核验。即使数学分级为 PASS，`verified=false`、`broker_reconciled=false`、`trade_execution_enabled=false` 均不变，不得执行或合并。
+- 最终验收以本次最新 HEAD 的后端/前端 CI 与真实券商、手机 Safari、HTTPS/TLS 实机证据为准，不能用本项单元测试替代。

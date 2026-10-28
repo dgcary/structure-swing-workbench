@@ -116,6 +116,86 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     assert held["effective_plans"][0]["current_risk"] is None
                     assert held["trade_execution_enabled"] is False
 
+                    # A matching symbol is insufficient when plan inventory
+                    # cannot be reconciled with the recorded fills.
+                    position.total_quantity = Decimal(120)
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    position.total_quantity = Decimal(100)
+                    session.flush()
+                    assert len(projected()["effective_plans"]) == 1
+
+                    # Partial sell leaves 60 shares attributable to this plan
+                    # only when the snapshot also records exactly 60.
+                    sell = TradeAction(
+                        plan_version_id=version.id,
+                        action_type=ActionType.REDUCE,
+                        side=OrderSide.SELL, status=ActionStatus.PARTIALLY_FILLED,
+                    )
+                    session.add(sell)
+                    session.flush()
+                    partial = ExecutionFill(
+                        action_id=sell.id, side=OrderSide.SELL,
+                        quantity=Decimal(40), price=Decimal(11),
+                        fee=Decimal(0), executed_at=now - timedelta(minutes=40),
+                        source="manual",
+                    )
+                    session.add(partial)
+                    position.total_quantity = Decimal(60)
+                    session.flush()
+                    assert len(projected()["effective_plans"]) == 1
+
+                    # A second plan for the same stock with its own recorded
+                    # buy makes the ownership of this snapshot ambiguous.
+                    other_plan = TradePlan(
+                        instrument_code="600000", instrument_name="合成再次入场",
+                        status=PlanStatus.CLOSED, is_active=False,
+                    )
+                    session.add(other_plan)
+                    session.flush()
+                    other_version = TradePlanVersion(
+                        plan_id=other_plan.id, version_number=1,
+                        state=PlanVersionState.CLOSED, is_effective=False,
+                    )
+                    session.add(other_version)
+                    session.flush()
+                    other_action = TradeAction(
+                        plan_version_id=other_version.id,
+                        action_type=ActionType.INITIAL_ENTRY,
+                        side=OrderSide.BUY, status=ActionStatus.FILLED,
+                    )
+                    session.add(other_action)
+                    session.flush()
+                    other_fill = ExecutionFill(
+                        action_id=other_action.id, side=OrderSide.BUY,
+                        quantity=Decimal(40), price=Decimal(12),
+                        fee=Decimal(0), executed_at=now - timedelta(minutes=20),
+                        source="manual",
+                    )
+                    session.add(other_fill)
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    session.delete(other_fill)
+                    session.flush()
+                    assert len(projected()["effective_plans"]) == 1
+
+                    # A completed exit leaves no inventory for the old plan;
+                    # a positive symbol snapshot must not resurrect it.
+                    full_exit = ExecutionFill(
+                        action_id=sell.id, side=OrderSide.SELL,
+                        quantity=Decimal(60), price=Decimal(11),
+                        fee=Decimal(0), executed_at=now - timedelta(minutes=30),
+                        source="manual",
+                    )
+                    session.add(full_exit)
+                    position.total_quantity = Decimal(100)
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    session.delete(full_exit)
+                    session.delete(partial)
+                    session.flush()
+                    assert len(projected()["effective_plans"]) == 1
+
                     # A positive snapshot alone is not proof of an initial buy.
                     session.delete(session.get(ExecutionFill, fill.id))
                     session.flush()

@@ -99,3 +99,20 @@ def test_extreme_finite_reverse_t_risk_assumptions_return_422_not_server_error()
     assert ok.status_code == 200
     assert ok.json()["projected_risk"]["verified"] is False
     assert ok.json()["trade_execution_enabled"] is False
+
+
+def test_large_valid_reverse_t_inputs_preserve_fractional_risk():
+    result = preview(risk_inputs={
+        **RISK,
+        "account_equity": "9999999999999999.9999",
+        "core_quantity": "9999999999999999.9999",
+        "core_cost_price": "99999999999999.9999",
+        "main_invalidation_price": "99999999999999.9998",
+        "existing_t_max_loss": "0",
+        "other_positions_max_loss": "0",
+    })
+    assert result.status_code == 200
+    risk = result.json()["projected_risk"]
+    assert risk["core_max_loss"] == "999999999999.99999999"
+    assert risk["projected_max_loss"] == "1000000000049.99999999"
+    assert risk["verified"] is False

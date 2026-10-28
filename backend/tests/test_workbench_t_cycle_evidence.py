@@ -12,11 +12,13 @@ DAY = date(2026, 10, 27)
 
 
 def _fill(
-    identifier, side, qty, hour, *, source="manual", at=None, price="10", external_id=None
+    identifier, side, qty, hour, *, source="manual", at=None, price="10",
+    external_id=None, fee="0",
 ):
     return SimpleNamespace(
         id=identifier, side=side, quantity=Decimal(qty), source=source,
         price=Decimal(price) if price is not None else None,
+        fee=Decimal(fee) if fee is not None else None,
         executed_at=at if at is not None else NOW.replace(hour=hour),
         external_execution_id=external_id,
     )
@@ -211,6 +213,39 @@ def test_invalid_execution_price_never_certifies_a_completed_t_cycle():
             _fill("close", OrderSide.BUY, "10", 2, price=invalid),
         )
         assert recorded_t_cycles(rows, DAY, now=NOW)[0]["state"] == "conflict"
+
+
+def test_invalid_execution_fee_never_certifies_a_completed_t_cycle():
+    """Missing, negative or non-finite broker fees are conflicting fill facts."""
+    for invalid in ("NaN", "Infinity", "-Infinity", "-0.01", None):
+        for bad_leg in ("open", "close"):
+            open_fee = invalid if bad_leg == "open" else "0"
+            close_fee = invalid if bad_leg == "close" else "0"
+            rows = [
+                _record(ActionType.POSITIVE_T_SELL,
+                        _fill("open", OrderSide.SELL, "10", 1, fee=open_fee)),
+                _record(ActionType.POSITIVE_T_BUYBACK,
+                        _fill("close", OrderSide.BUY, "10", 2, fee=close_fee)),
+            ]
+            cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+            assert cycle["state"] == "conflict"
+            assert cycle["opening_quantity"] is None
+            assert cycle["closing_quantity"] is None
+            assert cycle["broker_reconciled"] is False
+            assert cycle["trade_execution_enabled"] is False
+
+
+def test_zero_and_positive_fees_preserve_unverified_recorded_t_pair():
+    rows = [
+        _record(ActionType.REVERSE_T_BUY,
+                _fill("buy", OrderSide.BUY, "10", 1, fee="0")),
+        _record(ActionType.REVERSE_T_SELL,
+                _fill("sell", OrderSide.SELL, "10", 2, fee="0.50")),
+    ]
+    cycle = recorded_t_cycles(rows, DAY, now=NOW)[0]
+    assert cycle["state"] == "closed"
+    assert cycle["broker_reconciled"] is False
+    assert cycle["trade_execution_enabled"] is False
 
 
 def test_duplicate_broker_execution_reference_never_closes_a_cycle():

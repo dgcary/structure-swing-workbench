@@ -277,3 +277,9 @@
 - `backend/app/workbench/t_cycle_evidence.py::recorded_t_cycles`：对有持久化 Action 关联的 T 成交，除核对成交 `side` 外，额外核对 Action 自身的 `side` 和 `action_type` 与对应正/反 T 腿是否一致。即使两腿成交数量、价格和时间看似能够闭环，只要 Action 方向或类型自相矛盾，就标记为 `conflict`，不认证单周期数量，也不用于单日完整 T 下限告警。
 - `backend/tests/test_workbench_t_cycle_evidence.py`：新增 Action 方向错误、Action 类型错误两种反例，以及元数据一致时仍只返回 `closed`（已记录配对、未对账）的对照。
 - **限制**：这是数据库内部事实一致性门禁，不是独立券商成交认证；`broker_reconciled=false`、`trade_execution_enabled=false` 不变。券商全量流水、日终正式 BROKEN 转仓、T+1/CORE-T 风险及 Safari/TLS 实机证据仍缺，M8 整体验收保持 FAIL，PR #19 不合并、不部署。
+
+### 2026-10-28 增量证据：T 动作计划数量与拆单成交一致性
+
+- `backend/app/workbench/t_cycle_evidence.py`：当正式 T 动作填写了 `planned_quantity`，同一动作的多笔实际成交数量之和不得超过该记录数量；数量无效（NaN、零、负数）或同一动作数量记录矛盾时，该周期为 `conflict`，不能将两腿碰巧相等的成交误认作可信闭环。未填写计划数量时沿用原有成交证据规则，不据此自动推断计划。
+- `backend/tests/test_workbench_t_cycle_evidence.py::test_split_fills_cannot_exceed_their_recorded_action_quantity`：覆盖开仓动作计划 10 股但拆单累计成交 12 股的冲突，以及计划 12 股与成交 12 股的一致对照、非法计划数量反例。
+- **验收边界**：这只是持久化动作与成交的内部一致性检查；不证明券商全量成交、正式日终转仓、日内换仓、T+1 可卖数量或核心/T 仓独立风险，不能生成交易许可。仍须核对本轮最新 HEAD 的 GitHub Actions；M8 Gate 保持 FAIL，PR #19 保持 Draft，不合并、不部署、不启动 M9。

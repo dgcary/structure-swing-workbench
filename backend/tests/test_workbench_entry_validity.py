@@ -150,7 +150,7 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     # instants in UTC, not their differing timezone offsets.
                     late_buy = TradeAction(
                         plan_version_id=version.id,
-                        action_type=ActionType.ADD,
+                        action_type=ActionType.ORDINARY_ADD,
                         side=OrderSide.BUY, status=ActionStatus.FILLED,
                     )
                     session.add(late_buy)

@@ -45,7 +45,7 @@ def test_reverse_t_risk_uses_peak_inventory_and_separate_stops():
     assert risk["projected_max_loss"] == "400.0"
     assert Decimal(risk["projected_account_risk_pct"]) == Decimal("1.6")
     assert risk["account_total_max_loss"] == "500.0"
-    assert Decimal(risk["account_total_risk_pct"]) == Decimal("2")
+    assert Decimal(risk["account_total_risk_pct"]) == Decimal(2)
     assert risk["level"] == "PASS"
     assert risk["verified"] is False
     assert risk["source"] == "用户手工假设"

@@ -71,6 +71,70 @@ def _core_only_risk(quantity: Decimal, cost: Decimal | None, stop: Decimal | Non
         return quantity * (cost - stop)
 
 
+
+def _recorded_plan_holding_matches_snapshot(
+    session: Session, plan: TradePlan, snapshot_at: datetime, snapshot_qty: Decimal,
+) -> bool:
+    """Conservative §15.43 attribution; a same-symbol holding is not plan ownership.
+
+    Compare all recorded fills from every version of this plan, not just its
+    first buy. A complete exit, partial/unknown inventory, conflicting fills,
+    or fills from another plan for this symbol cannot keep an expired entry
+    plan on the *effective* list. This is still NOT broker certification.
+    """
+    if not snapshot_qty.is_finite() or snapshot_qty <= 0:
+        return False
+    rows = list(session.execute(
+        select(ExecutionFill, TradeAction)
+        .join(TradeAction, ExecutionFill.action_id == TradeAction.id)
+        .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
+        .where(
+            TradePlanVersion.plan_id == plan.id,
+            ExecutionFill.executed_at <= snapshot_at,
+        )
+    ))
+    if not rows:
+        return False
+    saw_initial_buy = False
+    with localcontext() as context:
+        context.prec = 64
+        net = Decimal(0)
+        for fill, action in rows:
+            if (
+                fill.side != action.side
+                or not fill.quantity.is_finite() or fill.quantity <= 0
+                or not fill.price.is_finite() or fill.price <= 0
+                or not fill.fee.is_finite() or fill.fee < 0
+                or not isinstance(fill.source, str) or not fill.source.strip()
+                or _observed_at(fill.executed_at) is None
+            ):
+                return False
+            if action.action_type == ActionType.INITIAL_ENTRY:
+                if action.side != OrderSide.BUY:
+                    return False
+                saw_initial_buy = True
+            net += fill.quantity if fill.side == OrderSide.BUY else -fill.quantity
+            # A recorded sell cannot dispose of more of this plan than it owns.
+            if net < 0:
+                return False
+    if not saw_initial_buy or net <= 0 or net != snapshot_qty:
+        return False
+    # Even equal quantities cannot attribute the latest snapshot to this plan
+    # when another plan for the same instrument has recorded transactions.
+    other_plan_fill = session.scalar(
+        select(ExecutionFill.id)
+        .join(TradeAction, ExecutionFill.action_id == TradeAction.id)
+        .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
+        .join(TradePlan, TradePlanVersion.plan_id == TradePlan.id)
+        .where(
+            TradePlan.instrument_code == plan.instrument_code,
+            TradePlan.id != plan.id,
+            ExecutionFill.executed_at <= snapshot_at,
+        ).limit(1)
+    )
+    return other_plan_fill is None
+
+
 def project_persisted(session: Session) -> dict[str, object]:
     """Read only existing records; no migrations, writes or synthetic data."""
     snapshot = session.scalar(
@@ -237,23 +301,9 @@ def project_persisted(session: Session) -> dict[str, object]:
             if (snapshot_at is None or
                     positive_snapshot_quantities.get(plan.instrument_code, Decimal(0)) <= 0):
                 continue
-            entry_fills = session.scalars(
-                select(ExecutionFill)
-                .join(TradeAction, ExecutionFill.action_id == TradeAction.id)
-                .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
-                .where(
-                    TradePlanVersion.plan_id == plan.id,
-                    TradeAction.action_type == ActionType.INITIAL_ENTRY,
-                    TradeAction.side == OrderSide.BUY,
-                    ExecutionFill.side == OrderSide.BUY,
-                    ExecutionFill.executed_at <= snapshot_at,
-                )
-            )
-            if not any(
-                fill.quantity.is_finite() and fill.quantity > 0
-                and isinstance(fill.source, str) and bool(fill.source.strip())
-                and _observed_at(fill.executed_at) is not None
-                for fill in entry_fills
+            if not _recorded_plan_holding_matches_snapshot(
+                session, plan, snapshot_at,
+                positive_snapshot_quantities[plan.instrument_code],
             ):
                 continue
             held_after_entry_versions.add(version.id)

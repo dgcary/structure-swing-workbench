@@ -101,3 +101,38 @@ test("isolated CSV can never carry persisted plans or audits", () => {
     assert.throws(() => assertReadOnlyOverview(safe, "isolated_csv_preview"), /协议异常/);
   }
 });
+
+
+test("historical attribution is review-only and cannot overlap effective plans", () => {
+  const pending = {
+    ...plan, attribution_status: "unverified",
+    warning: "历史首次建仓记录存在，当前归属待核验",
+  };
+  const data = { ...baseline(), attribution_pending_plans: [pending] };
+  assert.doesNotThrow(() => assertReadOnlyOverview(data, "read_only"));
+  for (const broken of [
+    { ...pending, attribution_status: "verified" },
+    { ...pending, current_risk: "100" },
+    { ...pending, initial_risk: "100" },
+    { ...pending, historical_cost_risk_estimate: "100" },
+    { ...pending, warning: "已清仓" },
+    { ...pending, source: "本机草稿/plan-v1" },
+  ]) {
+    assert.throws(() => assertReadOnlyOverview({
+      ...data, attribution_pending_plans: [broken],
+    }, "read_only"), /协议异常/);
+  }
+  assert.throws(() => assertReadOnlyOverview({
+    ...data, attribution_pending_plans: [pending, pending],
+  }, "read_only"), /协议异常/);
+  assert.throws(() => assertReadOnlyOverview({
+    ...data, effective_plans: [plan],
+  }, "read_only"), /协议异常/);
+  assert.throws(() => assertReadOnlyOverview({
+    ...data, mode: "isolated_csv_preview",
+    schema_version: "m8.account_snapshot_preview.v1",
+    effective_plans: null, pending_actions: null, audit_results: null,
+    input_source: "user_uploaded_csv", persisted: false, realtime: false,
+    full_account_verified: false, imported_kinds: ["account"],
+  }, "isolated_csv_preview"), /协议异常/);
+});

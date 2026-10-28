@@ -7,7 +7,7 @@ A database row is not proof of a live broker connection.
 import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -55,7 +55,12 @@ def _core_only_risk(quantity: Decimal, cost: Decimal | None, stop: Decimal | Non
         or stop <= 0 or cost <= stop
     ):
         return None
-    return quantity * (cost - stop)
+    # M1 NUMERIC(20,4) quantity × NUMERIC(18,4) price can carry up to
+    # 38 significant digits. Default Decimal precision (28) silently rounds
+    # a historical risk fact before the UI displays it as sourced evidence.
+    with localcontext() as context:
+        context.prec = 64
+        return quantity * (cost - stop)
 
 
 def project_persisted(session: Session) -> dict[str, object]:

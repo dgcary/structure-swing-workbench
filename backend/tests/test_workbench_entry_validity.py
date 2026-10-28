@@ -191,6 +191,26 @@ def test_postgres_entered_plan_stays_visible_after_entry_deadline_only_with_evid
                     position.total_quantity = Decimal(100)
                     session.flush()
                     assert projected()["effective_plans"] == []
+
+                    # Re-entering the same symbol after complete exit must
+                    # use a new plan ID; an old plan cannot be resurrected.
+                    reentry_action = TradeAction(
+                        plan_version_id=version.id,
+                        action_type=ActionType.INITIAL_ENTRY,
+                        side=OrderSide.BUY, status=ActionStatus.FILLED,
+                    )
+                    session.add(reentry_action)
+                    session.flush()
+                    reentry_fill = ExecutionFill(
+                        action_id=reentry_action.id, side=OrderSide.BUY,
+                        quantity=Decimal(100), price=Decimal(12),
+                        fee=Decimal(0), executed_at=now - timedelta(minutes=15),
+                        source="manual",
+                    )
+                    session.add(reentry_fill)
+                    session.flush()
+                    assert projected()["effective_plans"] == []
+                    session.delete(reentry_fill)
                     session.delete(full_exit)
                     session.delete(partial)
                     session.flush()

@@ -57,7 +57,8 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
                 quantity="100", equity="200000",
                 snapshot_at=AT, version_at=AT - timedelta(hours=1),
                 with_plan=True, buckets_complete=True, zero_conflict=False,
-                valid_until=None):
+                valid_until=None, additional_version_stop=None,
+                additional_version_valid_until=None):
     snapshot = SimpleNamespace(
         id="snapshot-1", captured_at=snapshot_at, source="manual",
         total_equity=Decimal(equity), available_cash=Decimal(100000),
@@ -88,10 +89,21 @@ def _projection(*, core="100", t="0", cost="10", stop="9",
     plan = SimpleNamespace(
         instrument_code="600000", instrument_name="人工指定标的",
     )
-    return build_overview(persisted=project_persisted(
-        _ReadOnlySession(snapshot, position, buckets, version, plan,
-                         zero_conflict=zero_conflict)
-    ))
+    session = _ReadOnlySession(
+        snapshot, position, buckets, version, plan, zero_conflict=zero_conflict
+    )
+    if additional_version_stop is not None:
+        session.versions.append((
+            SimpleNamespace(
+                id="version-2", version_number=2, state=PlanVersionState.EFFECTIVE,
+                updated_at=version_at,
+                valid_until=additional_version_valid_until,
+                structure_invalidation_price=Decimal(additional_version_stop),
+                first_target_price=Decimal(12),
+            ),
+            plan,
+        ))
+    return build_overview(persisted=project_persisted(session))
 
 
 def _metric(overview, key):
@@ -195,3 +207,29 @@ def test_future_dated_snapshot_and_plan_do_not_authenticate_account_risk():
     assert plan["pending_actions"] == []
     assert plan["audit_results"] == []
     assert plan["trade_execution_enabled"] is False
+
+@pytest.mark.parametrize("other_stop", ["9", "8"])
+def test_two_effective_plans_for_one_symbol_block_account_risk(other_stop):
+    # A single aggregate CORE position cannot be assigned to either plan's
+    # stop without an independently verified per-plan inventory allocation.
+    overview = _projection(additional_version_stop=other_stop)
+    assert len(overview["effective_plans"]) == 2
+    assert all(plan["current_risk"] is None for plan in overview["effective_plans"])
+    assert all("多份有效计划" in plan["warning"] for plan in overview["effective_plans"])
+    risk = _metric(overview, "account_risk")
+    assert risk["status"] == "unavailable"
+    assert risk["value"] is None
+    assert risk["source"] is None
+    assert overview["trade_execution_enabled"] is False
+
+
+def test_expired_second_plan_does_not_invalidate_unique_current_risk():
+    market_today = datetime.now(timezone(timedelta(hours=8))).date()
+    overview = _projection(
+        additional_version_stop="8",
+        additional_version_valid_until=market_today - timedelta(days=1),
+    )
+    assert len(overview["effective_plans"]) == 1
+    assert overview["effective_plans"][0]["current_risk"] == "100"
+    assert _metric(overview, "account_risk")["status"] == "available"
+    assert overview["trade_execution_enabled"] is False

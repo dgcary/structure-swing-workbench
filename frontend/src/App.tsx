@@ -40,6 +40,7 @@ type PersistedPlan = {
   id: string; symbol: string; name: string; version: number; state_zh: string;
   invalidation_price: string | null; first_target_price: string | null;
   initial_risk: string | null; current_risk: string | null;
+  historical_cost_risk_estimate: string | null;
   source: string; as_of: string | null; warning: string;
 };
 
@@ -416,7 +417,8 @@ export function App() {
                       <article className="holding-card" key={plan.id}>
                         <h3>{plan.symbol} · {plan.name} · 第{plan.version}版</h3>
                         <p>计划状态：{plan.state_zh} · 结构失效价：{plan.invalidation_price ?? "未知"}</p>
-                        <p>第一目标：{plan.first_target_price ?? "未知"} · 初始风险：{plan.initial_risk ?? "未核实"} · 当前风险：{plan.current_risk === null ? "未核实" : `${plan.current_risk} 元（核心仓历史估算）`}</p>
+                        <p>第一目标：{plan.first_target_price ?? "未知"} · 初始风险：{plan.initial_risk ?? "未核实"} · 当前风险：{plan.current_risk === null ? "未核实" : `${plan.current_risk} 元`}</p>
+                         <p>历史策略成本风险估算：{plan.historical_cost_risk_estimate === null ? "不可用" : `${plan.historical_cost_risk_estimate} 元（非初始风险认证）`}</p>
                         <p>来源：{plan.source} · 数据时间：{plan.as_of ?? "未核实"}</p>
                         <p className="notice">{plan.warning}</p>
                       </article>

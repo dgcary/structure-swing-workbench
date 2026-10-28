@@ -204,6 +204,7 @@ function validRecordedTCycle(value: unknown): boolean {
       !A_SHARE_SYMBOL.test(value.symbol) ||
       !optionalText(value.cycle_key) || !optionalText(value.plan_version_id) ||
       !validCalendarDate(value.market_date) ||
+      !["session", "closed", "unknown"].includes(String(value.market_calendar_status)) ||
       !["open", "closed", "conflict"].includes(String(value.state)) ||
       !(value.direction === null || value.direction === "positive" ||
         value.direction === "reverse") ||
@@ -228,7 +229,14 @@ function validRecordedTCycle(value: unknown): boolean {
     if (value.opening_quantity !== null || value.closing_quantity !== null ||
         value.end_of_day_unclosed || value.requires_reaudit) return false;
   } else {
-    if (value.direction === null || value.as_of === null ||
+    // Only a dated, keyed, exchange-session pair can be displayed as
+    // internally coherent. A holiday or unknown session remains a conflict.
+    if (value.market_calendar_status !== "session" ||
+        typeof value.cycle_key !== "string" || !value.cycle_key.trim() ||
+        typeof value.plan_version_id !== "string" || !value.plan_version_id.trim() ||
+        value.direction === null || value.as_of === null ||
+        new Date(Date.parse(value.as_of) + 8 * 60 * 60 * 1000)
+          .toISOString().slice(0, 10) !== value.market_date ||
         !decimalText(value.opening_quantity) ||
         !decimalText(value.closing_quantity)) return false;
     const opening = decimalParts(value.opening_quantity);
@@ -323,6 +331,25 @@ export function assertReadOnlyOverview(
   // for one symbol/day must trigger a lower-bound warning on every row.
   // Fewer than three is NOT proof that the trading rule passed.
   if (Array.isArray(data.t_cycle_evidence)) {
+    // A repeated plan/version/day/cycle identity cannot represent another T
+    // decision. Nor can a single fill certify two different non-conflict cycles.
+    const identities = new Set<string>();
+    const acceptedFillSources = new Set<string>();
+    for (const cycle of data.t_cycle_evidence) {
+      if (cycle.cycle_key !== null) {
+        const identity = JSON.stringify([
+          cycle.symbol, cycle.market_date, cycle.plan_version_id, cycle.cycle_key,
+        ]);
+        if (identities.has(identity)) fail();
+        identities.add(identity);
+      }
+      if (cycle.state !== "conflict") {
+        for (const source of cycle.sources) {
+          if (acceptedFillSources.has(source)) fail();
+          acceptedFillSources.add(source);
+        }
+      }
+    }
     const closedByDay = new Map<string, number>();
     for (const cycle of data.t_cycle_evidence) {
       const key = cycle.symbol + "/" + cycle.market_date;

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.db.models import PositionBucketSnapshot, PositionSnapshot
+from app.db.models import ExecutionFill, PositionBucketSnapshot, PositionSnapshot
 from app.domain.enums import PlanVersionState, PositionBucketType
 from app.workbench.overview import build_overview
 from app.workbench.persisted import _core_only_risk, project_persisted
@@ -49,7 +49,11 @@ class _ReadOnlySession:
             return iter(self.buckets)
         return iter([])
 
-    def execute(self, _statement):
+    def execute(self, statement):
+        # The attribution check reads actual fills; this synthetic session
+        # intentionally contains no broker/plan execution evidence.
+        if statement.column_descriptions[0]["entity"] is ExecutionFill:
+            return []
         return self.versions
 
 

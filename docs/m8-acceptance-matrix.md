@@ -240,3 +240,10 @@
 - `backend/app/workbench/account_snapshot_preview.py::_preview_daily_fill_coverage`：此前仅抽取声明日的成交编号核对，上传 CSV 即使还包含其他交易日的成交，也可能显示 `matched_unverified`。现在显式返回 `outside_claimed_day_fill_count`；非零时即使声明日编号完全一致，也降级为 `insufficient` 并给出按交易日分别核对的中文提示。跨日文件不必然错误，因此不直接当成成交编号冲突；若声明日仍有缺失/额外/重复/超水位成交，`mismatch` 优先。
 - `backend/tests/test_workbench_account_snapshot_preview.py`：新增跨日 +08:00/UTC 等价时间、跨日文件同时有当日编号冲突、同一上海市场日 UTC 时间不误判的正反例。确认所有路径仍 `broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`，首页 `t_cycles_today` 不可用。
 - **边界**：仅加强用户上传 CSV 与自报清单的内部范围一致性，不是独立券商账户身份、完整成交水位或官方临时休市认证。真实脱敏券商 CSV→隔离 PostgreSQL 对账、日终 BROKEN 转仓、日内换仓、T+1、CORE/T 风险和手机 Safari/TLS 实机仍缺；M8 整体 Gate FAIL，PR #19 保持 Draft，不合并、不部署、不进入 M9。CI 必须以本次最新 HEAD 的 Actions 为准。
+
+### 2026-10-28 增量证据：复用 T 周期标识不得合并多个闭环
+
+- `backend/app/workbench/t_cycle_evidence.py`：同一证券、同一正式计划版本、同一 `t_cycle_key` 的成交按时间顺序核对。若数量余额已经归零（一次完整闭环），随后该标识下又出现新一腿成交，标记为 `conflict`，不再将两次独立 T 决策压缩为一个 `closed` 周期，也不把后续重开误判为一个合法未闭环周期。
+- `backend/tests/test_workbench_t_cycle_evidence.py`：覆盖同标识两个完整闭环、闭环后再次开仓、不同标识的两个独立闭环；既有拆单/部分成交测试继续保护合法单周期的多笔成交。
+- 这是**已记录成交身份一致性门禁**，不是对用户既定「完整闭环计一次 T、单票每日最多两次」规则的修改。冲突记录仍不能作为完整 T 次数或日终正式转仓依据；`broker_reconciled=false`、`trade_execution_enabled=false`，首页完整 T 次数仍不可用。
+- 本项不能代替券商全量成交与逐日水位、BROKEN 持久化、T+1、CORE/T 风险、真实账户对账及 Safari/TLS 实机验收；最终 CI 和独立 Gate 仍需按最新 HEAD 核验。

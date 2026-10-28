@@ -280,9 +280,10 @@ function validPersistedSections(
     return Array.isArray(rows) && rows.every(validators[index]) &&
       new Set(rows.map((row: Record<string, unknown>) => row.id)).size === rows.length;
   })) return false;
-  return !Array.isArray(pending) || !Array.isArray(data.effective_plans) ||
+  const effective = data.effective_plans;
+  return !Array.isArray(pending) || !Array.isArray(effective) ||
     !pending.some((row: Record<string, unknown>) =>
-      data.effective_plans.some((active: Record<string, unknown>) => active.id === row.id));
+      effective.some((active: Record<string, unknown>) => active.id === row.id));
 }
 
 /** Both live and uploaded CSV overviews are read-only; neither authorizes trading. */

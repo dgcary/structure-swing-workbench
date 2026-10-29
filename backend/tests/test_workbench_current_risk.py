@@ -19,9 +19,9 @@ def _position(**changes):
         "price_source": "trusted-price-adapter",
         "price_as_of": NOW - timedelta(minutes=1),
         "price_current_verified": True,
-        "core_quantity": Decimal("100"),
+        "core_quantity": Decimal(100),
         "core_stop": Decimal("9.50"),
-        "t_quantity": Decimal("20"),
+        "t_quantity": Decimal(20),
         "t_stop": Decimal("10.00"),
     }
     data.update(changes)
@@ -30,7 +30,7 @@ def _position(**changes):
 
 def _account(positions, **changes):
     args = {
-        "equity": Decimal("10000"),
+        "equity": Decimal(10000),
         "equity_source": "trusted-account-adapter",
         "equity_as_of": NOW - timedelta(minutes=1),
         "equity_verified": True,
@@ -69,7 +69,7 @@ def test_unverified_or_undated_current_quote_cannot_create_risk():
         {"current_price": None},
         {"current_price": Decimal("NaN")},
         {"current_price": Decimal("Infinity")},
-        {"current_price": Decimal("-1")},
+        {"current_price": Decimal(-1)},
     ]
     for case in cases:
         result = position_current_risk(_position(**case), now=NOW)
@@ -80,14 +80,14 @@ def test_unverified_or_undated_current_quote_cannot_create_risk():
 def test_missing_invalid_or_negative_bucket_values_fail_closed():
     for case in [
         {"core_quantity": None},
-        {"core_quantity": Decimal("-1")},
+        {"core_quantity": Decimal(-1)},
         {"core_quantity": Decimal("NaN")},
         {"t_quantity": None},
         {"t_quantity": Decimal("Infinity")},
         {"core_stop": None},
         {"core_stop": Decimal("NaN")},
-        {"t_stop": Decimal("0")},
-        {"t_stop": Decimal("-1")},
+        {"t_stop": Decimal(0)},
+        {"t_stop": Decimal(-1)},
         {"core_quantity": Decimal(0), "t_quantity": Decimal(0)},
     ]:
         assert position_current_risk(_position(**case), now=NOW).status == "unavailable"
@@ -103,7 +103,7 @@ def test_price_below_either_stop_requires_review_not_negative_risk():
         assert result.amount is None
         assert "穿越" in result.warning
     at_stop = position_current_risk(
-        _position(current_price=Decimal("10"), t_stop=Decimal("10")), now=NOW,
+        _position(current_price=Decimal(10), t_stop=Decimal(10)), now=NOW,
     )
     assert at_stop.status == "available"
     assert at_stop.t_amount == 0
@@ -117,7 +117,7 @@ def test_account_risk_requires_complete_holdings_and_trusted_equity():
         {"equity_source": None},
         {"equity_as_of": None},
         {"equity_as_of": NOW + timedelta(minutes=1)},
-        {"equity": Decimal("0")},
+        {"equity": Decimal(0)},
         {"equity": Decimal("NaN")},
     ]:
         result = _account(positions, **case)
@@ -130,13 +130,13 @@ def test_account_risk_requires_complete_holdings_and_trusted_equity():
 def test_account_aggregates_only_complete_current_risk_without_3_percent_gate():
     # The confirmed §15.63 rule is display-only even above 3% total risk.
     second = _position(
-        symbol="000001", current_price=Decimal("20"),
-        core_quantity=Decimal("200"), core_stop=Decimal("10"),
+        symbol="000001", current_price=Decimal(20),
+        core_quantity=Decimal(200), core_stop=Decimal(10),
         t_quantity=Decimal(0), t_stop=None,
     )
-    result = _account([_position(), second], equity=Decimal("1000"))
+    result = _account([_position(), second], equity=Decimal(1000))
     assert result.status == "available"
-    assert result.amount == Decimal("2086")
+    assert result.amount == Decimal(2086)
     assert result.percent == Decimal("208.6")
     assert "不新增账户级" in result.warning
 

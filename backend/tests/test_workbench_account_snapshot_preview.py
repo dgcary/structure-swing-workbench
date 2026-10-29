@@ -1,0 +1,528 @@
+"""M8 uploaded account facts must never become a live or persistent account."""
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+client = TestClient(app)
+
+ACCOUNT_CSV = (
+    "equity,available_cash,as_of\n"
+    "200000,65000,2026-10-16T09:30:00+08:00\n"
+)
+
+
+def test_uploaded_account_snapshot_is_request_scoped() -> None:
+    preview = client.post(
+        "/workbench/account-snapshot-preview", json={"account": ACCOUNT_CSV}
+    )
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["persisted"] is False
+    assert body["realtime"] is False
+    assert body["full_account_verified"] is False
+    assert body["trade_execution_enabled"] is False
+    metrics = {item["key"]: item for item in body["metrics"]}
+    assert metrics["equity"]["value"] == "200000"
+    assert metrics["available_cash"]["value"] == "65000"
+    assert metrics["account_risk"]["value"] is None
+
+    live = client.get("/workbench/overview")
+    assert live.status_code == 200
+    assert all(item["value"] is None for item in live.json()["metrics"])
+
+
+def test_empty_or_invalid_account_upload_fails_closed() -> None:
+    for data in ({}, {"account": "  "}, {"account": "bad,header\n1,2\n"}):
+        response = client.post("/workbench/account-snapshot-preview", json=data)
+        assert response.status_code == 422
+
+
+@pytest.mark.parametrize(("kind", "row"), [
+    ("account", "equity,available_cash,as_of\n200000,65000,{at}\n"),
+    ("holdings", "symbol,quantity,cost,as_of\n600000,100,10,{at}\n"),
+    ("fills", ("fill_id,symbol,side,quantity,price,executed_at\n"
+               "future-fill,600000,BUY,100,10,{at}\n")),
+])
+def test_future_dated_uploaded_facts_fail_closed(kind: str, row: str) -> None:
+    # All three user-supplied CSV sources must be observed, not future facts.
+    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    response = client.post(
+        "/workbench/account-snapshot-preview", json={kind: row.format(at=future)}
+    )
+    assert response.status_code == 422
+    assert "未来时间" in response.json()["detail"]
+
+
+def test_small_upload_clock_skew_remains_display_only() -> None:
+    # Allow a small timestamp skew, never interpret it as broker connectivity.
+    near_future = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
+    response = client.post(
+        "/workbench/account-snapshot-preview",
+        json={"account": (
+            "equity,available_cash,as_of\n"
+            f"200000,65000,{near_future}\n"
+        )},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["persisted"] is False
+    assert payload["realtime"] is False
+    assert payload["trade_execution_enabled"] is False
+
+
+FILL_CSV = (
+    "fill_id,symbol,side,quantity,price,executed_at\n"
+    "A01,600000,BUY,100,10,2026-10-16T10:00:00+08:00\n"
+    "A02,600000,SELL,100,11,2026-10-16T11:00:00+08:00\n"
+)
+
+
+def _daily_claim(**overrides):
+    claim = {
+        "market_date": "2026-10-16",
+        "exported_at": "2026-10-16T16:00:00+08:00",
+        "complete_through": "2026-10-16T15:30:00+08:00",
+        "export_reference": "脱敏券商导出-001",
+        "expected_fill_ids": ["A01", "A02"],
+        "declared_full_day": True,
+    }
+    claim.update(overrides)
+    return claim
+
+
+def test_daily_fill_manifest_matches_ids_but_never_certifies_broker_or_t_count():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    coverage = body["daily_fill_coverage"]
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["recorded_fill_count"] == 2
+    assert coverage["declared_fill_count"] == 2
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert coverage["trade_execution_enabled"] is False
+    assert "没有独立券商来源认证" in coverage["warning"]
+    assert body["full_account_verified"] is False
+    assert body["trade_execution_enabled"] is False
+    metrics = {item["key"]: item for item in body["metrics"]}
+    assert metrics["t_cycles_today"]["status"] == "unavailable"
+    assert metrics["open_t_cycles"]["status"] == "unavailable"
+
+
+@pytest.mark.parametrize("other_day_at", [
+    "2026-10-15T10:00:00+08:00",
+    "2026-10-15T02:00:00+00:00",
+])
+def test_daily_claim_with_other_day_csv_fills_is_insufficient(other_day_at):
+    # A multi-day export cannot be silently trimmed to make a single-day
+    # self-reported manifest appear to cover the uploaded CSV.
+    extra = f"B01,600000,BUY,10,10,{other_day_at}\n"
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV + extra,
+        "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    coverage = body["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["recorded_fill_count"] == 2
+    assert coverage["outside_claimed_day_fill_count"] == 1
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert "其他交易日" in coverage["warning"]
+    assert coverage["broker_reconciled"] is False
+    assert body["full_account_verified"] is False
+    assert body["trade_execution_enabled"] is False
+    metrics = {item["key"]: item for item in body["metrics"]}
+    assert metrics["t_cycles_today"]["status"] == "unavailable"
+
+
+def test_cross_day_upload_does_not_hide_same_day_manifest_mismatch():
+    extra = "B01,600000,BUY,10,10,2026-10-15T10:00:00+08:00\n"
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV + extra,
+        "daily_fill_claim": _daily_claim(expected_fill_ids=["A01"]),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["outside_claimed_day_fill_count"] == 1
+    assert coverage["unexpected_fill_count"] == 1
+    assert coverage["broker_reconciled"] is False
+
+
+def test_utc_timestamp_on_same_market_day_is_not_cross_day():
+    same_day_utc = FILL_CSV.replace(
+        "2026-10-16T10:00:00+08:00", "2026-10-16T02:00:00+00:00"
+    )
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": same_day_utc,
+        "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["outside_claimed_day_fill_count"] == 0
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["broker_reconciled"] is False
+
+
+@pytest.mark.parametrize(("expected", "missing", "unexpected"), [
+    (["A01", "missing"], 1, 1),
+    (["A01"], 0, 1),
+    (["A01", "A02", "A03"], 1, 0),
+])
+def test_daily_fill_manifest_detects_missing_and_unexpected_ids(
+    expected, missing, unexpected,
+):
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(expected_fill_ids=expected),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["missing_fill_count"] == missing
+    assert coverage["unexpected_fill_count"] == unexpected
+    assert coverage["broker_reconciled"] is False
+
+
+@pytest.mark.parametrize("late_at", [
+    "2026-10-16T15:45:00+08:00",
+    "2026-10-16T07:45:00+00:00",
+])
+def test_daily_fill_manifest_rejects_fills_after_claimed_watermark(late_at):
+    # Identical ID sets do not prove that the declared time range covers all rows.
+    late_csv = FILL_CSV.replace("2026-10-16T11:00:00+08:00", late_at)
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": late_csv, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["outside_watermark_fill_count"] == 1
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_daily_fill_manifest_accepts_fill_at_exact_watermark_only_as_unverified():
+    boundary_csv = FILL_CSV.replace(
+        "2026-10-16T11:00:00+08:00", "2026-10-16T07:30:00+00:00"
+    )
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": boundary_csv, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["outside_watermark_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+
+
+def test_daily_fill_manifest_cannot_claim_full_day_before_actual_market_close():
+    """The 5-minute clock-skew grace period must not certify a future close."""
+    from app.account.csv_ingest import import_csv
+    from app.account.ledger import AccountLedger
+    from app.workbench.account_snapshot_preview import (
+        DailyFillCoverageClaim,
+        _preview_daily_fill_coverage,
+    )
+
+    ledger = AccountLedger()
+    import_csv(ledger, "fills", FILL_CSV, batch_id="preclose-coverage")
+    claim = DailyFillCoverageClaim.model_validate(_daily_claim(
+        exported_at="2026-10-16T15:01:00+08:00",
+        complete_through="2026-10-16T15:00:00+08:00",
+    ))
+    before = _preview_daily_fill_coverage(
+        ledger, claim, 0, now=datetime.fromisoformat("2026-10-16T14:58:00+08:00")
+    )
+    assert before["status"] == "insufficient"
+    assert before["broker_reconciled"] is False
+    assert before["trade_execution_enabled"] is False
+
+    after = _preview_daily_fill_coverage(
+        ledger, claim, 0, now=datetime.fromisoformat("2026-10-16T15:02:00+08:00")
+    )
+    assert after["status"] == "matched_unverified"
+    assert after["broker_reconciled"] is False
+
+
+def test_daily_fill_manifest_future_export_after_close_is_not_completed_coverage():
+    """A claim with a future export is not an observed full-day report."""
+    from app.account.csv_ingest import import_csv
+    from app.account.ledger import AccountLedger
+    from app.workbench.account_snapshot_preview import (
+        DailyFillCoverageClaim,
+        _preview_daily_fill_coverage,
+    )
+
+    ledger = AccountLedger()
+    import_csv(ledger, "fills", FILL_CSV, batch_id="future-export")
+    claim = DailyFillCoverageClaim.model_validate(_daily_claim(
+        exported_at="2026-10-16T15:04:00+08:00",
+        complete_through="2026-10-16T15:00:00+08:00",
+    ))
+    coverage = _preview_daily_fill_coverage(
+        ledger, claim, 0, now=datetime.fromisoformat("2026-10-16T15:02:00+08:00")
+    )
+    assert coverage["status"] == "insufficient"
+    assert coverage["broker_reconciled"] is False
+    assert coverage["trade_execution_enabled"] is False
+
+
+@pytest.mark.parametrize("cross_day_watermark", [
+    "2026-10-17T15:30:00+08:00",
+    "2026-10-17T07:30:00+00:00",
+])
+def test_daily_fill_manifest_later_day_watermark_is_not_daily_coverage(
+    cross_day_watermark,
+):
+    # A later day's watermark cannot stand in for the claimed market date,
+    # even when all self-reported fill IDs match the uploaded CSV.
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(
+            complete_through=cross_day_watermark,
+            exported_at="2026-10-18T09:00:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["recorded_fill_count"] == 2
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+    metrics = {item["key"]: item for item in response.json()["metrics"]}
+    assert metrics["t_cycles_today"]["status"] == "unavailable"
+
+
+def test_daily_fill_manifest_later_export_with_same_day_watermark_is_unverified():
+    # Historical exports may happen later; only the coverage watermark must
+    # belong to the declared market day in Shanghai local time.
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(
+            complete_through="2026-10-16T07:30:00+00:00",
+            exported_at="2026-10-18T09:00:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+
+
+def test_daily_fill_manifest_duplicate_csv_rows_are_not_silent_completeness():
+    duplicated = FILL_CSV + FILL_CSV.splitlines(keepends=True)[1]
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": duplicated, "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["duplicate_csv_rows"] == 1
+    assert coverage["broker_reconciled"] is False
+
+
+def test_daily_fill_manifest_before_close_is_insufficient_even_if_ids_match():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(
+            exported_at="2026-10-16T14:00:00+08:00",
+            complete_through="2026-10-16T13:30:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["daily_fill_coverage"]["status"] == "insufficient"
+
+
+@pytest.mark.parametrize("claim", [
+    _daily_claim(expected_fill_ids=["A01", "A01"]),
+    _daily_claim(exported_at="2026-10-16T16:00:00",
+                 complete_through="2026-10-16T15:30:00+08:00"),
+    _daily_claim(exported_at="2026-10-16T14:00:00+08:00"),
+    _daily_claim(export_reference="  "),
+    _daily_claim(expected_fill_ids=[" A01", "A02"]),
+])
+def test_daily_fill_manifest_rejects_ambiguous_claims(claim):
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV, "daily_fill_claim": claim,
+    })
+    assert response.status_code == 422
+
+
+def test_daily_fill_manifest_requires_csv_and_rejects_future_watermark():
+    no_fills = client.post("/workbench/account-snapshot-preview", json={
+        "account": ACCOUNT_CSV, "daily_fill_claim": _daily_claim(),
+    })
+    assert no_fills.status_code == 422
+    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(exported_at=future, complete_through=future),
+    })
+    assert response.status_code == 422
+    assert "未来" in response.json()["detail"]
+
+
+def test_daily_fill_manifest_not_provided_remains_explicitly_unavailable():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["daily_fill_coverage"] is None
+    assert response.json()["full_account_verified"] is False
+
+
+def test_weekend_self_report_cannot_claim_a_complete_a_share_market_day():
+    # Even internally matching IDs cannot make Sunday an A-share session.
+    sunday_csv = FILL_CSV.replace("2026-10-16", "2026-10-18")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": sunday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-18",
+            complete_through="2026-10-18T15:30:00+08:00",
+            exported_at="2026-10-18T16:00:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_weekend_manifest_discrepancy_remains_a_mismatch():
+    sunday_csv = FILL_CSV.replace("2026-10-16", "2026-10-18")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": sunday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-18",
+            complete_through="2026-10-18T15:30:00+08:00",
+            exported_at="2026-10-18T16:00:00+08:00",
+            expected_fill_ids=["A01"],
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["unexpected_fill_count"] == 1
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_exchange_holiday_manifest_is_not_full_day_even_when_ids_match():
+    # 2026-10-01 is a mainland exchange holiday, despite being Thursday.
+    holiday_csv = FILL_CSV.replace("2026-10-16", "2026-10-01")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": holiday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-01",
+            complete_through="2026-10-01T15:30:00+08:00",
+            exported_at="2026-10-01T16:00:00+08:00",
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["market_calendar_status"] == "closed"
+    assert coverage["missing_fill_count"] == 0
+    assert coverage["unexpected_fill_count"] == 0
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_exchange_holiday_mismatch_has_priority_over_calendar_gate():
+    holiday_csv = FILL_CSV.replace("2026-10-16", "2026-10-01")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": holiday_csv,
+        "daily_fill_claim": _daily_claim(
+            market_date="2026-10-01",
+            complete_through="2026-10-01T15:30:00+08:00",
+            exported_at="2026-10-01T16:00:00+08:00",
+            expected_fill_ids=["A01"],
+        ),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["market_calendar_status"] == "closed"
+    assert coverage["unexpected_fill_count"] == 1
+    assert coverage["broker_reconciled"] is False
+
+
+def test_missing_or_out_of_range_exchange_calendar_fails_closed(monkeypatch):
+    from app.workbench import account_snapshot_preview as module
+
+    monkeypatch.setattr(module, "_market_session_status", lambda _date: "unknown")
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "insufficient"
+    assert coverage["market_calendar_status"] == "unknown"
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+@pytest.mark.parametrize("provider_error", [
+    RuntimeError("calendar provider failed"),
+    KeyError("missing exchange session"),
+    IndexError("calendar range lookup failed"),
+    OSError("calendar data unavailable"),
+])
+@pytest.mark.parametrize("expected_ids,expected_status", [
+    (["A01", "A02"], "insufficient"),
+    (["A01"], "mismatch"),
+])
+def test_calendar_provider_failure_fails_closed_without_hiding_csv_discrepancy(
+    monkeypatch, provider_error, expected_ids, expected_status,
+):
+    from app.workbench import account_snapshot_preview as module
+
+    def failing_calendar():
+        raise provider_error
+
+    monkeypatch.setattr(module, "_xshg_calendar", failing_calendar)
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(expected_fill_ids=expected_ids),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["market_calendar_status"] == "unknown"
+    assert coverage["status"] == expected_status
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+    assert response.json()["trade_execution_enabled"] is False
+
+
+def test_exchange_calendar_session_still_never_authenticates_broker():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["market_calendar_status"] == "session"
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False

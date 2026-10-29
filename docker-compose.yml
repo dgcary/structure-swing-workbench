@@ -21,6 +21,9 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://structure_swing:change-me@postgres:5432/structure_swing}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      WORKBENCH_PERSISTED_READ_ENABLED: ${WORKBENCH_PERSISTED_READ_ENABLED:-false}
+      WORKBENCH_ACTION_DATE_WRITE_ENABLED: ${WORKBENCH_ACTION_DATE_WRITE_ENABLED:-false}
+      WORKBENCH_ACTION_DATE_WRITE_TOKEN: ${WORKBENCH_ACTION_DATE_WRITE_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

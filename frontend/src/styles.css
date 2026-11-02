@@ -89,7 +89,8 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
 
 
 /* CSV upload preview: always explicit about non-persistence and source scope. */
-.csv-preview-form { display: grid; gap: 14px; max-width: 850px; }
+.csv-preview-form { display: grid; gap: 14px; max-width: 850px; min-width: 0; }
+.csv-preview-form p { overflow-wrap: anywhere; }
 .csv-preview-form label { display: grid; gap: 7px; color: #afc1d7; font-size: 13px; }
 .csv-preview-form :is(select, textarea, input[type="file"]) {
   width: 100%; min-width: 0; padding: 12px; color: #edf4fc;

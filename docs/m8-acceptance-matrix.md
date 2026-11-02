@@ -419,3 +419,9 @@
 - `backend/app/workbench/account_snapshot_preview.py`：用户自报的每日成交清单可附带逐笔证券、方向、数量、价格和带时区成交时间；即使成交编号相同，只要字段与本次上传 CSV 不一致，就返回 `mismatch` 和冲突编号。相同时区等价时间与十进制等价值按实际值比较。清单编号与逐笔编号集合不一致则拒绝输入。
 - `backend/tests/test_workbench_account_snapshot_preview.py` 覆盖同编号证券、方向、数量、价格、成交时间改变，时间/数值等价及清单编号不一致。Windows 本地后端测试 544 passed、4 skipped；跳过项包含依赖独立 PostgreSQL 的测试，最新 PR CI 仍需单独核实。
 - 两份输入均由用户提供，`matched_unverified` 仍只表示上传材料内部一致，`broker_reconciled=false`、`full_account_verified=false`、首页当日 T 次数继续不可用。真实券商账户身份、逐日全量水位与脱敏真实 CSV→隔离 PostgreSQL 对账未完成。**M8 Gate FAIL，PR #19 保持 Draft。**
+
+### 2026-11-02 增量：320 像素窄屏成交导入表单
+
+- `frontend/src/styles.css` 允许必填 CSV 表头提示在窄屏换行，并允许表单网格缩到容器宽度。
+- 在 320×700 浏览器视口逐页检查九个工作台入口：修复前「成交导入」使页面宽达 338 像素，修复后页面宽为 320 像素；其余入口无整体横向溢出。前端 106 项测试和生产构建通过。
+- 该检查不代表手机 Safari、可信 HTTPS 或真实数据业务验收。**M8 Gate FAIL，PR #19 保持 Draft。**

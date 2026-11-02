@@ -376,10 +376,13 @@ export function App() {
               <p>{overview?.notice ?? "账户、持仓、计划与审计必须有可追溯来源；缺失值不会显示为零或通过。"}</p>
               {overviewError && <p role="alert">工作台接口异常：{overviewError}</p>}
             </section>
-            <AccountSnapshotPreview
-              onPreview={(snapshot) => { setOverview(snapshot); setOverviewError(null); }}
-              onReset={() => { setOverview(baselineOverview); setOverviewError(null); }}
-            />
+            <details className="upload-disclosure">
+              <summary>导入本地 CSV · 临时预览</summary>
+              <AccountSnapshotPreview
+                onPreview={(snapshot) => { setOverview(snapshot); setOverviewError(null); }}
+                onReset={() => { setOverview(baselineOverview); setOverviewError(null); }}
+              />
+            </details>
             <div className="section-heading"><h2>账户与纪律总览</h2><span>{overview?.mode === "isolated_csv_preview" ? "上传 CSV · 非实时 · 未保存" : "只读 · 未连接券商"}</span></div>
             {overview ? (
               <section className="metric-grid" aria-label="账户指标">

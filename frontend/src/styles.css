@@ -26,6 +26,11 @@ h3 { font-size: 13px; font-weight: 500; margin: 0; }
 .alert-banner { border: 1px solid #886c32; border-left: 4px solid #e7b657; background: #2c261c; border-radius: 10px; padding: 15px 20px; margin-bottom: 24px; }
 .alert-banner strong { color: #ffdb93; }
 .alert-banner p { color: #f1d8a8; margin: 6px 0 0; line-height: 1.6; font-size: 13px; }
+.upload-disclosure { margin-bottom: 20px; border: 1px solid #314258; border-radius: 10px; background: #101b2c; }
+.upload-disclosure > summary { padding: 13px 16px; cursor: pointer; color: #bbd5f5; font-weight: 700; }
+.upload-disclosure > summary:focus-visible { outline: 3px solid #f8d47d; outline-offset: 2px; }
+.upload-disclosure[open] > summary { border-bottom: 1px solid #314258; }
+.upload-disclosure > section { margin: 12px; }
 .section-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .section-heading span { color: #8396af; font-size: 12px; }
 .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }

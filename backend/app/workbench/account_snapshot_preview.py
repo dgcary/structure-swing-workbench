@@ -182,6 +182,8 @@ def _preview_daily_fill_coverage(
         "declared_fill_count": len(expected),
         "missing_fill_count": len(missing),
         "unexpected_fill_count": len(unexpected),
+        "missing_fill_ids": sorted(missing),
+        "unexpected_fill_ids": sorted(unexpected),
         "detail_mismatch_fill_ids": detail_mismatches,
         "duplicate_csv_rows": duplicate_rows,
         "outside_watermark_fill_count": outside_watermark,

@@ -248,6 +248,8 @@ def test_daily_fill_manifest_detects_missing_and_unexpected_ids(
     assert coverage["status"] == "mismatch"
     assert coverage["missing_fill_count"] == missing
     assert coverage["unexpected_fill_count"] == unexpected
+    assert coverage["missing_fill_ids"] == sorted(set(expected) - {"A01", "A02"})
+    assert coverage["unexpected_fill_ids"] == sorted({"A01", "A02"} - set(expected))
     assert coverage["broker_reconciled"] is False
 
 

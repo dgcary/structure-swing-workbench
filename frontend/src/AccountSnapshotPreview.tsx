@@ -239,6 +239,12 @@ export function AccountSnapshotPreview({
         "逐日覆盖证据不足"}</strong>
       <p>交易日：{coverage.market_date}；自报 {coverage.declared_fill_count} 笔，上传 {coverage.recorded_fill_count} 笔；
         缺失 {coverage.missing_fill_count} 笔，额外 {coverage.unexpected_fill_count} 笔，重复行 {coverage.duplicate_csv_rows} 行。</p>
+      {coverage.missing_fill_ids.length > 0 && <p>自报有、上传缺失：
+        {coverage.missing_fill_ids.slice(0, 20).join("、")}
+        {coverage.missing_fill_ids.length > 20 ? " 等（仅显示前 20 笔）" : ""}</p>}
+      {coverage.unexpected_fill_ids.length > 0 && <p>上传有、自报未列：
+        {coverage.unexpected_fill_ids.slice(0, 20).join("、")}
+        {coverage.unexpected_fill_ids.length > 20 ? " 等（仅显示前 20 笔）" : ""}</p>}
       <p>水位外成交 {coverage.outside_watermark_fill_count} 笔；其他日期成交 {coverage.outside_claimed_day_fill_count} 笔。</p>
       <p>{coverage.warning}</p>
       <p>券商全量未认证 · 不可据此交易</p>

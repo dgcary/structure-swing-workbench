@@ -24,6 +24,8 @@ export type DailyCoverage = {
   declared_fill_count: number;
   missing_fill_count: number;
   unexpected_fill_count: number;
+  missing_fill_ids: string[];
+  unexpected_fill_ids: string[];
   detail_mismatch_fill_ids: string[] | null;
   duplicate_csv_rows: number;
   outside_watermark_fill_count: number;
@@ -88,14 +90,29 @@ export function parseDailyCoverage(value: unknown, expected: boolean): DailyCove
     row.outside_watermark_fill_count, row.outside_claimed_day_fill_count,
   ];
   const mismatches = row.detail_mismatch_fill_ids;
+  const missingIds = row.missing_fill_ids;
+  const unexpectedIds = row.unexpected_fill_ids;
+  const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) &&
+    ids.every((id) => typeof id === "string" && id.length > 0 && id.length <= 128) &&
+    new Set(ids).size === ids.length;
   if (!(["matched_unverified", "mismatch", "insufficient"] as unknown[]).includes(status) ||
       !validMarketDate(String(row.market_date ?? "")) ||
       counts.some((count) => !Number.isSafeInteger(count) || (count as number) < 0) ||
+      !validIds(missingIds) || !validIds(unexpectedIds) ||
+      missingIds.length !== row.missing_fill_count ||
+      unexpectedIds.length !== row.unexpected_fill_count ||
       !(mismatches === null || (Array.isArray(mismatches) &&
         mismatches.every((id) => typeof id === "string" && id.length > 0))) ||
       row.broker_reconciled !== false || row.trade_execution_enabled !== false ||
       typeof row.warning !== "string" || !row.warning.trim()) {
     throw new Error("逐日成交对照结果协议异常，不能作为券商认证。");
+  }
+  const hasMismatch = row.missing_fill_count !== 0 || row.unexpected_fill_count !== 0 ||
+    row.duplicate_csv_rows !== 0 || row.outside_watermark_fill_count !== 0 ||
+    (Array.isArray(mismatches) && mismatches.length > 0);
+  if ((status === "mismatch") !== hasMismatch ||
+      (status === "matched_unverified" && row.outside_claimed_day_fill_count !== 0)) {
+    throw new Error("逐日成交对照状态与逐笔数量协议不一致。");
   }
   return row as DailyCoverage;
 }

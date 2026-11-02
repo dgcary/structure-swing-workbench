@@ -45,6 +45,8 @@ const coverage = {
   declared_fill_count: 2,
   missing_fill_count: 0,
   unexpected_fill_count: 0,
+  missing_fill_ids: [],
+  unexpected_fill_ids: [],
   detail_mismatch_fill_ids: null,
   duplicate_csv_rows: 0,
   outside_watermark_fill_count: 0,
@@ -62,4 +64,9 @@ test("coverage contract preserves unverified status and fails closed on certific
   assert.throws(() => parseDailyCoverage({ ...coverage, broker_reconciled: true }, true), /协议/);
   assert.throws(() => parseDailyCoverage({ ...coverage, status: "verified" }, true), /协议/);
   assert.throws(() => parseDailyCoverage({ ...coverage, missing_fill_count: -1 }, true), /协议/);
+  assert.throws(() => parseDailyCoverage({ ...coverage, missing_fill_ids: [""] }, true), /协议/);
+  assert.throws(() => parseDailyCoverage({ ...coverage, missing_fill_count: 1 }, true), /协议/);
+  assert.throws(() => parseDailyCoverage({
+    ...coverage, status: "matched_unverified", missing_fill_count: 1, missing_fill_ids: ["A03"],
+  }, true), /协议/);
 });

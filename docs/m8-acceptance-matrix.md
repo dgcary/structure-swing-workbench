@@ -395,3 +395,9 @@
 - 账户汇总还要求已核实账户权益与**完整**持仓；一票不完整即整体 `unavailable`，一票穿越止损即须人工复核。汇总金额/权益比例仅展示，不增设 §15.63 禁止的账户级 3% 硬门槛。
 - `backend/tests/test_workbench_current_risk.py` 用**合成输入**覆盖 CORE/T 分账、精确十进制、零 T 仓、无效来源/时间、未来行情、NaN、止损穿越、缺失持仓、重复证券及账户风险大于 3% 不硬拦截。
 - **关键限制：尚未接入实际工作台 API，也没有独立可信券商/现价适配器或真实账户数据。** 该计算模块绝不构成已实现的首页风险指标；`account_risk` 仍保持 `unavailable`，不得把模拟输入标记为已认证事实。真实 CSV→隔离 PostgreSQL 对账、正式日终 T 转仓、换仓/T+1、手机 Safari/HTTPS 实机等仍未完成。**M8 整体 Gate FAIL，PR #19 Draft，不合并、不部署、不派发 M9。**
+
+### 2026-11-02 增量：前端拒绝未来来源时间
+
+- `frontend/src/validObservedAt.ts` 与 `overviewContract.ts`：只读总览的有来源指标、持仓、正式计划/动作/审计和已记录 T 周期，在时间格式、时区有效之外，还拒绝超过浏览器当前时间 5 分钟的来源时间；与后端既有时钟容差一致。浏览器时间错误时保守拒绝展示。
+- `frontend/tests/observedAt.test.mjs`：覆盖容差内时间、明显未来的指标和持仓；前端全量 104 项测试与生产构建通过。本轮尚未完成手机 Safari/HTTPS 实机验收。
+- 此项仅补强展示协议，不能认证券商来源、全量成交或实时行情。真实 CSV→隔离 PostgreSQL 对账、BROKEN T 正式转仓、换仓/T+1、可信 CORE/T 风险及 Safari/HTTPS 实机仍未完成。**M8 Gate FAIL，PR #19 保持 Draft。**

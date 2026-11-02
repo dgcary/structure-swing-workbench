@@ -1,4 +1,4 @@
-import { validObservedAt } from "./validObservedAt.ts";
+import { validRecordedAt } from "./validObservedAt.ts";
 
 /** Reject incomplete or execution-capable payloads before showing account facts. */
 const METRIC_KEYS = [
@@ -69,7 +69,7 @@ function validMetric(value: unknown): boolean {
     if (typeof value.value !== "string" || !value.value.trim() ||
         typeof value.source !== "string" || !value.source.trim() ||
         typeof value.as_of !== "string" ||
-        !validObservedAt(value.as_of)) return false;
+        !validRecordedAt(value.as_of)) return false;
     if (TEXT_METRICS.has(value.key)) return true;
     // A string like "0x10" is accepted by Number(), but is not a broker decimal.
     if (!decimalText(value.value)) return false;
@@ -114,7 +114,7 @@ function validHolding(value: unknown): boolean {
       value.unanchored_fill_delta != null) return false;
   if (typeof value.source !== "string" || !value.source.trim() ||
       typeof value.as_of !== "string" ||
-      !validObservedAt(value.as_of)) return false;
+      !validRecordedAt(value.as_of)) return false;
   if (value.status === "conflict" || value.status === "unanchored") {
     // A fill delta or contradictory snapshot cannot establish cost or core/T allocations.
     return value.quantity === null && value.broker_display_cost === null &&
@@ -138,7 +138,7 @@ function validHolding(value: unknown): boolean {
 function sourcedRow(value: unknown, prefix: string): value is Record<string, unknown> {
   return record(value) && typeof value.id === "string" && value.id.trim().length > 0 &&
     typeof value.source === "string" && value.source.startsWith(prefix) &&
-    (value.as_of === null || validObservedAt(value.as_of));
+    (value.as_of === null || validRecordedAt(value.as_of));
 }
 
 function optionalDecimal(value: unknown): boolean {
@@ -233,7 +233,7 @@ function validRecordedTCycle(value: unknown): boolean {
       typeof value.warning !== "string" || !value.warning.trim() ||
       !Array.isArray(value.sources) || value.sources.length === 0 ||
       !value.sources.every((source: unknown) => recordedFillId(source) !== null)) return false;
-  if (value.as_of !== null && !validObservedAt(value.as_of)) return false;
+  if (value.as_of !== null && !validRecordedAt(value.as_of)) return false;
   // A closed pair necessarily contains an opening and a closing execution.
   // A partially closed open cycle also needs evidence of both legs. A single
   // source must never be presented as a recorded buy/sell pairing.

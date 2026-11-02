@@ -18,3 +18,8 @@ export function validObservedAt(value: unknown): value is string {
       (Number(zone.slice(1, 3)) > 23 || Number(zone.slice(4, 6)) > 59)) return false;
   return Number.isFinite(Date.parse(value));
 }
+
+/** A recorded fact may allow small clock skew, but must not come from the future. */
+export function validRecordedAt(value: unknown, now = Date.now()): value is string {
+  return validObservedAt(value) && Date.parse(value) <= now + 5 * 60 * 1000;
+}

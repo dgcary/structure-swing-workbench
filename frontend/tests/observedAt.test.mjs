@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { validObservedAt } from "../src/validObservedAt.ts";
+import { validObservedAt, validRecordedAt } from "../src/validObservedAt.ts";
 import { assertReadOnlyOverview } from "../src/overviewContract.ts";
 
 const keys = [
@@ -60,6 +60,29 @@ test("overview metric and holding observations fail closed on impossible dates",
     symbol: "600000", status: "snapshot", quantity: "100",
     broker_display_cost: "12.30", core_quantity: null, t_quantity: null,
     source: "CSV", as_of: impossible, warning: "来源时间不可信",
+  }];
+  assert.throws(() => assertReadOnlyOverview(holding, "read_only"), /协议异常/);
+});
+
+test("future source observations cannot appear as recorded account facts", () => {
+  const now = Date.now();
+  const near = new Date(now + 60_000).toISOString();
+  const future = new Date(now + 10 * 60_000).toISOString();
+  assert.equal(validRecordedAt(near, now), true);
+  assert.equal(validRecordedAt(future, now), false);
+
+  const metric = baseline();
+  metric.metrics[0] = {
+    ...metric.metrics[0], status: "available", value: "1000",
+    source: "CSV", as_of: future,
+  };
+  assert.throws(() => assertReadOnlyOverview(metric, "read_only"), /协议异常/);
+
+  const holding = baseline();
+  holding.holdings = [{
+    symbol: "600000", status: "snapshot", quantity: "100",
+    broker_display_cost: "12.30", core_quantity: null, t_quantity: null,
+    source: "CSV", as_of: future, warning: "来源时间不可信",
   }];
   assert.throws(() => assertReadOnlyOverview(holding, "read_only"), /协议异常/);
 });

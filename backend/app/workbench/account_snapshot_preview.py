@@ -1,6 +1,7 @@
 """Isolated, user-supplied CSV overview. No account data is retained between requests."""
 
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from decimal import Decimal
 from functools import lru_cache
 
 from fastapi import HTTPException
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.account.csv_ingest import import_csv
 from app.account.ledger import AccountLedger
+from app.account.models import FillSide
 from app.workbench.overview import build_overview
 
 MARKET_TZ = timezone(timedelta(hours=8))
@@ -31,6 +33,28 @@ def _market_session_status(market_date: date) -> str:
         return "unknown"
 
 
+class ExpectedFill(BaseModel):
+    """User-supplied comparison row; never independent broker evidence."""
+
+    fill_id: str = Field(min_length=1, max_length=128)
+    symbol: str = Field(min_length=1, max_length=16)
+    side: FillSide
+    quantity: Decimal
+    price: Decimal
+    executed_at: datetime
+
+    @model_validator(mode="after")
+    def check_row(self) -> "ExpectedFill":
+        if (self.fill_id != self.fill_id.strip()
+                or self.symbol != self.symbol.strip()
+                or not self.quantity.is_finite() or self.quantity <= 0
+                or not self.price.is_finite() or self.price <= 0
+                or self.executed_at.tzinfo is None
+                or self.executed_at.utcoffset() is None):
+            raise ValueError("逐笔对照成交的编号、证券、数量、价格或时间无效")
+        return self
+
+
 class DailyFillCoverageClaim(BaseModel):
     """Untrusted CSV export claim, NOT a broker-authenticated completeness watermark."""
 
@@ -39,6 +63,7 @@ class DailyFillCoverageClaim(BaseModel):
     complete_through: datetime
     export_reference: str = Field(min_length=1, max_length=128)
     expected_fill_ids: list[str] = Field(max_length=10_000)
+    expected_fills: list[ExpectedFill] | None = Field(default=None, max_length=10_000)
     declared_full_day: bool = False
 
     @model_validator(mode="after")
@@ -55,6 +80,12 @@ class DailyFillCoverageClaim(BaseModel):
             raise ValueError("成交清单编号不能为空或包含首尾空格")
         if len(set(self.expected_fill_ids)) != len(self.expected_fill_ids):
             raise ValueError("成交清单编号重复，无法核对完整性")
+        if self.expected_fills is not None:
+            detail_ids = [fill.fill_id for fill in self.expected_fills]
+            if len(set(detail_ids)) != len(detail_ids):
+                raise ValueError("逐笔对照成交编号重复")
+            if set(detail_ids) != set(self.expected_fill_ids):
+                raise ValueError("逐笔对照成交编号与清单编号不一致")
         return self
 
 
@@ -87,6 +118,19 @@ def _preview_daily_fill_coverage(
     expected = set(claim.expected_fill_ids)
     missing = expected - recorded
     unexpected = recorded - expected
+    detail_mismatches: list[str] | None = None
+    if claim.expected_fills is not None:
+        expected_rows = {fill.fill_id: fill for fill in claim.expected_fills}
+        detail_mismatches = sorted(
+            fill.fill_id for fill in day_fills
+            if fill.fill_id in expected_rows and (
+                fill.symbol != expected_rows[fill.fill_id].symbol
+                or fill.side != expected_rows[fill.fill_id].side
+                or fill.quantity != expected_rows[fill.fill_id].quantity
+                or fill.price != expected_rows[fill.fill_id].price
+                or fill.executed_at != expected_rows[fill.fill_id].executed_at
+            )
+        )
     market_close = datetime.combine(claim.market_date, time(15), tzinfo=MARKET_TZ)
     market_session_status = _market_session_status(claim.market_date)
     claimed_full_day = (
@@ -108,13 +152,15 @@ def _preview_daily_fill_coverage(
         # insufficient evidence, not proof that the other-day fills are bad.
         and not outside_claimed_day
     )
-    mismatch = bool(missing or unexpected or duplicate_rows or outside_watermark)
+    mismatch = bool(
+        missing or unexpected or duplicate_rows or outside_watermark or detail_mismatches
+    )
     status = (
         "mismatch" if mismatch else
         "matched_unverified" if claimed_full_day else "insufficient"
     )
     warning = (
-        "上传成交与自报清单编号不一致、CSV 重复，或存在晚于自报水位的成交；"
+        "上传成交与自报清单编号或逐笔字段不一致、CSV 重复，或存在晚于自报水位的成交；"
         "必须核对原始券商流水。"
         if mismatch else
         "上传 CSV 含其他交易日成交，单日自报清单未覆盖整个文件；请按交易日分别核对，不能认证当日T次数。"
@@ -135,6 +181,7 @@ def _preview_daily_fill_coverage(
         "declared_fill_count": len(expected),
         "missing_fill_count": len(missing),
         "unexpected_fill_count": len(unexpected),
+        "detail_mismatch_fill_ids": detail_mismatches,
         "duplicate_csv_rows": duplicate_rows,
         "outside_watermark_fill_count": outside_watermark,
         "outside_claimed_day_fill_count": outside_claimed_day,

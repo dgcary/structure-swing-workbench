@@ -94,6 +94,56 @@ def _daily_claim(**overrides):
     return claim
 
 
+def _expected_fills():
+    return [
+        {"fill_id": "A01", "symbol": "600000", "side": "BUY", "quantity": "100",
+         "price": "10.00", "executed_at": "2026-10-16T02:00:00+00:00"},
+        {"fill_id": "A02", "symbol": "600000", "side": "SELL", "quantity": "100",
+         "price": "11", "executed_at": "2026-10-16T11:00:00+08:00"},
+    ]
+
+
+@pytest.mark.parametrize(("original", "changed"), [
+    ("A01,600000,BUY,100,10,", "A01,000001,BUY,100,10,"),
+    ("A01,600000,BUY,100,10,", "A01,600000,SELL,100,10,"),
+    ("A01,600000,BUY,100,10,", "A01,600000,BUY,101,10,"),
+    ("A01,600000,BUY,100,10,", "A01,600000,BUY,100,10.01,"),
+    ("2026-10-16T10:00:00+08:00", "2026-10-16T10:01:00+08:00"),
+])
+def test_daily_manifest_detects_changed_fill_details_even_when_ids_match(original, changed):
+    altered = FILL_CSV.replace(original, changed)
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": altered,
+        "daily_fill_claim": _daily_claim(expected_fills=_expected_fills()),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "mismatch"
+    assert coverage["detail_mismatch_fill_ids"] == ["A01"]
+    assert coverage["broker_reconciled"] is False
+    assert response.json()["full_account_verified"] is False
+
+
+def test_daily_manifest_matches_equivalent_decimal_and_timezone_only_as_unverified():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(expected_fills=_expected_fills()),
+    })
+    assert response.status_code == 200, response.text
+    coverage = response.json()["daily_fill_coverage"]
+    assert coverage["status"] == "matched_unverified"
+    assert coverage["detail_mismatch_fill_ids"] == []
+    assert coverage["broker_reconciled"] is False
+
+
+def test_daily_manifest_rejects_inconsistent_expected_fill_id_set():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(expected_fills=_expected_fills()[:1]),
+    })
+    assert response.status_code == 422
+
+
 def test_daily_fill_manifest_matches_ids_but_never_certifies_broker_or_t_count():
     response = client.post("/workbench/account-snapshot-preview", json={
         "fills": FILL_CSV, "daily_fill_claim": _daily_claim(),

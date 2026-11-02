@@ -144,6 +144,14 @@ def test_daily_manifest_rejects_inconsistent_expected_fill_id_set():
     assert response.status_code == 422
 
 
+def test_daily_manifest_rejects_oversized_self_reported_fill_id():
+    response = client.post("/workbench/account-snapshot-preview", json={
+        "fills": FILL_CSV,
+        "daily_fill_claim": _daily_claim(expected_fill_ids=["A" * 129]),
+    })
+    assert response.status_code == 422
+
+
 def test_daily_fill_manifest_matches_ids_but_never_certifies_broker_or_t_count():
     response = client.post("/workbench/account-snapshot-preview", json={
         "fills": FILL_CSV, "daily_fill_claim": _daily_claim(),

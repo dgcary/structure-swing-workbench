@@ -76,8 +76,9 @@ class DailyFillCoverageClaim(BaseModel):
         if not self.export_reference.strip():
             raise ValueError("成交清单导出标识不能为空")
         if any(not identifier.strip() or identifier != identifier.strip()
+               or len(identifier) > 128
                for identifier in self.expected_fill_ids):
-            raise ValueError("成交清单编号不能为空或包含首尾空格")
+            raise ValueError("成交清单编号不能为空、包含首尾空格或超过 128 字符")
         if len(set(self.expected_fill_ids)) != len(self.expected_fill_ids):
             raise ValueError("成交清单编号重复，无法核对完整性")
         if self.expected_fills is not None:

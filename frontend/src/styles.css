@@ -92,7 +92,7 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
 .csv-preview-form { display: grid; gap: 14px; max-width: 850px; min-width: 0; }
 .csv-preview-form p { overflow-wrap: anywhere; }
 .csv-preview-form label { display: grid; gap: 7px; color: #afc1d7; font-size: 13px; }
-.csv-preview-form :is(select, textarea, input[type="file"]) {
+.csv-preview-form :is(select, textarea, input[type="file"], input[type="text"]) {
   width: 100%; min-width: 0; padding: 12px; color: #edf4fc;
   background: #0c182a; border: 1px solid #49617e; border-radius: 8px; font: inherit;
 }
@@ -100,6 +100,10 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
 .csv-preview-form button { width: fit-content; padding: 12px 18px; color: #fff;
   background: #2363ac; border: 0; border-radius: 8px; cursor: pointer; }
 .csv-preview-form :is(select,textarea,input,button):focus-visible { outline: 3px solid #f8d47d; outline-offset: 2px; }
+.daily-claim-input { min-width: 0; padding: 14px; border: 1px solid #49617e; border-radius: 8px; }
+.daily-claim-input summary { cursor: pointer; color: #cce0f6; }
+.daily-claim-fields { display: grid; gap: 14px; min-width: 0; margin-top: 14px; }
+.csv-preview-form .claim-check { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 
 /* Uploaded historical OHLCV chart; no real-time data is implied. */
 .kline-chart { overflow-x: auto; margin-top: 16px; background: #0b1726; border-radius: 8px; }

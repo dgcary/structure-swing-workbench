@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { assertReadOnlyOverview } from "./overviewContract";
+import {
+  buildDailyFillClaim, parseDailyCoverage,
+  type DailyClaimInput, type DailyCoverage, type DailyFillClaim,
+} from "./dailyFillClaim";
 
 type Kind = "account" | "holdings" | "fills";
 type CSVValues = Record<Kind, string>;
@@ -27,6 +31,7 @@ export type SnapshotOverview = {
   effective_plans: null;
   pending_actions: null;
   audit_results: null;
+  daily_fill_coverage: DailyCoverage | null;
 };
 
 const fields: { key: Kind; title: string; columns: string }[] = [
@@ -35,6 +40,11 @@ const fields: { key: Kind; title: string; columns: string }[] = [
   { key: "fills", title: "确认成交", columns: "fill_id,symbol,side,quantity,price,executed_at" },
 ];
 
+const emptyClaim: DailyClaimInput = {
+  enabled: false, marketDate: "", exportedAt: "", completeThrough: "",
+  exportReference: "", fillIds: "", declaredFullDay: false,
+};
+
 export function AccountSnapshotPreview({
   onPreview, onReset,
 }: {
@@ -42,6 +52,8 @@ export function AccountSnapshotPreview({
   onReset: () => void;
 }) {
   const [values, setValues] = useState<CSVValues>({ account: "", holdings: "", fills: "" });
+  const [claim, setClaim] = useState<DailyClaimInput>(emptyClaim);
+  const [coverage, setCoverage] = useState<DailyCoverage | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
@@ -61,7 +73,13 @@ export function AccountSnapshotPreview({
     setPending(false);
     setError("");
     setNotice("");
+    setCoverage(null);
     onReset();
+  }
+
+  function changeClaim(change: Partial<DailyClaimInput>) {
+    invalidatePreview();
+    setClaim((previous) => ({ ...previous, ...change }));
   }
 
   function change(kind: Kind, value: string) {
@@ -93,13 +111,21 @@ export function AccountSnapshotPreview({
     event.preventDefault();
     setError("");
     setNotice("");
-    const supplied = Object.fromEntries(
+    const supplied: Record<string, string | DailyFillClaim> = Object.fromEntries(
       fields.filter(({ key }) => values[key].trim()).map(({ key }) => [key, values[key]])
     );
     if (!Object.keys(supplied).length) {
       setError("请至少提供一份 CSV。");
       return;
     }
+    let dailyClaim;
+    try {
+      dailyClaim = buildDailyFillClaim(claim, Boolean(values.fills.trim()));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "逐日成交清单无效。");
+      return;
+    }
+    if (dailyClaim) supplied.daily_fill_claim = dailyClaim;
     const activeRequest = ++requestId.current;
     setPending(true);
     onReset();
@@ -126,8 +152,10 @@ export function AccountSnapshotPreview({
           !(result.holdings === null || Array.isArray(result.holdings))) {
         throw new Error("快照协议不匹配，禁止当作真实账户数据。");
       }
+      const checkedCoverage = parseDailyCoverage(result.daily_fill_coverage, Boolean(dailyClaim));
       if (activeRequest === requestId.current) {
         onPreview(result);
+        setCoverage(checkedCoverage);
         setNotice("临时快照已显示在下方总览；不保存、不代表账户全量或实时数据。");
       }
     } catch (cause) {
@@ -158,11 +186,62 @@ export function AccountSnapshotPreview({
           </label>
         </div>
       ))}
+      <details className="daily-claim-input">
+        <summary>可选：逐日成交清单对照（仅用户自报）</summary>
+        <p>将自报成交编号与本次上传 CSV 核对。两份材料都由你提供；即使一致，也不能证明券商全量成交、T+1 可卖数量或交易许可。</p>
+        <label className="claim-check">
+          <input type="checkbox" checked={claim.enabled} onChange={(event) => {
+            changeClaim({ enabled: event.target.checked });
+          }} />启用本次逐日对照
+        </label>
+        {claim.enabled && <div className="daily-claim-fields">
+          <label>交易日（上海市场日期，如 2026-10-16）
+            <input type="text" value={claim.marketDate} onChange={(event) => {
+              changeClaim({ marketDate: event.target.value });
+            }} />
+          </label>
+          <label>清单导出时间（含时区，如 2026-10-16T16:00:00+08:00）
+            <input type="text" value={claim.exportedAt} onChange={(event) => {
+              changeClaim({ exportedAt: event.target.value });
+            }} />
+          </label>
+          <label>成交覆盖至（含时区，如 2026-10-16T15:30:00+08:00）
+            <input type="text" value={claim.completeThrough} onChange={(event) => {
+              changeClaim({ completeThrough: event.target.value });
+            }} />
+          </label>
+          <label>自报导出编号
+            <input type="text" maxLength={128} value={claim.exportReference} onChange={(event) => {
+              changeClaim({ exportReference: event.target.value });
+            }} />
+          </label>
+          <label>自报成交编号（每行一个）
+            <textarea value={claim.fillIds} onChange={(event) => {
+              changeClaim({ fillIds: event.target.value });
+            }} />
+          </label>
+          <label className="claim-check">
+            <input type="checkbox" checked={claim.declaredFullDay} onChange={(event) => {
+              changeClaim({ declaredFullDay: event.target.checked });
+            }} />自报清单覆盖该交易日全天
+          </label>
+        </div>}
+      </details>
       <button type="submit" disabled={pending || !Object.values(values).some((value) => value.trim())}>
         {pending ? "正在核验…" : "预览本次账户与持仓"}
       </button>
     </form>
     {error && <p role="alert">预览失败：{error}</p>}
     {notice && <p role="status">{notice}</p>}
+    {coverage && <section className="plan-result" role={coverage.status === "mismatch" ? "alert" : "status"}>
+      <strong>{coverage.status === "mismatch" ? "自报清单与 CSV 不一致" :
+        coverage.status === "matched_unverified" ? "自报清单与 CSV 一致 · 未认证" :
+        "逐日覆盖证据不足"}</strong>
+      <p>交易日：{coverage.market_date}；自报 {coverage.declared_fill_count} 笔，上传 {coverage.recorded_fill_count} 笔；
+        缺失 {coverage.missing_fill_count} 笔，额外 {coverage.unexpected_fill_count} 笔，重复行 {coverage.duplicate_csv_rows} 行。</p>
+      <p>水位外成交 {coverage.outside_watermark_fill_count} 笔；其他日期成交 {coverage.outside_claimed_day_fill_count} 笔。</p>
+      <p>{coverage.warning}</p>
+      <p>券商全量未认证 · 不可据此交易</p>
+    </section>}
   </section>;
 }

@@ -401,3 +401,9 @@
 - `frontend/src/validObservedAt.ts` 与 `overviewContract.ts`：只读总览的有来源指标、持仓、正式计划/动作/审计和已记录 T 周期，在时间格式、时区有效之外，还拒绝超过浏览器当前时间 5 分钟的来源时间；与后端既有时钟容差一致。浏览器时间错误时保守拒绝展示。
 - `frontend/tests/observedAt.test.mjs`：覆盖容差内时间、明显未来的指标和持仓；前端全量 104 项测试与生产构建通过。本轮尚未完成手机 Safari/HTTPS 实机验收。
 - 此项仅补强展示协议，不能认证券商来源、全量成交或实时行情。真实 CSV→隔离 PostgreSQL 对账、BROKEN T 正式转仓、换仓/T+1、可信 CORE/T 风险及 Safari/HTTPS 实机仍未完成。**M8 Gate FAIL，PR #19 保持 Draft。**
+
+### 2026-11-02 增量：历史审计异常按严重程度优先展示
+
+- `frontend/src/auditPriority.ts` 与 `App.tsx`：正式历史审计按硬性失败、可人工覆盖失败、警告、通过排序；同等级按记录时间由近到远。通过项继续折叠，原始审计内容和等级均不改动。
+- `frontend/tests/auditPriority.test.mjs` 覆盖严重程度、同等级时间及无时间记录的顺序；前端全量 106 项测试与生产构建通过。
+- 这只改善历史记录的查阅顺序。历史审计不等于当前动作的完整审计或交易许可；真实券商数据、BROKEN T、换仓/T+1、可信风险与 Safari/HTTPS 实机仍待验收。**M8 Gate FAIL，PR #19 保持 Draft。**

@@ -11,6 +11,7 @@ import { summarizeLocalDrafts, type LocalDraftSummary } from "./localDraftSummar
 import { shouldRefreshLocalDrafts } from "./localDraftRefresh";
 import { assertReadOnlyOverview } from "./overviewContract";
 import { canSendDateWriteToken } from "./dateWriteTransport";
+import { orderHistoricalAudits } from "./auditPriority";
 
 type Metric = {
   key: string;
@@ -338,6 +339,9 @@ export function App() {
   const otherActions = overview?.pending_actions?.filter(
     (action) => action.date_status !== "today",
   ) ?? [];
+  const orderedAudits = orderHistoricalAudits(overview?.audit_results ?? []);
+  const exceptionalAudits = orderedAudits.filter((audit) => audit.level !== "pass");
+  const passingAudits = orderedAudits.filter((audit) => audit.level === "pass");
 
   return (
     <div className="shell">
@@ -466,17 +470,17 @@ export function App() {
                 <div className="audit-unknown">历史审计仅供查阅 · 不可认定可执行</div>
                 {overview?.audit_results && overview.audit_results.length > 0 ? (
                   <>
-                    {overview.audit_results.filter((audit) => audit.level !== "pass").map((audit) => (
+                    {exceptionalAudits.map((audit) => (
                       <article className="holding-card" key={audit.id} role="status">
                         <strong>{audit.level_zh} · {audit.summary}</strong>
                         <p>来源：{audit.source} · 数据时间：{audit.as_of ?? "未核实"}</p>
                         <p>{audit.warning}</p>
                       </article>
                     ))}
-                    {overview.audit_results.some((audit) => audit.level === "pass") && (
+                    {passingAudits.length > 0 && (
                       <details>
-                        <summary>展开正常审计记录（{overview.audit_results.filter((audit) => audit.level === "pass").length}项）</summary>
-                        {overview.audit_results.filter((audit) => audit.level === "pass").map((audit) => (
+                        <summary>展开正常审计记录（{passingAudits.length}项）</summary>
+                        {passingAudits.map((audit) => (
                           <article className="holding-card" key={audit.id}>
                             <strong>{audit.level_zh} · {audit.summary}</strong>
                             <p>来源：{audit.source} · 数据时间：{audit.as_of ?? "未核实"}</p>

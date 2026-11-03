@@ -1,10 +1,12 @@
+import json
 from ipaddress import ip_address
 from secrets import compare_digest
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import SQLAlchemyError
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -19,6 +21,11 @@ from app.workbench.action_date import ActionDateRequest, update_action_planned_d
 from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
 from app.workbench.dongwu_statement import check_dongwu_statement_pdf
 from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
+from app.workbench.manual_journal import (
+    ManualJournalWrite,
+    append_manual_record,
+    read_manual_records,
+)
 from app.workbench.overview import build_overview
 from app.workbench.persisted import project_persisted
 from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
@@ -26,6 +33,7 @@ from app.workbench.t_cycle_preview import TCyclePreviewRequest, preview_t_cycle
 
 settings = get_settings()
 MAX_STATEMENT_UPLOAD_BYTES = 10_000_000
+MAX_MANUAL_JOURNAL_BYTES = 100_000
 
 app = FastAPI(
     title="Structure Swing Workbench API",
@@ -180,6 +188,70 @@ async def workbench_dongwu_statement_check(request: Request) -> dict[str, object
 def workbench_t_cycle_preview(payload: TCyclePreviewRequest) -> dict[str, object]:
     """Calculate one user-supplied T cycle without broker or execution access."""
     return preview_t_cycle(payload)
+
+
+def _manual_journal_access(request: Request, authorization: str | None) -> None:
+    if not settings.workbench_manual_journal_enabled:
+        raise HTTPException(status_code=404, detail="手工台账未启用")
+    if not _trusted_date_write_transport(request):
+        raise HTTPException(status_code=403, detail="手工台账仅允许可信 HTTPS 或本机访问")
+    secret = settings.workbench_manual_journal_token
+    if len(secret) < 32:
+        raise HTTPException(status_code=503, detail="手工台账访问令牌未安全配置")
+    supplied = authorization.removeprefix("Bearer ") if authorization else ""
+    if not authorization or not authorization.startswith("Bearer ") or not compare_digest(
+        supplied, secret
+    ):
+        raise HTTPException(status_code=401, detail="手工台账访问令牌无效")
+
+
+@app.get("/workbench/manual-journal", tags=["workbench"])
+def workbench_manual_journal_read(
+    request: Request, authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    _manual_journal_access(request, authorization)
+    try:
+        engine = build_engine()
+        try:
+            with Session(engine) as session:
+                return read_manual_records(session)
+        finally:
+            engine.dispose()
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="手工台账数据库暂不可用") from exc
+
+
+@app.post("/workbench/manual-journal", tags=["workbench"], status_code=201)
+async def workbench_manual_journal_save(
+    request: Request, authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    _manual_journal_access(request, authorization)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_MANUAL_JOURNAL_BYTES:
+            raise HTTPException(status_code=413, detail="手工台账记录过大")
+        chunks.append(chunk)
+    try:
+        payload = ManualJournalWrite.model_validate(json.loads(b"".join(chunks)))
+    except (ValidationError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="手工台账字段无效") from exc
+    try:
+        engine = build_engine()
+        try:
+            with Session(engine) as session:
+                result = append_manual_record(session, payload)
+                session.commit()
+                return result
+        finally:
+            engine.dispose()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="手工台账版本冲突，请刷新后核对") from exc
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="手工台账版本冲突，请刷新后核对") from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="手工台账数据库暂不可用") from exc
 
 
 def _trusted_date_write_transport(request: Request) -> bool:

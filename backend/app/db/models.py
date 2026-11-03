@@ -315,3 +315,18 @@ class ManualOverride(IdMixin, TimestampMixin, Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     audit_result: Mapped[AuditResult] = relationship(back_populates="overrides")
+
+
+class ManualJournalRevision(IdMixin, Base):
+    """One complete, append-only user report; deliberately separate from formal facts."""
+
+    __tablename__ = "manual_journal_revisions"
+
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    recorded_at: Mapped[str] = mapped_column(String(40), nullable=False)
+    observed_at: Mapped[str] = mapped_column(String(40), nullable=False)
+    available_cash: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    total_equity: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    lots: Mapped[list[dict[str, str]]] = mapped_column(JSON, nullable=False)
+    operation: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
+    note: Mapped[str] = mapped_column(String(200), nullable=False, default="")

@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     workbench_action_date_write_token: str = ""
     # Explicit opt-in for local-only, request-scoped PDF statement checks.
     workbench_statement_check_enabled: bool = False
+    # Separate, opt-in self-reported journal. Never reuse this token for broker access.
+    workbench_manual_journal_enabled: bool = False
+    workbench_manual_journal_token: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

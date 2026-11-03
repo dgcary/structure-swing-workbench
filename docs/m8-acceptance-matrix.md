@@ -472,3 +472,10 @@
 - `backend/app/main.py` 新增默认关闭的 PDF 核对接口；须显式启用、后端绑定回环地址，且请求目标、网页来源、连接对端均为本机回环地址。按流式 10 MB 上限读取，在内存中调用既有东吴 PDF 核对器，失败返回通用错误，不回显原文、密码或交易数值。
 - `frontend/src/DongwuStatementPreview.tsx` 在总览下的独立折叠入口中让用户主动选取已解压 PDF；非本机网页地址连文件选择和上传都禁用。PDF 直连固定的 `127.0.0.1:8000`，不经过可配置的 Web 代理；后端响应明确列出可公开的汇总字段，避免未来解析器新增私密字段时自动泄露。结果只显示周期、条数和差异计数；不会填入首页实时账户指标。前端协议拒绝伪造券商已对账、可交易、缺合计核对或夹带账户/逐笔字段的响应。
 - `backend/tests/test_workbench_dongwu_statement_api.py` 与 `frontend/tests/dongwuStatementContract.test.mjs` 覆盖默认关闭、本机来源、体积/类型限制、聚合响应及前端来源门禁。该功能是**本机历史账单内部核对**，不代表手机 Safari/HTTPS 实机、券商认证、实时持仓、T+1 或日终 BROKEN T。**M8 Gate FAIL，PR #19 保持 Draft。**
+
+### 2026-11-03 低频交易的手工账户台账
+
+- 用户选择在家中同一 Wi-Fi 下用手机和电脑共享手工记录。新增独立、默认关闭的 PostgreSQL 修订表和「手工台账」入口：记录观察时间、资金、当前持仓买入批次与可选买卖操作；旧版保留，跨设备同版写入冲突拒绝覆盖。未知买入时间或投入金额可以留空。详见 [手工账户台账](m8-manual-journal.md)。
+- 读写均需独立强口令，远程设备仅接受可信 HTTPS；前端不保存口令。此数据始终标记 `user_manual`、`broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`，不写入正式账户/成交表，不推断实时市值、T+1、完整 T 次数或交易许可。
+- 目前仍需家庭网络的统一访问保护、可信 HTTPS 部署及手机 Safari 实机验收；现有开发端口不可直接开放给手机。券商全量数据与正式业务闭环缺口不因手工记录消失。**M8 Gate FAIL，PR #19 保持 Draft，不合并、不部署。**
+- 本地检查：后端 590 passed、4 skipped，Ruff 通过；前端 120 passed，TypeScript 与生产构建通过。此项只是代码与合成记录验证，尚无真实手机、家庭 HTTPS 或用户实际录入验收。

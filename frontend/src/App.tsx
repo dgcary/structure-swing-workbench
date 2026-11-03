@@ -5,6 +5,7 @@ import { CSVPreview } from "./CSVPreview";
 import { KlinePreview } from "./KlinePreview";
 import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
 import { DongwuStatementPreview } from "./DongwuStatementPreview";
+import { ManualJournal } from "./ManualJournal";
 import { TCyclePreview } from "./TCyclePreview";
 import { LocalPlanDrafts } from "./LocalPlanDrafts";
 import { LocalReview } from "./LocalReview";
@@ -106,7 +107,7 @@ type ResearchReport = {
 
 const sections = [
   "总览", "计划管理", "审计结果", "K线", "成交导入", "T仓",
-  "历史计划", "复盘", "研究样例",
+  "历史计划", "复盘", "研究样例", "手工台账",
 ] as const;
 type Section = (typeof sections)[number];
 
@@ -517,6 +518,7 @@ export function App() {
           <button className="back-button" type="button" onClick={() => setSection("计划管理")}>前往计划管理</button>
         </section>}
         {section === "成交导入" && <CSVPreview />}
+        {section === "手工台账" && <ManualJournal />}
         {section === "K线" && <KlinePreview />}
         {section === "T仓" && <>
           <section className="panel" aria-label="已记录T周期复核">
@@ -574,7 +576,7 @@ export function App() {
         </>}
         {section === "复盘" && <LocalReview />}
         {section === "研究样例" && <ResearchDemo />}
-        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && section !== "T仓" && section !== "历史计划" && section !== "复盘" && (
+        {section !== "总览" && section !== "研究样例" && section !== "计划管理" && section !== "审计结果" && section !== "成交导入" && section !== "K线" && section !== "T仓" && section !== "历史计划" && section !== "复盘" && section !== "手工台账" && (
           <section className="panel placeholder-panel">
             <h2>{section}</h2>
             <Unavailable

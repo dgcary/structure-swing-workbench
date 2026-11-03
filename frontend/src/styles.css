@@ -119,3 +119,25 @@ footer { border-top: 1px solid #293449; padding: 20px 0 40px; text-align: center
 .draft-card p { color: #9eb1c8; font-size: 13px; line-height: 1.65; }
 .draft-card button { border: 1px solid #5578a6; border-radius: 7px; background: #193b66; color: #eaf3ff; padding: 9px 13px; cursor: pointer; }
 .draft-card button:focus-visible { outline: 3px solid #f8d47d; outline-offset: 2px; }
+
+/* Server-synced manual notes stay visually separate from broker facts. */
+.manual-journal-form { display: grid; gap: 14px; max-width: 850px; margin: 18px 0 28px; }
+.manual-journal-form label, .manual-journal-panel > label { display: grid; gap: 7px; color: #afc1d7; font-size: 13px; }
+.manual-journal-form :is(input, select, textarea), .manual-journal-panel > label > input[type="password"] {
+  width: 100%; min-width: 0; padding: 12px; color: #edf4fc;
+  background: #0c182a; border: 1px solid #49617e; border-radius: 8px; font: inherit;
+}
+.manual-journal-form button, .manual-journal-panel > button { width: fit-content; max-width: 100%;
+  padding: 12px 18px; color: #fff; background: #2363ac; border: 0; border-radius: 8px; cursor: pointer; }
+.manual-journal-form button:disabled { opacity: .55; cursor: wait; }
+.manual-journal-form .claim-check { display: flex; align-items: center; gap: 8px; }
+.manual-journal-form .claim-check input { width: auto; }
+.manual-journal-lot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  padding: 14px; border: 1px solid #344a65; border-radius: 8px; min-width: 0; }
+.manual-journal-history { border: 1px solid #344a65; border-radius: 8px; padding: 12px;
+  margin: 10px 0; overflow-wrap: anywhere; }
+.manual-journal-history summary { cursor: pointer; color: #cce0f6; }
+.manual-journal-history p { color: #aabbd0; line-height: 1.55; }
+.manual-journal-form :is(input,select,textarea,button):focus-visible,
+.manual-journal-history summary:focus-visible { outline: 3px solid #f8d47d; outline-offset: 2px; }
+@media (max-width: 760px) { .manual-journal-lot { grid-template-columns: 1fr; } }

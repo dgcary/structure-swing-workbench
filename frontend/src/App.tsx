@@ -4,6 +4,7 @@ import { AuditPreviewResult, type PartialAuditResult } from "./AuditPreviewResul
 import { CSVPreview } from "./CSVPreview";
 import { KlinePreview } from "./KlinePreview";
 import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
+import { DongwuStatementPreview } from "./DongwuStatementPreview";
 import { TCyclePreview } from "./TCyclePreview";
 import { LocalPlanDrafts } from "./LocalPlanDrafts";
 import { LocalReview } from "./LocalReview";
@@ -382,6 +383,10 @@ export function App() {
                 onPreview={(snapshot) => { setOverview(snapshot); setOverviewError(null); }}
                 onReset={() => { setOverview(baselineOverview); setOverviewError(null); }}
               />
+            </details>
+            <details className="upload-disclosure">
+              <summary>核对东吴 PDF · 历史账单</summary>
+              <DongwuStatementPreview />
             </details>
             <div className="section-heading"><h2>账户与纪律总览</h2><span>{overview?.mode === "isolated_csv_preview" ? "上传 CSV · 非实时 · 未保存" : "只读 · 未连接券商"}</span></div>
             {overview ? (

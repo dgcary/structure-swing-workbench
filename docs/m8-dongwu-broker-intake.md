@@ -11,6 +11,14 @@
 - 本次未取得可脱敏导入的同账户原始 CSV、独立账户身份及逐日完整性证明，也未完成真实数据导入隔离 PostgreSQL。`broker_reconciled=false`、`full_account_verified=false`、`trade_execution_enabled=false`；M8 Gate 仍 FAIL。
 - 用户目前无法提供更细的逐笔导出材料；该缺口记录为当前验收限制，不推断券商是否支持某种未见过的导出格式。
 
+## 本机 PDF 临时核对入口
+
+Web 工作台的「核对东吴 PDF · 历史账单」入口只接收用户在本机主动选择的**已解压 PDF**。网页不接收 ZIP 密码、账户登录凭据或非公开接口令牌；后端按请求在内存中核对后只返回日期、条数及差异计数，不保存文件，也不更新实时账户总览。
+
+此入口默认关闭。仅在本机单独运行后端、于 `backend` 目录安装可选依赖 `pip install ".[broker_pdf]"`、将后端实际绑定到 `127.0.0.1:8000` 且设置 `WORKBENCH_STATEMENT_CHECK_ENABLED=true` 时启用；现有 Docker 默认 `0.0.0.0` 部署不启用。网页若不是从本机地址打开，会禁用 PDF 选择和上传。PDF 直接发送至固定的 `127.0.0.1:8000` 后端地址，不经过可配置的 Web 代理；服务端还要求请求目标、来源网页和连接对端均为回环地址，并按流式读取限制 PDF 为 10 MB。任何反向代理、远程设备或手机访问的上传方案需另行设计并审查，不沿用这个本机入口。
+
+核对结果只有 `matched_unverified` 或 `mismatch`，缺逐笔编号、成交时刻及逐日完整性证明；不能生成正式成交、当前持仓、T+1、日终转仓或交易许可。
+
 ## 已核实的公开信息
 
 - [东吴证券证券经纪官网](https://www.dwzq.com.cn/main/services/wealth/securitiesEconom/index.html)将“对账单”列为东吴秀财的账户管理服务。

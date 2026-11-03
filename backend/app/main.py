@@ -1,5 +1,6 @@
 from ipaddress import ip_address
 from secrets import compare_digest
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,7 @@ from app.workbench.account_snapshot_preview import (
 )
 from app.workbench.action_date import ActionDateRequest, update_action_planned_date
 from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
+from app.workbench.dongwu_statement import check_dongwu_statement_pdf
 from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
 from app.workbench.overview import build_overview
 from app.workbench.persisted import project_persisted
@@ -23,6 +25,7 @@ from app.workbench.plan_preview import PlanPreviewRequest, preview_plan
 from app.workbench.t_cycle_preview import TCyclePreviewRequest, preview_t_cycle
 
 settings = get_settings()
+MAX_STATEMENT_UPLOAD_BYTES = 10_000_000
 
 app = FastAPI(
     title="Structure Swing Workbench API",
@@ -95,6 +98,82 @@ def workbench_account_snapshot_preview(
 ) -> dict[str, object]:
     """Show uploaded account CSVs only in an isolated request-scoped ledger."""
     return preview_account_snapshot(payload)
+
+
+def _local_statement_transport(request: Request) -> bool:
+    """Require a loopback URL and peer; remote proxies must not expose PDF upload."""
+    if request.client is None:
+        return False
+    try:
+        host = request.url.hostname
+        local_host = host == "localhost" or (
+            host is not None and ip_address(host).is_loopback
+        )
+        origin = urlsplit(request.headers.get("origin", ""))
+        origin_host = origin.hostname
+        local_origin = origin_host == "localhost" or (
+            origin_host is not None and ip_address(origin_host).is_loopback
+        )
+        return (
+            local_host and ip_address(request.client.host).is_loopback
+            and origin.scheme in {"http", "https"} and local_origin
+            and not origin.username and not origin.password
+            and not origin.path and not origin.query and not origin.fragment
+        )
+    except ValueError:
+        return False
+
+
+@app.post("/workbench/dongwu-statement-check", tags=["workbench"])
+async def workbench_dongwu_statement_check(request: Request) -> dict[str, object]:
+    """Check a user-selected PDF in memory; never save or publish account facts."""
+    if not settings.workbench_statement_check_enabled:
+        raise HTTPException(status_code=404, detail="本机对账单核对未启用")
+    host = settings.app_host
+    try:
+        bound_locally = host == "localhost" or ip_address(host).is_loopback
+    except ValueError:
+        bound_locally = False
+    if not bound_locally or not _local_statement_transport(request):
+        raise HTTPException(status_code=403, detail="对账单核对仅允许本机回环访问")
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if media_type != "application/pdf":
+        raise HTTPException(status_code=415, detail="仅支持已解压的 PDF 文件")
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_STATEMENT_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="PDF 超过本机核对大小上限")
+        chunks.append(chunk)
+    try:
+        check = check_dongwu_statement_pdf(b"".join(chunks))
+    except ModuleNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="本机 PDF 核对组件未安装") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="对账单无法按已核实格式核对") from exc
+    return {
+        "schema_version": "m8.dongwu_statement_check.v1",
+        "mode": "local_pdf_preview",
+        "notice": "仅核对所选账单内部一致性；非实时账户、非券商全量认证，不保存或授权交易。",
+        "status": check.status,
+        "period_start": check.period_start.isoformat(),
+        "period_end": check.period_end.isoformat(),
+        "summary_row_count": check.summary_row_count,
+        "detail_row_count": check.detail_row_count,
+        "matched_group_count": check.matched_group_count,
+        "missing_summary_group_count": check.missing_summary_group_count,
+        "extra_summary_group_count": check.extra_summary_group_count,
+        "mismatched_group_count": check.mismatched_group_count,
+        "repaired_summary_rows": check.repaired_summary_rows,
+        "broker_reconciled": check.broker_reconciled,
+        "full_account_verified": check.full_account_verified,
+        "trade_execution_enabled": check.trade_execution_enabled,
+        "execution_ids_available": check.execution_ids_available,
+        "execution_times_available": check.execution_times_available,
+        "footer_totals_checked": check.footer_totals_checked,
+        "footer_totals_mismatched_count": check.footer_totals_mismatched_count,
+    }
 
 
 @app.post("/workbench/t-cycle-preview", tags=["workbench"])

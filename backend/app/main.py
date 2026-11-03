@@ -22,8 +22,11 @@ from app.workbench.csv_preview import CSVPreviewRequest, preview_csv
 from app.workbench.dongwu_statement import check_dongwu_statement_pdf
 from app.workbench.kline_preview import KlinePreviewRequest, preview_kline
 from app.workbench.manual_journal import (
+    ManualJournalConflict,
     ManualJournalWrite,
+    ManualOperationApply,
     append_manual_record,
+    apply_manual_operation,
     read_manual_records,
 )
 from app.workbench.overview import build_overview
@@ -190,7 +193,7 @@ def workbench_t_cycle_preview(payload: TCyclePreviewRequest) -> dict[str, object
     return preview_t_cycle(payload)
 
 
-def _manual_journal_access(request: Request, authorization: str | None) -> None:
+def _manual_journal_access(request: Request, journal_token: str | None) -> None:
     if not settings.workbench_manual_journal_enabled:
         raise HTTPException(status_code=404, detail="手工台账未启用")
     if not _trusted_date_write_transport(request):
@@ -198,18 +201,16 @@ def _manual_journal_access(request: Request, authorization: str | None) -> None:
     secret = settings.workbench_manual_journal_token
     if len(secret) < 32:
         raise HTTPException(status_code=503, detail="手工台账访问令牌未安全配置")
-    supplied = authorization.removeprefix("Bearer ") if authorization else ""
-    if not authorization or not authorization.startswith("Bearer ") or not compare_digest(
-        supplied, secret
-    ):
+    if not journal_token or not compare_digest(journal_token, secret):
         raise HTTPException(status_code=401, detail="手工台账访问令牌无效")
 
 
 @app.get("/workbench/manual-journal", tags=["workbench"])
 def workbench_manual_journal_read(
-    request: Request, authorization: str | None = Header(default=None),
+    request: Request,
+    journal_token: str | None = Header(default=None, alias="X-Workbench-Journal-Token"),
 ) -> dict[str, object]:
-    _manual_journal_access(request, authorization)
+    _manual_journal_access(request, journal_token)
     try:
         engine = build_engine()
         try:
@@ -223,9 +224,10 @@ def workbench_manual_journal_read(
 
 @app.post("/workbench/manual-journal", tags=["workbench"], status_code=201)
 async def workbench_manual_journal_save(
-    request: Request, authorization: str | None = Header(default=None),
+    request: Request,
+    journal_token: str | None = Header(default=None, alias="X-Workbench-Journal-Token"),
 ) -> dict[str, object]:
-    _manual_journal_access(request, authorization)
+    _manual_journal_access(request, journal_token)
     chunks: list[bytes] = []
     size = 0
     async for chunk in request.stream():
@@ -237,6 +239,8 @@ async def workbench_manual_journal_save(
         payload = ManualJournalWrite.model_validate(json.loads(b"".join(chunks)))
     except (ValidationError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=422, detail="手工台账字段无效") from exc
+    if payload.operation is not None:
+        raise HTTPException(status_code=422, detail="买卖操作须由自动更新持仓接口登记")
     try:
         engine = build_engine()
         try:
@@ -246,8 +250,46 @@ async def workbench_manual_journal_save(
                 return result
         finally:
             engine.dispose()
-    except ValueError as exc:
+    except ManualJournalConflict as exc:
         raise HTTPException(status_code=409, detail="手工台账版本冲突，请刷新后核对") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="手工台账观察时间或内容无效") from exc
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="手工台账版本冲突，请刷新后核对") from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="手工台账数据库暂不可用") from exc
+
+
+@app.post("/workbench/manual-journal/operation", tags=["workbench"], status_code=201)
+async def workbench_manual_journal_operation(
+    request: Request,
+    journal_token: str | None = Header(default=None, alias="X-Workbench-Journal-Token"),
+) -> dict[str, object]:
+    _manual_journal_access(request, journal_token)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_MANUAL_JOURNAL_BYTES:
+            raise HTTPException(status_code=413, detail="手工台账记录过大")
+        chunks.append(chunk)
+    try:
+        payload = ManualOperationApply.model_validate(json.loads(b"".join(chunks)))
+    except (ValidationError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="手工台账操作字段无效") from exc
+    try:
+        engine = build_engine()
+        try:
+            with Session(engine) as session:
+                result = apply_manual_operation(session, payload)
+                session.commit()
+                return result
+        finally:
+            engine.dispose()
+    except ManualJournalConflict as exc:
+        raise HTTPException(status_code=409, detail="手工台账版本冲突，请刷新后核对") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="手工台账操作与现有持仓不一致") from exc
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="手工台账版本冲突，请刷新后核对") from exc
     except SQLAlchemyError as exc:

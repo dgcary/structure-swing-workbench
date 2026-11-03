@@ -48,7 +48,7 @@ function amount(value: unknown, positive = false): value is string {
 }
 function instant(value: unknown): value is string {
   if (typeof value !== "string") return false;
-  const match = /^(20\d{2}-\d{2}-\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+  const match = /^([0-9]{4}-\d{2}-\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
   if (!match) return false;
   const day = new Date(`${match[1]}T00:00:00Z`);
   return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === match[1] &&

@@ -55,3 +55,20 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
+
+  home-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 验证家庭配置与构建镜像（仅合成口令）
+        env:
+          HOME_LAN_IP: 192.168.1.10
+          HOME_DB_PASSWORD: 0123456789abcdef0123456789abcdef
+          HOME_JOURNAL_TOKEN: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        run: |
+          export HOME_PASSWORD_HASH="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext ci-only-test-password)"
+          docker compose -f docker-compose.home.yml config -q
+          docker run --rm -v "$PWD/deploy/home/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e HOME_LAN_IP -e HOME_PASSWORD_HASH caddy:2-alpine \
+            caddy adapt --config /etc/caddy/Caddyfile --validate >/dev/null
+          docker compose -f docker-compose.home.yml build migrate backend web

@@ -19,10 +19,12 @@ dependencies = [
 
 [project.optional-dependencies]
 market = ["akshare>=1.16"]
+broker_pdf = ["pdfplumber>=0.11,<1"]
 dev = [
   "pytest>=8,<9",
   "httpx>=0.27,<1",
   "ruff>=0.8,<1",
+  "pdfplumber>=0.11,<1",
 ]
 
 [tool.setuptools.packages.find]

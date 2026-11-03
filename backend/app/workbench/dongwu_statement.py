@@ -32,6 +32,8 @@ class StatementCheck:
     trade_execution_enabled: bool = False
     execution_ids_available: bool = False
     execution_times_available: bool = False
+    footer_totals_checked: bool = False
+    footer_totals_mismatched_count: int = 0
 
 
 def _text(value: str | None) -> str:
@@ -85,10 +87,39 @@ def _group_values(
     return {key: tuple(values) for key, values in groups.items()}
 
 
+def _footer_mismatches(
+    rows: Sequence[Sequence[str | None]], totals: Sequence[Sequence[str | None]],
+    *, value_columns: tuple[int, ...], total_columns: tuple[int, ...],
+) -> int:
+    expected: dict[str, list[Decimal]] = defaultdict(
+        lambda: [Decimal(0) for _ in value_columns]
+    )
+    for row in rows:
+        currency = _text(row[2])
+        for offset, column in enumerate(value_columns):
+            expected[currency][offset] += _number(row[column], "成交金额或费用")
+    observed: dict[str, tuple[Decimal, ...]] = {}
+    for row in totals:
+        currency = _text(row[2])
+        if currency in observed:
+            raise ValueError("同一币种出现重复成交合计")
+        observed[currency] = tuple(_number(row[column], "合计金额或费用")
+                                   for column in total_columns)
+    return sum(
+        currency not in observed or tuple(values) != observed[currency]
+        for currency, values in expected.items()
+    ) + sum(
+        any(value != 0 for value in values)
+        for currency, values in observed.items() if currency not in expected
+    )
+
+
 def compare_statement_rows(
     summary_rows: Sequence[Sequence[str | None]],
     detail_rows: Sequence[Sequence[str | None]],
     *, period_start: date, period_end: date, repaired_rows: int,
+    summary_totals: Sequence[Sequence[str | None]] | None = None,
+    detail_totals: Sequence[Sequence[str | None]] | None = None,
 ) -> StatementCheck:
     """Compare grouped statement figures exactly; return no private row values."""
     if period_start > period_end or repaired_rows < 0:
@@ -108,8 +139,21 @@ def compare_statement_rows(
     changed = sum(summary[key] != detail[key] for key in common)
     missing = len(detail_keys - summary_keys)
     extra = len(summary_keys - detail_keys)
+    if bool(summary_totals) != bool(detail_totals):
+        raise ValueError("成交汇总与交割明细的合计行不完整")
+    totals_checked = bool(summary_totals) and bool(detail_totals)
+    total_mismatches = (
+        _footer_mismatches(
+            summary_rows, summary_totals, value_columns=(7, 8, 9, 10),
+            total_columns=(7, 8, 9, 10),
+        ) + _footer_mismatches(
+            detail_rows, detail_totals, value_columns=(8, 9, 10, 11, 12),
+            total_columns=(8, 9, 10, 11, 12),
+        ) if totals_checked else 0
+    )
     return StatementCheck(
-        status="mismatch" if missing or extra or changed else "matched_unverified",
+        status="mismatch" if missing or extra or changed or total_mismatches
+        else "matched_unverified",
         period_start=period_start, period_end=period_end,
         summary_row_count=len(summary_rows), detail_row_count=len(detail_rows),
         matched_group_count=len(common) - changed,
@@ -117,6 +161,8 @@ def compare_statement_rows(
         extra_summary_group_count=extra,
         mismatched_group_count=changed,
         repaired_summary_rows=repaired_rows,
+        footer_totals_checked=totals_checked,
+        footer_totals_mismatched_count=total_mismatches,
     )
 
 
@@ -219,6 +265,8 @@ def check_dongwu_statement_pdf(data: bytes) -> StatementCheck:
         period_start, period_end = _statement_period(pdf.pages[0].extract_text() or "")
         summary_rows: list[list[str | None]] = []
         detail_rows: list[list[str | None]] = []
+        summary_totals: list[list[str | None]] = []
+        detail_totals: list[list[str | None]] = []
         summary_seen = detail_seen = False
         active_kind: Literal["summary", "detail"] | None = None
         totals_started = False
@@ -253,6 +301,7 @@ def check_dongwu_statement_pdf(data: bytes) -> StatementCheck:
                             row, active_kind, continuation=totals_started,
                         ):
                             totals_started = True
+                            (summary_totals if active_kind == "summary" else detail_totals).append(row)
                             continue
                         if active_kind is not None and any(_text(cell) for cell in row[1:]):
                             raise ValueError("成交行缺少可核实日期或字段")
@@ -270,10 +319,13 @@ def check_dongwu_statement_pdf(data: bytes) -> StatementCheck:
                         raise ValueError("成交表顺序或列数异常")
         if not summary_seen or not detail_seen:
             raise ValueError("东吴成交汇总或交割明细表头缺失")
+        if not summary_totals or not detail_totals:
+            raise ValueError("东吴成交汇总或交割明细的币种合计行缺失")
         if len(summary_rows) + len(detail_rows) > 50_000:
             raise ValueError("对账单成交行数超出本地核对上限")
         return compare_statement_rows(
             summary_rows, detail_rows,
             period_start=period_start, period_end=period_end,
             repaired_rows=repaired,
+            summary_totals=summary_totals, detail_totals=detail_totals,
         )

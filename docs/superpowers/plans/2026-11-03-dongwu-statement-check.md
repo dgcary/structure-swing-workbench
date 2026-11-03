@@ -53,10 +53,19 @@
 
 - [x] Run the checker only in memory on the user-supplied encrypted ZIP, entering its password interactively and printing safe counts/status only.
 - [x] Record result, the statement's prior-trading-day holdings scope, and the missing execution ID/time limitation without copying private values.
-- [ ] Run full backend suite and update Draft PR; verify CI and TSK-18 evidence.
+- [x] Run full backend suite and update Draft PR; verify CI #41567856243 success and TSK-18 evidence for HEAD `021fd047`.
 
 ## Execution ledger
 
 - Ruling: Account, holdings and cash-flow tables before the trade headers are ignored because the statement contains distinct non-trade sections; a dated row with changed width after trade parsing begins is rejected. If this boundary is wrong, a future broker layout may need a new parser version.
 - Ruling: The PDF's typed currency totals are recognized by exact column occupancy and numeric cells, and are not treated as executions. If their layout changes, parsing fails closed until reviewed.
 - Final review: a fresh reviewer found three Important false-match paths (incomplete header checks, changed later headers, and skipped damaged rows). Each was reproduced with a failing synthetic test, fixed, and covered by the 562 passed / 4 skipped full suite.
+
+## Follow-up: currency footer totals
+
+- User currently cannot provide a more detailed export. Keep the broker completeness gate closed and strengthen what the supplied PDF itself can prove.
+- [x] Add a failing test where the grouped trade rows match but the PDF's currency footer total differs.
+- [x] Compare each summary and detail footer separately with its own row sums; accept a zero footer for a currency without trades, and include the detail table's other fee.
+- [x] Re-run the private PDF in memory and confirm both footer tables match, without recording raw values.
+- [ ] Run full suite, review the follow-up, commit to Draft PR #19, verify CI, and update TSK-18.
+- Follow-up review found that a PDF missing both footer tables could still report `matched_unverified`; a failing synthetic example now proves the case, and the PDF entry point rejects either missing footer.

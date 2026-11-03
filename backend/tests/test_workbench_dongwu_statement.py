@@ -147,10 +147,16 @@ def test_pdf_recovers_a_pagebreak_row_before_comparing(monkeypatch):
     other_detail[6] = "300"
     other_detail[8] = "-3000.00"
     other_detail[9] = "1.00"
+    summary_total = ["合计", None, "人民币", None, None, None, None, "-6000", "2", "0", "0"]
+    detail_total = [
+        "合计", None, "人民币", None, None, None, None, None,
+        "-6000", "2", "0", "0", "0", None,
+    ]
     summary_table = FakeTable(
-        [SUMMARY_HEADER, [*SUMMARY[:3], *([None] * 8)], other_summary], partial_row=1
+        [SUMMARY_HEADER, [*SUMMARY[:3], *([None] * 8)], other_summary, summary_total],
+        partial_row=1,
     )
-    detail_table = FakeTable([DETAIL_HEADER, *DETAIL, other_detail])
+    detail_table = FakeTable([DETAIL_HEADER, *DETAIL, other_detail, detail_total])
     pages = [
         FakePage("东吴证券对账单\n账单周期：2026 年08月05日-2026年11月02 日", []),
         FakePage("", [summary_table], recovered=SUMMARY),
@@ -169,6 +175,17 @@ def test_pdf_without_expected_statement_headers_fails_closed(monkeypatch):
     pages = [FakePage("东吴证券对账单\n账单周期：2026年08月05日-2026年11月02日", [])]
     monkeypatch.setattr(pdfplumber, "open", lambda _: FakePDF(pages))
     with pytest.raises(ValueError, match="表头"):
+        check_dongwu_statement_pdf(b"synthetic PDF bytes")
+
+
+def test_pdf_matching_rows_without_currency_footers_fail_closed(monkeypatch):
+    pages = [
+        FakePage("东吴证券对账单\n账单周期：2026年08月05日-2026年11月02日", []),
+        FakePage("", [FakeTable([SUMMARY_HEADER, SUMMARY])]),
+        FakePage("", [FakeTable([DETAIL_HEADER, *DETAIL])]),
+    ]
+    monkeypatch.setattr(pdfplumber, "open", lambda _: FakePDF(pages))
+    with pytest.raises(ValueError, match="合计行"):
         check_dongwu_statement_pdf(b"synthetic PDF bytes")
 
 
@@ -219,16 +236,24 @@ def test_pdf_accepts_typed_currency_totals_across_pages(monkeypatch):
         "合计", None, "人民币", None, None, None, None, None,
         "-3000", "1", "0", "0", "0", None,
     ]
+    detail_next_total = [
+        None, None, "港币", None, None, None, None, None,
+        "0", "0", "0", "0", "0", None,
+    ]
     pages = [
         FakePage("东吴证券对账单\n账单周期：2026年08月05日-2026年11月02日", []),
         FakePage("", [FakeTable([SUMMARY_HEADER, SUMMARY, summary_total])]),
-        FakePage("", [FakeTable([summary_next_total]), FakeTable([DETAIL_HEADER, *DETAIL, detail_total])]),
+        FakePage("", [FakeTable([summary_next_total]), FakeTable([
+            DETAIL_HEADER, *DETAIL, detail_total, detail_next_total,
+        ])]),
     ]
     monkeypatch.setattr(pdfplumber, "open", lambda _: FakePDF(pages))
     result = check_dongwu_statement_pdf(b"synthetic PDF bytes")
     assert result.status == "matched_unverified"
     assert result.summary_row_count == 1
     assert result.detail_row_count == 2
+    assert result.footer_totals_checked is True
+    assert result.footer_totals_mismatched_count == 0
 
 
 def test_pdf_rejects_trade_table_width_change_after_header(monkeypatch):
@@ -241,3 +266,38 @@ def test_pdf_rejects_trade_table_width_change_after_header(monkeypatch):
     monkeypatch.setattr(pdfplumber, "open", lambda _: FakePDF(pages))
     with pytest.raises(ValueError, match="列数"):
         check_dongwu_statement_pdf(b"synthetic PDF bytes")
+
+
+def test_pdf_footer_total_mismatch_downgrades_internal_match(monkeypatch):
+    wrong_total = ["合计", None, "人民币", None, None, None, None, "-2999", "1", "0", "0"]
+    detail_total = [
+        "合计", None, "人民币", None, None, None, None, None,
+        "-3000", "1", "0", "0", "0", None,
+    ]
+    pages = [
+        FakePage("东吴证券对账单\n账单周期：2026年08月05日-2026年11月02日", []),
+        FakePage("", [FakeTable([SUMMARY_HEADER, SUMMARY, wrong_total])]),
+        FakePage("", [FakeTable([DETAIL_HEADER, *DETAIL, detail_total])]),
+    ]
+    monkeypatch.setattr(pdfplumber, "open", lambda _: FakePDF(pages))
+    result = check_dongwu_statement_pdf(b"synthetic PDF bytes")
+    assert result.status == "mismatch"
+    assert result.footer_totals_checked is True
+    assert result.footer_totals_mismatched_count == 1
+
+
+def test_pdf_detail_other_fee_total_mismatch_is_detected(monkeypatch):
+    summary_total = ["合计", None, "人民币", None, None, None, None, "-3000", "1", "0", "0"]
+    wrong_detail_total = [
+        "合计", None, "人民币", None, None, None, None, None,
+        "-3000", "1", "0", "0", "0.01", None,
+    ]
+    pages = [
+        FakePage("东吴证券对账单\n账单周期：2026年08月05日-2026年11月02日", []),
+        FakePage("", [FakeTable([SUMMARY_HEADER, SUMMARY, summary_total])]),
+        FakePage("", [FakeTable([DETAIL_HEADER, *DETAIL, wrong_detail_total])]),
+    ]
+    monkeypatch.setattr(pdfplumber, "open", lambda _: FakePDF(pages))
+    result = check_dongwu_statement_pdf(b"synthetic PDF bytes")
+    assert result.status == "mismatch"
+    assert result.footer_totals_mismatched_count == 1

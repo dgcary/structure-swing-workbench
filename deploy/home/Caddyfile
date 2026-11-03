@@ -1,3 +1,7 @@
+{
+    default_sni {$HOME_LAN_IP}
+}
+
 https://{$HOME_LAN_IP} {
     tls internal
     encode zstd gzip

@@ -74,13 +74,20 @@ jobs:
           docker compose -f docker-compose.home.yml build migrate backend web
           trap 'docker compose -f docker-compose.home.yml down --remove-orphans' EXIT
           docker compose -f docker-compose.home.yml up -d --no-build
-          for attempt in $(seq 1 30); do
-            if curl --insecure --silent --output /dev/null \
+          READY=false
+          for attempt in $(seq 1 15); do
+            if curl --insecure --fail --silent --show-error --max-time 2 --output /dev/null \
               --user owner:ci-only-test-password https://127.0.0.1/api/health; then
+              READY=true
               break
             fi
             sleep 2
           done
+          if [ "$READY" != true ]; then
+            docker compose -f docker-compose.home.yml ps
+            docker compose -f docker-compose.home.yml logs --tail=80 web backend migrate
+            exit 1
+          fi
           docker compose -f docker-compose.home.yml cp \
             web:/data/caddy/pki/authorities/local/root.crt ./ci-home-root.crt
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \

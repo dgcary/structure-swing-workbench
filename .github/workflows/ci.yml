@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: 验证家庭配置与构建镜像（仅合成口令）
         env:
-          HOME_LAN_IP: 192.168.1.10
+          HOME_LAN_IP: 127.0.0.1
           HOME_DB_PASSWORD: 0123456789abcdef0123456789abcdef
           HOME_JOURNAL_TOKEN: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         run: |
@@ -72,3 +72,37 @@ jobs:
             -e HOME_LAN_IP -e HOME_PASSWORD_HASH caddy:2-alpine \
             caddy adapt --config /etc/caddy/Caddyfile --validate >/dev/null
           docker compose -f docker-compose.home.yml build migrate backend web
+          trap 'docker compose -f docker-compose.home.yml down --remove-orphans' EXIT
+          docker compose -f docker-compose.home.yml up -d --no-build
+          for attempt in $(seq 1 30); do
+            if curl --insecure --silent --output /dev/null \
+              --user owner:ci-only-test-password https://127.0.0.1/api/health; then
+              break
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.home.yml cp \
+            web:/data/caddy/pki/authorities/local/root.crt ./ci-home-root.crt
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./ci-home-root.crt https://127.0.0.1/api/health)" = 401
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password https://127.0.0.1/api/health \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["status"] == "ok"'
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password \
+            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
+            https://127.0.0.1/api/workbench/manual-journal \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["latest_revision"] == 0'
+          OBSERVED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password \
+            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "{\"expected_revision\":0,\"observed_at\":\"$OBSERVED_AT\",\"available_cash\":\"1000\",\"lots\":[]}" \
+            https://127.0.0.1/api/workbench/manual-journal \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["revision"] == 1'
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password \
+            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
+            https://127.0.0.1/api/workbench/manual-journal \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["latest_revision"] == 1'

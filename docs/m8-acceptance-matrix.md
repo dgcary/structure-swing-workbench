@@ -486,3 +486,9 @@
 - 独立家庭 Compose 配置与现有开发配置分开：全站登录、内部 CA HTTPS、仅指定内网 IP 的 443 端口对外，后端与数据库不发布端口；见 [家中手机与电脑共用工作台](m8-home-deployment.md)。用户设备尚未安装、证书尚未信任，手机 Safari 尚未实机验收。
 - 本地检查：后端 612 passed、4 skipped，Ruff 通过；前端 125 passed，TypeScript 与 Vite 构建通过。覆盖自动持仓、跨批卖出、连续补录、空仓自报、旧日期读取和零值规范化。家庭 Compose YAML 解析及端口隔离静态检查通过。当前机器没有 Docker/Caddy，容器启动、证书与手机访问仍待实机验证。CI 仍须以最终提交的实际结果为准。
 - 手工台账始终为用户自报记录，不进入正式账户/成交/审计链。券商全量认证、可信当前价格、正式 BROKEN T、T+1 与换仓仍缺。**M8 Gate FAIL，PR #19 保持 Draft，不合并、不部署。**
+
+### 2026-11-04 增量：家庭 HTTPS 包合成端到端验证
+
+- [PR #19 最新 CI #41709139335](https://github.com/dgcary/structure-swing-workbench/actions/runs/41709139335) 在提交 `a5eca8988d61816121aa1dfd6566bf2c925ef2b0` 成功完成；`home-package`、前端和后端任务均通过。
+- CI 在隔离容器内启动家庭 Compose 包，验证 HTTPS 全站登录、手工台账首次保存、买入后自动更新、容器重启后记录保留、无令牌拒绝访问及旧版本写入冲突拒绝。此项补上了容器启动与访问路径的**合成验证**，取代前文“当前机器没有 Docker/Caddy，容器启动仍待验证”的旧状态。
+- 尚未在用户的 Ubuntu 台式机或 NAS 安装，也未让手机 Safari 信任家庭 CA 并实测。当前仓位仍待用户在实际设备上人工对齐。券商独立全量数据、可信现价、正式 BROKEN T、T+1 与换仓业务闭环仍缺。**M8 Gate FAIL；PR #19 保持 Draft，不合并、不部署。**

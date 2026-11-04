@@ -11,7 +11,9 @@ https://{$HOME_LAN_IP} {
     }
 
     handle_path /api/* {
-        reverse_proxy backend:8000
+        reverse_proxy backend:8000 {
+            header_up X-Workbench-Journal-Token {env.HOME_JOURNAL_TOKEN}
+        }
     }
 
     handle {

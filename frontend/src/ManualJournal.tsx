@@ -25,7 +25,7 @@ function utcTime(value: string): string {
 }
 function errorFor(status: number): string {
   if (status === 404) return "手工台账尚未在家庭工作台中启用。";
-  if (status === 401) return "访问口令不正确。";
+  if (status === 401) return "网页登录已失效，请刷新页面后重新登录。";
   if (status === 403) return "手机访问需要可信 HTTPS；本机可使用回环地址。";
   if (status === 409) return "另一设备已保存新版本。当前填写内容没有被覆盖，请记下修改后重新读取。";
   if (status === 413) return "记录过大，请减少持仓批次或备注。";
@@ -35,7 +35,6 @@ function errorFor(status: number): string {
 
 export function ManualJournal() {
   const allowed = canUseManualJournal(window.location);
-  const [token, setToken] = useState("");
   const [journal, setJournal] = useState<ManualJournalResponse | null>(null);
   const [observedAt, setObservedAt] = useState(nowLocal);
   const [cash, setCash] = useState("");
@@ -54,7 +53,10 @@ export function ManualJournal() {
   const [message, setMessage] = useState("");
   const requestId = useRef(0);
 
-  useEffect(() => () => { requestId.current += 1; }, []);
+  useEffect(() => {
+    if (allowed) void connect();
+    return () => { requestId.current += 1; };
+  }, []);
 
   function prepare(data: ManualJournalResponse) {
     setObservedAt(nowLocal());
@@ -71,10 +73,8 @@ export function ManualJournal() {
     setNote("");
   }
 
-  async function read(accessToken: string, prefill: boolean): Promise<ManualJournalResponse> {
-    const response = await fetch("/api/workbench/manual-journal", {
-      headers: { "X-Workbench-Journal-Token": accessToken },
-    });
+  async function read(prefill: boolean): Promise<ManualJournalResponse> {
+    const response = await fetch("/api/workbench/manual-journal");
     if (!response.ok) throw new Error(errorFor(response.status));
     const body: unknown = await response.json();
     const checked = parseManualJournal(body);
@@ -83,12 +83,11 @@ export function ManualJournal() {
   }
 
   async function connect() {
-    if (!allowed) { setError("此页面未使用可信连接，已禁止发送口令。"); return; }
-    if (token.length < 32) { setError("请输入家庭工作台的完整访问口令。"); return; }
+    if (!allowed) { setError("请通过可信 HTTPS 打开家庭工作台。"); return; }
     const active = ++requestId.current;
     setPending(true); setError(""); setMessage("");
     try {
-      const checked = await read(token, true);
+      const checked = await read(true);
       if (active === requestId.current) {
         setJournal(checked);
         setMessage("已读取同一份服务端手工台账；下方表单已复制最新记录供修改。");
@@ -106,7 +105,7 @@ export function ManualJournal() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!journal || !allowed || token.length < 32) return;
+    if (!journal || !allowed) return;
     let payload: object;
     try {
       payload = {
@@ -131,12 +130,12 @@ export function ManualJournal() {
     try {
       const response = await fetch("/api/workbench/manual-journal", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Workbench-Journal-Token": token },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error(errorFor(response.status));
       posted = true;
-      const checked = await read(token, false);
+      const checked = await read(false);
       if (active === requestId.current) {
         setJournal(checked);
         prepare(checked);
@@ -153,7 +152,7 @@ export function ManualJournal() {
 
   async function saveOperation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!journal?.latest || !allowed || token.length < 32) return;
+    if (!journal?.latest || !allowed) return;
     let payload: object;
     try {
       const allocations = operation.side === "SELL" ? buildSellAllocations(
@@ -180,12 +179,12 @@ export function ManualJournal() {
     try {
       const response = await fetch("/api/workbench/manual-journal/operation", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Workbench-Journal-Token": token },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error(errorFor(response.status));
       posted = true;
-      const checked = await read(token, false);
+      const checked = await read(false);
       if (active === requestId.current) {
         setJournal(checked); prepare(checked);
         setMessage(`买卖已记入第 ${checked.latest_revision} 版，持仓数量由工作台自动更新；请核对新版本。`);
@@ -206,14 +205,8 @@ export function ManualJournal() {
     <h2>手工账户台账</h2>
     <p className="notice">只记录你填写的资金、持仓批次和买卖操作。买入金额是手工登记的投入金额，不是当前市值；记录不与券商自动对账，也不产生交易许可。</p>
     {!allowed && <p role="alert">当前网页是局域网明文连接。为保护账户记录，手机需通过可信 HTTPS 打开工作台。</p>}
-    <label>家庭工作台访问口令
-      <input type="password" autoComplete="off" disabled={pending} value={token} onChange={(event) => {
-        requestId.current += 1; setPending(false); setJournal(null); setToken(event.target.value);
-        setError(""); setMessage("");
-      }} />
-    </label>
-    <button type="button" disabled={!allowed || pending || !token} onClick={() => { void connect(); }}>
-      {pending ? "正在处理…" : "读取手工台账"}
+    <button type="button" disabled={!allowed || pending} onClick={() => { void connect(); }}>
+      {pending ? "正在处理…" : "重新读取手工台账"}
     </button>
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}

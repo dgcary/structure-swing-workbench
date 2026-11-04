@@ -7,7 +7,7 @@
 ## 启用条件
 
 - 默认为关闭。设置 `WORKBENCH_MANUAL_JOURNAL_ENABLED=true` 与独立随机生成的 32 字符以上 `WORKBENCH_MANUAL_JOURNAL_TOKEN`，并完成 Alembic 迁移。
-- API 的读与写均需独立的 `X-Workbench-Journal-Token` 访问口令，避免与整站登录共用 `Authorization`。网页只在内存中保留口令，切换离开页面后清除；局域网明文 HTTP 页面不会发送口令。服务端也拒绝远程明文 HTTP 与伪造的 `X-Forwarded-Proto` 请求。
+- API 的读与写仍需内部 `X-Workbench-Journal-Token` 密钥。家庭入口在完成全站登录后向后端注入该密钥，浏览器不接收或输入它；直连后端仍须独立认证。服务端拒绝远程明文 HTTP 与伪造的 `X-Forwarded-Proto` 请求。
 - 已准备独立的[家庭运行配置](m8-home-deployment.md)：全站登录、内部 CA HTTPS、仅固定内网 IP 的 443 端口对外，数据库与后端不发布端口。**尚未在用户的 Ubuntu/NAS 与手机 Safari 实机验证**；现有 5173/8000 开发端口不可作为家庭共享入口。
 - 本地回环 HTTP 仅供开发验证。任何代理都须正确地把受信任 TLS 连接呈现为 ASGI `https`；不能让任意请求头伪造该事实。
 

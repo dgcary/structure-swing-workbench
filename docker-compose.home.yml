@@ -53,6 +53,7 @@ services:
     environment:
       HOME_LAN_IP: ${HOME_LAN_IP:?Set HOME_LAN_IP in .env.home}
       HOME_PASSWORD_HASH: ${HOME_PASSWORD_HASH:?Set HOME_PASSWORD_HASH in .env.home}
+      HOME_JOURNAL_TOKEN: ${HOME_JOURNAL_TOKEN:?Set HOME_JOURNAL_TOKEN in .env.home}
     depends_on:
       - backend
     ports:

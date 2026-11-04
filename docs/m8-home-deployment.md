@@ -5,12 +5,12 @@
 ## 首次准备
 
 1. 在运行设备上安装 Docker Engine 与 Docker Compose 插件，并给该设备设定固定的家庭内网 IPv4 地址（或在路由器中保留地址）。不要配置路由器端口转发。
-2. 在仓库根目录将 `.env.home.example` 复制为 `.env.home`。填写固定内网 IP，并分别生成数据库密码和手工台账口令，例如各用一次 `openssl rand -hex 32`。不要复用两个值，不要将 `.env.home` 传到 GitHub。
+2. 在仓库根目录将 `.env.home.example` 复制为 `.env.home`。填写固定内网 IP，并分别生成数据库密码和台账服务内部密钥，例如各用一次 `openssl rand -hex 32`。不要复用两个值，不要将 `.env.home` 传到 GitHub。内部密钥由家庭入口自动传给后端，用户无需输入。
 3. 选择一个单独的网页登录密码。运行 `docker run --rm -it caddy:2-alpine caddy hash-password`，在提示下输入密码，将输出的完整 bcrypt 哈希填入 `.env.home` 的 `HOME_PASSWORD_HASH`，保留外层单引号和内部所有 `$`。网页登录用户名固定为 `owner`。不要把明文密码填入配置文件。
 4. 运行 `docker compose --env-file .env.home -f docker-compose.home.yml config`，核对只发布固定内网 IP 的 443 端口，且数据库、后端没有 `ports`。该命令可能显示配置中的密码和口令，不要分享其输出。
 5. 运行 `docker compose --env-file .env.home -f docker-compose.home.yml up -d --build`。第一次会建立 PostgreSQL 数据卷、执行数据库迁移，再启动后端与加密网页入口。用 `docker compose --env-file .env.home -f docker-compose.home.yml ps` 核对状态。
 
-这套家庭配置与现有 `docker-compose.yml` 开发配置独立。网页入口使用全站登录、内部 CA 颁发的 HTTPS 证书，只有 443 端口绑定到指定家庭内网 IP；后端和数据库不发布宿主机端口。正式账户读取、正式动作日期写入及本机 PDF 检查保持关闭。手工台账需要网页登录后再输入独立台账口令；后者仅保留在当前网页内存。
+这套家庭配置与现有 `docker-compose.yml` 开发配置独立。网页入口使用全站登录、内部 CA 颁发的 HTTPS 证书，只有 443 端口绑定到指定家庭内网 IP；后端和数据库不发布宿主机端口。正式账户读取、正式动作日期写入及本机 PDF 检查保持关闭。登录网页后，手工台账自动读取；内部密钥只由代理传给后端，不发送到浏览器。
 
 ## 让手机信任家庭证书
 
@@ -30,7 +30,7 @@ docker compose --env-file .env.home -f docker-compose.home.yml cp web:/data/cadd
 
 ## 维护与边界
 
-- PostgreSQL 数据卷保存手工记录，Caddy 数据卷保存家庭证书。升级前分别备份这两份数据和 `.env.home`，并保管网页密码与台账口令；不要使用 `docker compose down -v` 删除卷。
+- PostgreSQL 数据卷保存手工记录，Caddy 数据卷保存家庭证书。升级前分别备份这两份数据和 `.env.home`，并保管网页登录密码；不要使用 `docker compose down -v` 删除卷。
 - 仅家中同网使用；运行设备关机、休眠或离开网络时，手机无法连接。要改用 NAS，先在 Ubuntu 上验证，再迁移数据库与证书数据。
 - 此部署不会连接东吴证券，也不会实时获取持仓、股价或可卖数量。手工记录不进入正式审计与交易许可。M8 总体验收仍不通过。
 

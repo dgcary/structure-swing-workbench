@@ -69,7 +69,7 @@ jobs:
           export HOME_PASSWORD_HASH="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext ci-only-test-password)"
           docker compose -f docker-compose.home.yml config -q
           docker run --rm -v "$PWD/deploy/home/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            -e HOME_LAN_IP -e HOME_PASSWORD_HASH caddy:2-alpine \
+            -e HOME_LAN_IP -e HOME_PASSWORD_HASH -e HOME_JOURNAL_TOKEN caddy:2-alpine \
             caddy adapt --config /etc/caddy/Caddyfile --validate >/dev/null
           docker compose -f docker-compose.home.yml build migrate backend web
           trap 'docker compose -f docker-compose.home.yml down --remove-orphans' EXIT
@@ -129,4 +129,3 @@ jobs:
             --header 'Content-Type: application/json' \
             --data "{\"expected_revision\":1,\"observed_at\":\"$OBSERVED_AT\",\"available_cash\":\"900\",\"lots\":[]}" \
             https://127.0.0.1/api/workbench/manual-journal)" = 409
-

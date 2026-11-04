@@ -97,7 +97,6 @@ jobs:
             | python3 -c 'import json,sys; assert json.load(sys.stdin)["status"] == "ok"'
           curl --fail --silent --show-error --cacert ./ci-home-root.crt \
             --user owner:ci-only-test-password \
-            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
             https://127.0.0.1/api/workbench/manual-journal \
             | python3 -c 'import json,sys; assert json.load(sys.stdin)["latest_revision"] == 0'
           BASE_AT="$(date -u -d '-2 hours' +'%Y-%m-%dT%H:%M:%SZ')"
@@ -105,31 +104,29 @@ jobs:
           OBSERVED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           curl --fail --silent --show-error --cacert ./ci-home-root.crt \
             --user owner:ci-only-test-password \
-            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
             --header 'Content-Type: application/json' \
             --data "{\"expected_revision\":0,\"observed_at\":\"$BASE_AT\",\"available_cash\":\"1000\",\"lots\":[]}" \
             https://127.0.0.1/api/workbench/manual-journal \
             | python3 -c 'import json,sys; assert json.load(sys.stdin)["revision"] == 1'
           curl --fail --silent --show-error --cacert ./ci-home-root.crt \
             --user owner:ci-only-test-password \
-            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
             --header 'Content-Type: application/json' \
             --data "{\"expected_revision\":1,\"observed_at\":\"$OBSERVED_AT\",\"operation\":{\"side\":\"BUY\",\"symbol\":\"600000.SH\",\"quantity\":\"20\",\"price\":\"10\",\"fee\":\"0\",\"executed_at\":\"$TRADE_AT\"}}" \
             https://127.0.0.1/api/workbench/manual-journal/operation \
             | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["revision"] == 2 and r["lots"][0]["quantity"] == "20"'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             --cacert ./ci-home-root.crt --user owner:ci-only-test-password \
-            https://127.0.0.1/api/workbench/manual-journal)" = 401
+            --header 'X-Workbench-Journal-Token: wrong-client-value' \
+            https://127.0.0.1/api/workbench/manual-journal)" = 200
           docker compose -f docker-compose.home.yml restart backend web
           curl --fail --silent --show-error --cacert ./ci-home-root.crt \
             --retry 10 --retry-all-errors --retry-delay 1 \
             --user owner:ci-only-test-password \
-            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
             https://127.0.0.1/api/workbench/manual-journal \
             | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["latest_revision"] == 2 and r["latest"]["lots"][0]["quantity"] == "20"'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             --cacert ./ci-home-root.crt --user owner:ci-only-test-password \
-            --header "X-Workbench-Journal-Token: $HOME_JOURNAL_TOKEN" \
             --header 'Content-Type: application/json' \
             --data "{\"expected_revision\":1,\"observed_at\":\"$OBSERVED_AT\",\"available_cash\":\"900\",\"lots\":[]}" \
             https://127.0.0.1/api/workbench/manual-journal)" = 409
+

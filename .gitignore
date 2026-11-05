@@ -16,6 +16,7 @@ dist/
 .env
 .env.*
 !.env.example
+structure-swing-home-root.crt
 
 # IDE
 .vscode/

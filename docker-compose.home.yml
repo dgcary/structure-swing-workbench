@@ -1,0 +1,69 @@
+name: structure-swing-home
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: structure_swing
+      POSTGRES_USER: structure_swing
+      POSTGRES_PASSWORD: ${HOME_DB_PASSWORD:?Set HOME_DB_PASSWORD in .env.home}
+    volumes:
+      - home_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U structure_swing -d structure_swing"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/home/Dockerfile.backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://structure_swing:${HOME_DB_PASSWORD:?Set HOME_DB_PASSWORD in .env.home}@postgres:5432/structure_swing
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/home/Dockerfile.backend
+    environment:
+      APP_ENV: home
+      DATABASE_URL: postgresql+psycopg://structure_swing:${HOME_DB_PASSWORD:?Set HOME_DB_PASSWORD in .env.home}@postgres:5432/structure_swing
+      CORS_ORIGINS: https://${HOME_LAN_IP:?Set HOME_LAN_IP in .env.home}
+      WORKBENCH_PERSISTED_READ_ENABLED: "false"
+      WORKBENCH_ACTION_DATE_WRITE_ENABLED: "false"
+      WORKBENCH_STATEMENT_CHECK_ENABLED: "false"
+      WORKBENCH_MANUAL_JOURNAL_ENABLED: "true"
+      WORKBENCH_MANUAL_JOURNAL_TOKEN: ${HOME_JOURNAL_TOKEN:?Set HOME_JOURNAL_TOKEN in .env.home}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/home/Dockerfile.web
+    environment:
+      HOME_LAN_IP: ${HOME_LAN_IP:?Set HOME_LAN_IP in .env.home}
+      HOME_PASSWORD_HASH: ${HOME_PASSWORD_HASH:?Set HOME_PASSWORD_HASH in .env.home}
+      HOME_JOURNAL_TOKEN: ${HOME_JOURNAL_TOKEN:?Set HOME_JOURNAL_TOKEN in .env.home}
+    depends_on:
+      - backend
+    ports:
+      - "${HOME_LAN_IP:?Set HOME_LAN_IP in .env.home}:443:443"
+    volumes:
+      - home_caddy_data:/data
+      - home_caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  home_postgres_data:
+  home_caddy_data:
+  home_caddy_config:

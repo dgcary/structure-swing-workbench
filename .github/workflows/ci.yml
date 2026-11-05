@@ -8,6 +8,20 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: swing_test
+          POSTGRES_PASSWORD: swing_test
+          POSTGRES_DB: swing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U swing_test -d swing_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -18,7 +32,14 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install --upgrade pip
       - run: pip install ".[dev]"
-      - run: pytest
+      - name: 验证 PostgreSQL 迁移
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://swing_test:swing_test@127.0.0.1:5432/swing_test
+      - name: 后端测试（含真实 PostgreSQL 只读投影）
+        run: pytest
+        env:
+          WORKBENCH_PG_TEST_URL: postgresql+psycopg://swing_test:swing_test@127.0.0.1:5432/swing_test
       - run: ruff check .
 
   frontend:
@@ -33,3 +54,78 @@ jobs:
           node-version: "22"
       - run: npm install
       - run: npm run build
+      - run: npm test
+
+  home-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 验证家庭配置与构建镜像（仅合成口令）
+        env:
+          HOME_LAN_IP: 127.0.0.1
+          HOME_DB_PASSWORD: 0123456789abcdef0123456789abcdef
+          HOME_JOURNAL_TOKEN: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        run: |
+          export HOME_PASSWORD_HASH="$(docker run --rm caddy:2-alpine caddy hash-password --plaintext ci-only-test-password)"
+          docker compose -f docker-compose.home.yml config -q
+          docker run --rm -v "$PWD/deploy/home/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e HOME_LAN_IP -e HOME_PASSWORD_HASH -e HOME_JOURNAL_TOKEN caddy:2-alpine \
+            caddy adapt --config /etc/caddy/Caddyfile --validate >/dev/null
+          docker compose -f docker-compose.home.yml build migrate backend web
+          trap 'docker compose -f docker-compose.home.yml down --remove-orphans' EXIT
+          docker compose -f docker-compose.home.yml up -d --no-build
+          READY=false
+          for attempt in $(seq 1 15); do
+            if curl --insecure --fail --silent --show-error --max-time 2 --output /dev/null \
+              --user owner:ci-only-test-password https://127.0.0.1/api/health; then
+              READY=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$READY" != true ]; then
+            docker compose -f docker-compose.home.yml ps
+            docker compose -f docker-compose.home.yml logs --tail=80 web backend migrate
+            exit 1
+          fi
+          docker compose -f docker-compose.home.yml cp \
+            web:/data/caddy/pki/authorities/local/root.crt ./ci-home-root.crt
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./ci-home-root.crt https://127.0.0.1/api/health)" = 401
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password https://127.0.0.1/api/health \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["status"] == "ok"'
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password \
+            https://127.0.0.1/api/workbench/manual-journal \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["latest_revision"] == 0'
+          BASE_AT="$(date -u -d '-2 hours' +'%Y-%m-%dT%H:%M:%SZ')"
+          TRADE_AT="$(date -u -d '-1 hour' +'%Y-%m-%dT%H:%M:%SZ')"
+          OBSERVED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password \
+            --header 'Content-Type: application/json' \
+            --data "{\"expected_revision\":0,\"observed_at\":\"$BASE_AT\",\"available_cash\":\"1000\",\"lots\":[]}" \
+            https://127.0.0.1/api/workbench/manual-journal \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["revision"] == 1'
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --user owner:ci-only-test-password \
+            --header 'Content-Type: application/json' \
+            --data "{\"expected_revision\":1,\"observed_at\":\"$OBSERVED_AT\",\"operation\":{\"side\":\"BUY\",\"symbol\":\"600000.SH\",\"quantity\":\"20\",\"price\":\"10\",\"fee\":\"0\",\"executed_at\":\"$TRADE_AT\"}}" \
+            https://127.0.0.1/api/workbench/manual-journal/operation \
+            | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["revision"] == 2 and r["lots"][0]["quantity"] == "20"'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./ci-home-root.crt --user owner:ci-only-test-password \
+            --header 'X-Workbench-Journal-Token: wrong-client-value' \
+            https://127.0.0.1/api/workbench/manual-journal)" = 200
+          docker compose -f docker-compose.home.yml restart backend web
+          curl --fail --silent --show-error --cacert ./ci-home-root.crt \
+            --retry 10 --retry-all-errors --retry-delay 1 \
+            --user owner:ci-only-test-password \
+            https://127.0.0.1/api/workbench/manual-journal \
+            | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["latest_revision"] == 2 and r["latest"]["lots"][0]["quantity"] == "20"'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./ci-home-root.crt --user owner:ci-only-test-password \
+            --header 'Content-Type: application/json' \
+            --data "{\"expected_revision\":1,\"observed_at\":\"$OBSERVED_AT\",\"available_cash\":\"900\",\"lots\":[]}" \
+            https://127.0.0.1/api/workbench/manual-journal)" = 409

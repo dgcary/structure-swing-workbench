@@ -1,0 +1,24 @@
+{
+    default_sni {$HOME_LAN_IP}
+}
+
+https://{$HOME_LAN_IP} {
+    tls internal
+    encode zstd gzip
+
+    basic_auth {
+        owner {env.HOME_PASSWORD_HASH}
+    }
+
+    handle_path /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Workbench-Journal-Token {env.HOME_JOURNAL_TOKEN}
+        }
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

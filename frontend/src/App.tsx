@@ -6,6 +6,7 @@ import { KlinePreview } from "./KlinePreview";
 import { AccountSnapshotPreview } from "./AccountSnapshotPreview";
 import { DongwuStatementPreview } from "./DongwuStatementPreview";
 import { ManualJournal } from "./ManualJournal";
+import { ManualAccountSummary } from "./ManualAccountSummary";
 import { TCyclePreview } from "./TCyclePreview";
 import { LocalPlanDrafts } from "./LocalPlanDrafts";
 import { LocalReview } from "./LocalReview";
@@ -378,6 +379,7 @@ export function App() {
               <p>{overview?.notice ?? "账户、持仓、计划与审计必须有可追溯来源；缺失值不会显示为零或通过。"}</p>
               {overviewError && <p role="alert">工作台接口异常：{overviewError}</p>}
             </section>
+            <ManualAccountSummary onOpen={() => setSection("手工台账")} />
             <details className="upload-disclosure">
               <summary>导入本地 CSV · 临时预览</summary>
               <AccountSnapshotPreview

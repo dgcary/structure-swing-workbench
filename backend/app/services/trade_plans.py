@@ -133,7 +133,7 @@ class TradePlanService:
         if version.state is not PlanVersionState.DRAFT:
             raise ValueError("只有草稿版本可以提交审计")
         version.state = PlanVersionState.PENDING_AUDIT
-        session.flush([version])
+        session.flush()
 
     @staticmethod
     def activate_version(
@@ -153,13 +153,13 @@ class TradePlanService:
         plan.status = PlanStatus.ACTIVE
         plan.is_active = True
         plan.closed_at = None
-        session.flush([plan])
+        session.flush()
 
         current = TradePlanService.get_effective_version(session, version.plan_id)
         if current is not None and current.id != version.id:
             current.is_effective = False
             current.state = PlanVersionState.SUPERSEDED
-            session.flush([current])
+            session.flush()
 
         version.is_effective = True
         version.state = (
@@ -167,7 +167,7 @@ class TradePlanService:
             if with_override
             else PlanVersionState.EFFECTIVE
         )
-        session.flush([version])
+        session.flush()
 
     @staticmethod
     def reject_version(session: Session, version: TradePlanVersion) -> None:
@@ -175,7 +175,7 @@ class TradePlanService:
             raise ValueError("只有待审计版本可以标记为已拒绝")
         version.is_effective = False
         version.state = PlanVersionState.REJECTED
-        session.flush([version])
+        session.flush()
 
     @staticmethod
     def get_effective_version(session: Session, plan_id: str) -> TradePlanVersion | None:
@@ -191,7 +191,7 @@ class TradePlanService:
         """Update non-critical metadata without creating a new auditable plan version."""
 
         plan.user_note = user_note
-        session.flush([plan])
+        session.flush()
 
     @staticmethod
     def close_plan(session: Session, plan: TradePlan) -> None:
@@ -211,12 +211,12 @@ class TradePlanService:
         }:
             current.is_effective = False
             current.state = PlanVersionState.CLOSED
-            session.flush([current])
+            session.flush()
 
         plan.is_active = False
         plan.status = PlanStatus.CLOSED
         plan.closed_at = utc_now()
-        session.flush([plan])
+        session.flush()
 
     @staticmethod
     def _prepare_version_data(

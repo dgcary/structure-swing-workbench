@@ -403,6 +403,27 @@ h3 {
   min-width: 160px;
 }
 
+.timeframe-picker {
+  display: flex;
+  gap: 6px;
+}
+
+.timeframe-picker .tab {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.chart-container {
+  width: 100%;
+  height: 420px;
+}
+
+@media (max-width: 800px) {
+  .chart-container {
+    height: 300px;
+  }
+}
+
 button {
   border: none;
   border-radius: 8px;

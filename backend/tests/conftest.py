@@ -1,12 +1,15 @@
 from collections.abc import Generator
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.api.deps import get_session
 from app.db import Base
+from app.main import app
 
 
 @pytest.fixture
@@ -38,3 +41,22 @@ def session(engine: Engine) -> Generator[Session, None, None]:
     with Session(engine, expire_on_commit=False) as db_session:
         yield db_session
         db_session.rollback()
+
+
+@pytest.fixture
+def api_client(engine: Engine) -> Generator[TestClient, None, None]:
+    def _override() -> Generator[Session, None, None]:
+        with Session(engine, expire_on_commit=False) as db_session:
+            try:
+                yield db_session
+                db_session.commit()
+            except Exception:
+                db_session.rollback()
+                raise
+
+    app.dependency_overrides[get_session] = _override
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        app.dependency_overrides.pop(get_session, None)

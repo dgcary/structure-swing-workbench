@@ -230,4 +230,6 @@ export const api = {
   screenCandidate: (body: unknown) =>
     request<ScreeningResultDto>("/candidates/screen", { method: "POST", body: JSON.stringify(body) }),
   marketQuote: (symbol: string) => request<MarketResultDto>(`/market/quote/${symbol}`),
+  marketBars: (symbol: string, timeframe: string) =>
+    request<MarketResultDto>(`/market/bars/${symbol}?timeframe=${encodeURIComponent(timeframe)}`),
 };

@@ -9,7 +9,9 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.domain.enums import (
+    ActionType,
     EntryMode,
+    OrderSide,
     PositionBucketType,
     SetupType,
     StructureStage,
@@ -74,6 +76,29 @@ class AuditRunRequest(BaseModel):
 class AuditDecisionRequest(BaseModel):
     approve: bool
     user_confirmed: bool = False
+    override_reason: str | None = None
+
+
+class ActionCreateRequest(BaseModel):
+    action_type: ActionType
+    side: OrderSide
+    planned_price_low: Decimal | None = None
+    planned_price_high: Decimal | None = None
+    planned_quantity: Decimal | None = None
+    planned_position_pct: Decimal | None = None
+    t_cycle_key: str | None = None
+    user_note: str | None = None
+
+
+class FillCreateRequest(BaseModel):
+    quantity: Decimal
+    price: Decimal
+    side: OrderSide | None = None
+    fee: Decimal = Decimal(0)
+    executed_at: datetime
+    source: str = "manual"
+    external_execution_id: str | None = None
+    override_confirmed: bool = False
     override_reason: str | None = None
 
 

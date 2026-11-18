@@ -11,6 +11,84 @@ const riskTone = (riskPct: string | null): string => {
   return "risk-fail";
 };
 
+const csvSamples: Record<string, string> = {
+  account: "equity,available_cash,as_of\n1000000,500000,2026-11-18T10:00:00+08:00",
+  holdings: "symbol,quantity,cost,as_of\n600000,10000,10.20,2026-11-18T10:00:00+08:00",
+};
+
+function CsvImportPanel({ onImported }: { onImported: () => void }) {
+  const [kind, setKind] = useState("account");
+  const [data, setData] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const result = await api.importCsv(kind, data);
+      if (result.duplicate) {
+        setMessage("CSV 内容与已导入记录一致，未重复导入");
+      } else if (kind === "account") {
+        setMessage("账户快照已导入");
+      } else {
+        setMessage(`持仓快照已导入 ${result.imported ?? 0} 批（权益未知，以快照锚定持仓）`);
+      }
+      setError(null);
+      setData("");
+      onImported();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setMessage(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-heading">
+        <h2>账户 / 持仓 CSV 导入</h2>
+        <span className="muted">m5 CSV 协议；相同内容重复导入自动去重。</span>
+      </div>
+      <form
+        className="inline-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <label>
+          CSV 类型
+          <select value={kind} onChange={(event) => setKind(event.target.value)}>
+            <option value="account">账户快照（equity,available_cash,as_of）</option>
+            <option value="holdings">持仓快照（symbol,quantity,cost,as_of）</option>
+          </select>
+        </label>
+        <button type="button" className="ghost" onClick={() => setData(csvSamples[kind])}>
+          填入示例
+        </button>
+        <button type="submit" disabled={busy || data.trim() === ""}>
+          导入
+        </button>
+      </form>
+      <textarea
+        className="csv-input"
+        rows={4}
+        value={data}
+        onChange={(event) => setData(event.target.value)}
+        placeholder={csvSamples[kind]}
+      />
+      {message && <p className="notice">{message}</p>}
+      {error && (
+        <p role="alert" className="alert">
+          导入失败：{error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function OverviewSection({ backendReady }: { backendReady: boolean }) {
   const [overview, setOverview] = useState<OverviewDto | null>(null);
   const [actions, setActions] = useState<ActionDto[]>([]);
@@ -52,7 +130,9 @@ export function OverviewSection({ backendReady }: { backendReady: boolean }) {
             <div className="stat-row">
               <div className="stat">
                 <span className="stat-label">账户总权益</span>
-                <span className="stat-value">{overview.snapshot?.total_equity ?? "未录入快照"}</span>
+                <span className="stat-value">
+                  {overview.snapshot?.total_equity ?? (overview.snapshot ? "权益未知" : "未录入快照")}
+                </span>
               </div>
               <div className="stat">
                 <span className="stat-label">可用现金</span>
@@ -73,7 +153,7 @@ export function OverviewSection({ backendReady }: { backendReady: boolean }) {
               <p className="muted">快照时间：{overview.snapshot.captured_at}（来源：{overview.snapshot.source}）</p>
             )}
             {!overview.snapshot && (
-              <p className="muted">尚未录入账户快照；先在下方录入或等待 CSV 导入功能。</p>
+              <p className="muted">尚未录入账户快照；可在下方手工录入或从 CSV 导入。</p>
             )}
           </>
         )}
@@ -97,27 +177,28 @@ export function OverviewSection({ backendReady }: { backendReady: boolean }) {
               ))}
             </ul>
           )}
-          {!overview || overview.snapshot === null || overview.snapshot.positions.length === 0 ? (
-            <p className="muted">暂无持仓快照明细。</p>
+          <h3 className="sub-heading">当前持仓（快照 + 净成交）</h3>
+          {!overview || overview.current_positions.length === 0 ? (
+            <p className="muted">暂无持仓记录。</p>
           ) : (
             <table className="table">
               <thead>
                 <tr>
                   <th>证券</th>
-                  <th>数量</th>
-                  <th>市值</th>
-                  <th>券商成本</th>
+                  <th>基准数量</th>
+                  <th>净成交</th>
+                  <th>当前数量</th>
                 </tr>
               </thead>
               <tbody>
-                {overview.snapshot.positions.map((position) => (
+                {overview.current_positions.map((position) => (
                   <tr key={position.instrument_code}>
                     <td>
                       {position.instrument_name}（{position.instrument_code}）
                     </td>
-                    <td>{position.total_quantity ?? "—"}</td>
-                    <td>{position.market_value ?? "—"}</td>
-                    <td>{position.broker_cost_price ?? "—"}</td>
+                    <td>{position.baseline_quantity ?? "未知"}</td>
+                    <td>{position.net_fill_delta ?? "—"}</td>
+                    <td>{position.current_quantity ?? "未知"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -128,7 +209,7 @@ export function OverviewSection({ backendReady }: { backendReady: boolean }) {
         <article className="card">
           <h3>今日待执行动作</h3>
           <p className="muted">
-            动作由计划生成并经纪律审计；动作创建与成交录入将在执行里程碑提供，当前为只读展示。
+            动作由计划生成并经纪律审计；在「交易计划」页创建动作、录入成交。
           </p>
           {actions.length === 0 ? (
             <p>当前没有待执行动作。</p>
@@ -147,6 +228,8 @@ export function OverviewSection({ backendReady }: { backendReady: boolean }) {
           )}
         </article>
       </div>
+
+      <CsvImportPanel onImported={() => void load()} />
     </section>
   );
 }

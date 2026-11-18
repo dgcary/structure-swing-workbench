@@ -3,13 +3,15 @@ import { CandidatesSection } from "./components/CandidatesSection";
 import { MarketSection } from "./components/MarketSection";
 import { OverviewSection } from "./components/OverviewSection";
 import { PlansSection } from "./components/PlansSection";
+import { TCyclesSection } from "./components/TCyclesSection";
 import { api } from "./api";
 
-type TabKey = "overview" | "plans" | "candidates" | "market";
+type TabKey = "overview" | "plans" | "tcycles" | "candidates" | "market";
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: "overview", label: "概览" },
   { key: "plans", label: "交易计划" },
+  { key: "tcycles", label: "T 仓" },
   { key: "candidates", label: "候选筛选" },
   { key: "market", label: "行情与研究" },
 ];
@@ -144,6 +146,7 @@ export function App() {
 
       {tab === "overview" && <OverviewSection backendReady={backendReady} />}
       {tab === "plans" && <PlansSection backendReady={backendReady} />}
+      {tab === "tcycles" && <TCyclesSection backendReady={backendReady} />}
       {tab === "candidates" && <CandidatesSection backendReady={backendReady} />}
       {tab === "market" && (
         <>

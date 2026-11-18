@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -16,11 +17,19 @@ from app.api.serializers import (
     action_dto,
     audit_result_dto,
     conflict,
+    enum_dto,
     money,
     not_found,
     time_iso,
 )
-from app.db.models import AuditResult, ExecutionFill, ManualOverride, TradeAction, TradePlanVersion
+from app.db.models import (
+    AuditResult,
+    ExecutionFill,
+    ManualOverride,
+    TradeAction,
+    TradePlan,
+    TradePlanVersion,
+)
 from app.domain.enums import ActionStatus, AuditLevel
 from app.services.action_audit import (
     ActionFacts,
@@ -29,6 +38,12 @@ from app.services.action_audit import (
     audit_recorded_fill,
     blocked_by_hard_fail,
     expected_side,
+)
+from app.services.t_cycle_view import (
+    MAX_COMPLETED_CYCLES_PER_DAY,
+    T_CYCLE_ACTION_TYPES,
+    CycleFill,
+    summarize_cycle,
 )
 
 router = APIRouter(tags=["actions"])
@@ -117,6 +132,71 @@ def _outcome_details(
     }
     if extra:
         payload.update(extra)
+    return payload
+
+
+@router.get("/t-cycles")
+def list_t_cycles(
+    instrument_code: str | None = None,
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    """T 循环分组视图：按 (证券, t_cycle_key) 汇总成交，提示每日循环上限。"""
+
+    query = (
+        select(TradeAction)
+        .join(TradePlanVersion, TradeAction.plan_version_id == TradePlanVersion.id)
+        .join(TradePlan, TradePlanVersion.plan_id == TradePlan.id)
+        .options(selectinload(TradeAction.plan_version))
+        .where(TradeAction.t_cycle_key.is_not(None))
+        .where(TradeAction.action_type.in_(tuple(T_CYCLE_ACTION_TYPES)))
+        .order_by(TradeAction.created_at.asc(), TradeAction.id.asc())
+    )
+    if instrument_code:
+        query = query.where(TradePlan.instrument_code == instrument_code)
+    grouped: dict[tuple[str, str], list[TradeAction]] = {}
+    for action in session.scalars(query):
+        plan = session.get(TradePlan, action.plan_version.plan_id)
+        if plan is None:
+            continue
+        grouped.setdefault((plan.instrument_code, action.t_cycle_key or ""), []).append(action)
+
+    completed_days: dict[tuple[str, Any], int] = {}
+    payload: list[dict] = []
+    for (code, cycle_key), cycle_actions in grouped.items():
+        action_ids = [action.id for action in cycle_actions]
+        fills = list(
+            session.scalars(
+                select(ExecutionFill)
+                .where(ExecutionFill.action_id.in_(action_ids))
+                .order_by(ExecutionFill.executed_at.asc(), ExecutionFill.id.asc())
+            )
+        )
+        summary = summarize_cycle(
+            [CycleFill(fill.side, fill.quantity, fill.price) for fill in fills]
+        )
+        plan = session.get(TradePlan, cycle_actions[0].plan_version.plan_id)
+        day = fills[0].executed_at.date() if fills else cycle_actions[0].created_at.date()
+        if summary.completed:
+            key = (code, day)
+            completed_days[key] = completed_days.get(key, 0) + 1
+        payload.append(
+            {
+                "t_cycle_key": cycle_key,
+                "instrument_code": code,
+                "instrument_name": plan.instrument_name if plan else code,
+                "day": day.isoformat(),
+                "status": "已完成" if summary.completed else "进行中",
+                "matched_quantity": money(summary.matched_quantity),
+                "matched_gross_pnl": money(summary.matched_gross_pnl),
+                "remaining_quantity": money(summary.remaining_quantity),
+                "open_side": enum_dto(summary.open_side),
+                "fill_count": len(fills),
+                "action_ids": action_ids,
+            }
+        )
+    for item in payload:
+        key = (item["instrument_code"], date.fromisoformat(item["day"]))
+        item["exceeds_daily_limit"] = completed_days.get(key, 0) > MAX_COMPLETED_CYCLES_PER_DAY
     return payload
 
 

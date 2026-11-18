@@ -9,9 +9,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.account.csv_ingest import SCHEMAS
+from app.account.imports import parse_number, parse_rows, parse_time
 from app.api.deps import get_session
-from app.api.schemas import AccountSnapshotRequest
-from app.api.serializers import enum_dto, money, not_found, time_iso
+from app.api.schemas import AccountSnapshotRequest, CsvImportRequest
+from app.api.serializers import bad_request, conflict, enum_dto, money, not_found, time_iso
 from app.db.models import (
     AccountSnapshot,
     ExecutionFill,
@@ -27,6 +29,7 @@ from app.services.trade_plans import TradePlanService
 router = APIRouter(tags=["account"])
 
 MAX_RETURNED_SNAPSHOTS = 50
+CSV_SOURCE = "csv"
 
 
 def _snapshot_dto(snapshot: AccountSnapshot) -> dict[str, Any]:
@@ -154,6 +157,130 @@ def _db_position_views(session: Session) -> list[dict[str, Any]]:
             }
         )
     return views
+
+
+def _positions_signature(
+    session: Session, snapshot: AccountSnapshot
+) -> set[tuple[str, str, str]]:
+    return {
+        (
+            position.instrument_code,
+            money(position.total_quantity) or "",
+            money(position.broker_cost_price) or "",
+        )
+        for position in snapshot.positions
+    }
+
+
+def _import_account_rows(session: Session, rows: list[dict[str, str]]) -> dict:
+    if len(rows) != 1:
+        raise conflict("账户快照每批只能有一行")
+    row = rows[0]
+    captured_at = parse_time(row["as_of"])
+    equity = parse_number(row["equity"], "账户权益", positive=True)
+    cash = parse_number(row["available_cash"], "可用现金")
+    existing = session.scalar(
+        select(AccountSnapshot).where(
+            AccountSnapshot.captured_at == captured_at,
+            AccountSnapshot.total_equity == equity,
+            AccountSnapshot.available_cash == cash,
+        )
+    )
+    if existing is not None:
+        return {"duplicate": True, "imported": 0, "snapshot": _snapshot_dto(existing)}
+    snapshot = AccountSnapshot(
+        captured_at=captured_at,
+        total_equity=equity,
+        available_cash=cash,
+        source=CSV_SOURCE,
+        source_note="账户 CSV 导入",
+    )
+    session.add(snapshot)
+    session.flush()
+    return {"duplicate": False, "imported": 1, "snapshot": _snapshot_dto(snapshot)}
+
+
+def _import_holdings_rows(session: Session, rows: list[dict[str, str]]) -> dict:
+    groups: dict[Any, list[dict[str, str]]] = {}
+    for row in rows:
+        groups.setdefault(parse_time(row["as_of"]), []).append(row)
+
+    imported = duplicates = 0
+    snapshots: list[dict] = []
+    for captured_at in sorted(groups):
+        group = groups[captured_at]
+        seen: set[str] = set()
+        for row in group:
+            code = row["symbol"].strip()
+            if not code:
+                raise conflict("持仓证券代码不能为空")
+            if code in seen:
+                raise conflict(f"同批持仓快照重复证券代码：{code}")
+            seen.add(code)
+        incoming = {
+            (
+                row["symbol"].strip(),
+                money(parse_number(row["quantity"], "持仓数量", positive=True)) or "",
+                money(parse_number(row["cost"], "持仓成本", positive=True)) or "",
+            )
+            for row in group
+        }
+        existing = session.scalars(
+            select(AccountSnapshot)
+            .where(AccountSnapshot.captured_at == captured_at, AccountSnapshot.source == CSV_SOURCE)
+            .options(selectinload(AccountSnapshot.positions))
+        ).all()
+        if any(_positions_signature(session, item) == incoming for item in existing):
+            duplicates += 1
+            continue
+        snapshot = AccountSnapshot(
+            captured_at=captured_at,
+            source=CSV_SOURCE,
+            source_note="持仓 CSV 导入（权益未知）",
+        )
+        session.add(snapshot)
+        session.flush()
+        for row in group:
+            code = row["symbol"].strip()
+            quantity = parse_number(row["quantity"], "持仓数量", positive=True)
+            cost = parse_number(row["cost"], "持仓成本", positive=True)
+            known = session.scalar(
+                select(PositionSnapshot.instrument_name)
+                .where(PositionSnapshot.instrument_code == code)
+                .order_by(PositionSnapshot.id.desc())
+            )
+            session.add(
+                PositionSnapshot(
+                    account_snapshot_id=snapshot.id,
+                    instrument_code=code,
+                    instrument_name=known or code,
+                    total_quantity=quantity,
+                    broker_cost_price=cost,
+                )
+            )
+        session.flush()
+        imported += 1
+        snapshots.append(_snapshot_dto(snapshot))
+    return {"duplicate": False, "imported": imported, "duplicates": duplicates, "snapshots": snapshots}
+
+
+@router.post("/account/imports/csv")
+def import_csv(request: CsvImportRequest, session: Session = Depends(get_session)) -> dict:
+    if request.kind not in ("account", "holdings"):
+        raise conflict("未知 CSV 类型，kind 只能为 account 或 holdings")
+    try:
+        rows = parse_rows(request.data, SCHEMAS[request.kind])
+    except ValueError as exc:
+        raise bad_request(str(exc)) from exc
+    if request.kind == "account":
+        try:
+            return _import_account_rows(session, rows)
+        except ValueError as exc:
+            raise bad_request(str(exc)) from exc
+    try:
+        return _import_holdings_rows(session, rows)
+    except ValueError as exc:
+        raise bad_request(str(exc)) from exc
 
 
 @router.post("/account/snapshots", status_code=201)

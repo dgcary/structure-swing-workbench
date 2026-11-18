@@ -6,9 +6,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
-
-from tests.test_api_account import _create_snapshot
-from tests.test_api_plans import (
+from test_api_account import _create_snapshot
+from test_api_plans import (
     _audit_version,
     _create_plan,
     _decide,

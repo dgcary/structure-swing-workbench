@@ -6,8 +6,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
-
-from tests.test_api_plans import EQUITY, PASSING_VERSION, _audit_version, _decide, _submit
+from test_api_plans import EQUITY, PASSING_VERSION, _audit_version, _decide, _submit
 
 CHINA = ZoneInfo("Asia/Shanghai")
 

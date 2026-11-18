@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session
@@ -28,9 +28,18 @@ from app.api.serializers import (
     version_audits,
 )
 from app.audit.engine import OverrideContext, apply_override
-from app.db.models import AccountSnapshot, AuditResult, ManualOverride, TradePlan, TradePlanVersion
+from app.db.models import (
+    AccountSnapshot,
+    AuditResult,
+    ExecutionFill,
+    ManualOverride,
+    TradeAction,
+    TradePlan,
+    TradePlanVersion,
+)
 from app.domain.enums import PlanStatus
 from app.services.plan_audit import PlanVersionFacts, audit_plan_version
+from app.services.plan_review import ReviewFill, review_fills
 from app.services.trade_plans import TradePlanService
 
 router = APIRouter(tags=["plans"])
@@ -326,4 +335,69 @@ def decide_version(
             "original_level": decision.original_level.value,
             "resulting_level": decision.resulting_level.value,
         },
+    }
+
+
+@router.get("/plans/{plan_id}/review")
+def review_plan(plan_id: str, session: Session = Depends(get_session)) -> dict:
+    """计划复盘：计划 vs 实际成交汇总，不构成违规判断。"""
+
+    plan = _get_plan(session, plan_id)
+    version_ids = [version.id for version in plan.versions]
+    action_ids = list(
+        session.scalars(
+            select(TradeAction.id).where(TradeAction.plan_version_id.in_(version_ids))
+        )
+    )
+    fills = list(
+        session.scalars(
+            select(ExecutionFill)
+            .where(ExecutionFill.action_id.in_(action_ids))
+            .order_by(ExecutionFill.executed_at.asc(), ExecutionFill.id.asc())
+        )
+    )
+    effective = TradePlanService.get_effective_version(session, plan.id)
+    planned_entry_low = effective.initial_entry_price_low if effective else None
+    review = review_fills(
+        [
+            ReviewFill(fill.side, fill.quantity, fill.price, fill.executed_at)
+            for fill in fills
+        ],
+        planned_entry_low,
+    )
+    audit_rows = session.execute(
+        select(AuditResult.level, func.count())
+        .where(
+            or_(
+                AuditResult.plan_version_id.in_(version_ids),
+                AuditResult.action_id.in_(action_ids) if action_ids else False,
+            )
+        )
+        .group_by(AuditResult.level)
+    ).all()
+    return {
+        "plan": {
+            "id": plan.id,
+            "instrument_code": plan.instrument_code,
+            "instrument_name": plan.instrument_name,
+            "status": enum_dto(plan.status),
+        },
+        "review": {
+            "total_buy_quantity": money(review.total_buy_quantity),
+            "total_sell_quantity": money(review.total_sell_quantity),
+            "avg_buy_price": money(review.avg_buy_price),
+            "avg_sell_price": money(review.avg_sell_price),
+            "remaining_quantity": money(review.remaining_quantity),
+            "realized_gross_pnl": money(review.realized_gross_pnl),
+            "first_fill_at": time_iso(review.first_fill_at),
+            "last_fill_at": time_iso(review.last_fill_at),
+            "holding_days": review.holding_days,
+            "long_holding_note": review.long_holding_note,
+            "entry_deviation_pct": (
+                money(review.entry_deviation_pct) if review.entry_deviation_pct is not None else None
+            ),
+        },
+        "audit_summary": [
+            {"level": enum_dto(level), "count": count} for level, count in audit_rows
+        ],
     }

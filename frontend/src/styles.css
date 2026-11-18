@@ -403,6 +403,30 @@ h3 {
   min-width: 160px;
 }
 
+.csv-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: Consolas, "Courier New", monospace;
+  resize: vertical;
+}
+
+.review-panel {
+  margin-top: 16px;
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 14px;
+}
+
+.review-panel h3 {
+  margin: 0 0 10px;
+}
+
+.sub-heading {
+  margin-top: 16px;
+}
+
 .timeframe-picker {
   display: flex;
   gap: 6px;

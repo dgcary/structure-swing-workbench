@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { PlanDto } from "../api";
+import type { PlanDto, PlanReviewDto } from "../api";
 import { api } from "../api";
 
 const levelTone: Record<string, string> = {
@@ -93,6 +93,7 @@ export function PlansSection({ backendReady }: { backendReady: boolean }) {
   const [auditEquity, setAuditEquity] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [review, setReview] = useState<PlanReviewDto | null>(null);
 
   const load = useCallback(async () => {
     if (!backendReady) return;
@@ -115,6 +116,7 @@ export function PlansSection({ backendReady }: { backendReady: boolean }) {
   const openDetail = async (planId: string) => {
     try {
       setSelected(await api.getPlan(planId));
+      setReview(await api.reviewPlan(planId));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -476,6 +478,60 @@ export function PlansSection({ backendReady }: { backendReady: boolean }) {
               </article>
             ))}
           </div>
+
+          {review && (
+            <div className="review-panel">
+              <h3>复盘（计划 vs 实际成交）</h3>
+              <dl className="facts">
+                <div>
+                  <dt>实际建仓</dt>
+                  <dd>
+                    {review.review.total_buy_quantity ?? "—"}
+                    {review.review.avg_buy_price ? ` @ ${review.review.avg_buy_price}` : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt>实际卖出</dt>
+                  <dd>
+                    {review.review.total_sell_quantity ?? "—"}
+                    {review.review.avg_sell_price ? ` @ ${review.review.avg_sell_price}` : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt>当前剩余</dt>
+                  <dd>{review.review.remaining_quantity ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>已实现毛盈亏</dt>
+                  <dd>{review.review.realized_gross_pnl ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>建仓价偏差</dt>
+                  <dd>
+                    {review.review.entry_deviation_pct
+                      ? `${review.review.entry_deviation_pct}%（对计划下沿）`
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>持有天数</dt>
+                  <dd>{review.review.holding_days ?? "—"}</dd>
+                </div>
+              </dl>
+              {review.review.long_holding_note && (
+                <p className="muted">{review.review.long_holding_note}</p>
+              )}
+              {review.audit_summary.length > 0 && (
+                <p className="muted">
+                  审计记录：
+                  {review.audit_summary
+                    .map((item) => `${item.level?.label ?? "未知"} × ${item.count}`)
+                    .join("，")}
+                </p>
+              )}
+              <p className="muted">复盘仅为数据汇总，不构成违规判断或投资建议。</p>
+            </div>
+          )}
 
           <div className="action-bar">
             <label>

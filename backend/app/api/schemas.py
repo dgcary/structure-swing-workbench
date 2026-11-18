@@ -128,6 +128,13 @@ class AccountSnapshotRequest(BaseModel):
     positions: list[PositionItem] = Field(default_factory=list)
 
 
+class CsvImportRequest(BaseModel):
+    """m5 账户 CSV 协议：kind 为 account 或 holdings。"""
+
+    kind: str
+    data: str
+
+
 class EvidenceItem(BaseModel):
     source: str
     reference: str

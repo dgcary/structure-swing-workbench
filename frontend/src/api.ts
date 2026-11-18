@@ -118,6 +118,52 @@ export type OverviewDto = {
   active_plan_count: number;
   total_risk_pct: string | null;
   position_count: number;
+  current_positions: {
+    instrument_code: string;
+    instrument_name: string;
+    baseline_quantity: string | null;
+    net_fill_delta: string | null;
+    current_quantity: string | null;
+    as_of: string | null;
+  }[];
+};
+
+export type TCycleDto = {
+  t_cycle_key: string;
+  instrument_code: string;
+  instrument_name: string;
+  day: string;
+  status: string;
+  matched_quantity: string | null;
+  matched_gross_pnl: string | null;
+  remaining_quantity: string | null;
+  open_side: EnumDto | null;
+  fill_count: number;
+  action_ids: string[];
+  exceeds_daily_limit: boolean;
+};
+
+export type PlanReviewDto = {
+  plan: {
+    id: string;
+    instrument_code: string;
+    instrument_name: string;
+    status: EnumDto | null;
+  };
+  review: {
+    total_buy_quantity: string | null;
+    total_sell_quantity: string | null;
+    avg_buy_price: string | null;
+    avg_sell_price: string | null;
+    remaining_quantity: string | null;
+    realized_gross_pnl: string | null;
+    first_fill_at: string | null;
+    last_fill_at: string | null;
+    holding_days: number | null;
+    long_holding_note: string | null;
+    entry_deviation_pct: string | null;
+  };
+  audit_summary: { level: EnumDto | null; count: number }[];
 };
 
 export type ActionDto = {
@@ -232,4 +278,12 @@ export const api = {
   marketQuote: (symbol: string) => request<MarketResultDto>(`/market/quote/${symbol}`),
   marketBars: (symbol: string, timeframe: string) =>
     request<MarketResultDto>(`/market/bars/${symbol}?timeframe=${encodeURIComponent(timeframe)}`),
+  importCsv: (kind: string, data: string) =>
+    request<{ duplicate: boolean; imported?: number; duplicates?: number; snapshot?: SnapshotDto; snapshots?: SnapshotDto[] }>(
+      "/account/imports/csv",
+      { method: "POST", body: JSON.stringify({ kind, data }) },
+    ),
+  listTCycles: (instrumentCode: string | null) =>
+    request<TCycleDto[]>(instrumentCode ? `/t-cycles?instrument_code=${encodeURIComponent(instrumentCode)}` : "/t-cycles"),
+  reviewPlan: (planId: string) => request<PlanReviewDto>(`/plans/${planId}/review`),
 };

@@ -209,8 +209,9 @@ class AccountSnapshot(IdMixin, TimestampMixin, Base):
     captured_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
-    total_equity: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
-    available_cash: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    # 持仓 CSV 导入以快照锚定持仓；权益未知时保持 NULL，不以 0 冒充。
+    total_equity: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    available_cash: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
     source_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 

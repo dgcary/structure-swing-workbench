@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from functools import lru_cache
 
 from fastapi import HTTPException
@@ -43,3 +43,16 @@ def get_market_provider() -> MarketDataProvider:
             status_code=503,
             detail="行情依赖 akshare 未安装，请在部署环境安装 market 可选依赖后重试",
         ) from exc
+
+
+def get_llm_complete() -> Callable[[str, str], str] | None:
+    """LLM complete(system, user) -> str；未配置 LLM 时返回 None。"""
+
+    settings = get_settings()
+    if not settings.llm_base_url or not settings.llm_model:
+        return None
+    from app.services.llm_client import get_llm_completer
+
+    return get_llm_completer(
+        settings.llm_base_url, settings.llm_model, settings.llm_api_key or None
+    )

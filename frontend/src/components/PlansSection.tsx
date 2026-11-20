@@ -94,6 +94,47 @@ export function PlansSection({ backendReady }: { backendReady: boolean }) {
   const [overrideReason, setOverrideReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState<PlanReviewDto | null>(null);
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const applyAiDraft = async () => {
+    setAiBusy(true);
+    try {
+      const result = await api.parsePlanText(aiText.trim());
+      const data = result.draft.version_data as Record<string, unknown>;
+      const text = (key: string): string =>
+        data[key] === undefined || data[key] === null ? "" : String(data[key]);
+      setForm((current) => ({
+        ...current,
+        instrument_code: result.draft.instrument_code ?? current.instrument_code,
+        instrument_name: result.draft.instrument_name ?? current.instrument_name,
+        setup_type: text("setup_type") || current.setup_type,
+        structure_stage: text("structure_stage") || current.structure_stage,
+        entry_mode: text("entry_mode") || current.entry_mode,
+        planned_total_position_pct: text("planned_total_position_pct") || current.planned_total_position_pct,
+        initial_entry_price_low: text("initial_entry_price_low") || current.initial_entry_price_low,
+        initial_entry_price_high: text("initial_entry_price_high") || current.initial_entry_price_high,
+        initial_entry_pct: text("initial_entry_pct") || current.initial_entry_pct,
+        confirmation_add_pct: text("confirmation_add_pct") || current.confirmation_add_pct,
+        t_reserve_pct: text("t_reserve_pct") || current.t_reserve_pct,
+        structure_invalidation_price: text("structure_invalidation_price") || current.structure_invalidation_price,
+        structure_invalidation_condition:
+          text("structure_invalidation_condition") || current.structure_invalidation_condition,
+        first_target_price: text("first_target_price") || current.first_target_price,
+        first_target_type: text("first_target_type") || current.first_target_type,
+        first_target_reduce_pct: text("first_target_reduce_pct") || current.first_target_reduce_pct,
+      }));
+      setAiWarnings(result.warnings);
+      setAiError(null);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : String(err));
+      setAiWarnings([]);
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!backendReady) return;
@@ -176,6 +217,48 @@ export function PlansSection({ backendReady }: { backendReady: boolean }) {
             {showForm ? "收起新建表单" : "新建计划"}
           </button>
         </div>
+
+        {showForm && (
+          <div className="ai-draft-panel">
+            <div className="panel-heading">
+              <h3>AI 草稿（自然语言 → 计划字段）</h3>
+              <span className="muted">
+                草稿仅供填写表单；反转确认与结构失效状态必须由你显式设置，计划仍需审计。
+              </span>
+            </div>
+            <form
+              className="inline-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void applyAiDraft();
+              }}
+            >
+              <label>
+                计划描述（自然语言）
+                <input
+                  value={aiText}
+                  onChange={(event) => setAiText(event.target.value)}
+                  placeholder="例：浦发银行 C 类回踩，10 块到 10 块 5 建仓，跌破 9 块 6 止损，三成仓位"
+                />
+              </label>
+              <button type="submit" disabled={aiBusy || aiText.trim() === ""}>
+                生成草稿
+              </button>
+            </form>
+            {aiWarnings.length > 0 && (
+              <ul className="plain-list muted">
+                {aiWarnings.map((warning) => (
+                  <li key={warning}>⚠ {warning}</li>
+                ))}
+              </ul>
+            )}
+            {aiError && (
+              <p role="alert" className="alert">
+                {aiError}
+              </p>
+            )}
+          </div>
+        )}
 
         {showForm && (
           <form

@@ -135,6 +135,12 @@ class CsvImportRequest(BaseModel):
     data: str
 
 
+class PlanParseRequest(BaseModel):
+    """自然语言 → AI 计划草稿；草稿不创建计划、不触发审计。"""
+
+    text: str = Field(min_length=1)
+
+
 class EvidenceItem(BaseModel):
     source: str
     reference: str

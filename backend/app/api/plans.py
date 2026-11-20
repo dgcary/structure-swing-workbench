@@ -5,16 +5,17 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_session
+from app.api.deps import get_llm_complete, get_session
 from app.api.schemas import (
     AuditDecisionRequest,
     AuditRunRequest,
     PlanCreateRequest,
     PlanNoteRequest,
+    PlanParseRequest,
     PlanRevisionRequest,
     version_payload,
 )
@@ -37,7 +38,8 @@ from app.db.models import (
     TradePlan,
     TradePlanVersion,
 )
-from app.domain.enums import PlanStatus
+from app.domain.enums import LabeledEnum, PlanStatus
+from app.services.llm_plan import LlmError, draft_plan_from_text
 from app.services.plan_audit import PlanVersionFacts, audit_plan_version
 from app.services.plan_review import ReviewFill, review_fills
 from app.services.trade_plans import TradePlanService
@@ -163,6 +165,41 @@ def list_plans(
     if active_only:
         query = query.where(TradePlan.is_active.is_(True))
     return [_plan_dto(session, plan) for plan in session.scalars(query)]
+
+
+@router.post("/plans/parse")
+def parse_plan_text(
+    request: PlanParseRequest, complete: Any = Depends(get_llm_complete)
+) -> dict:
+    """自然语言 → AI 计划草稿；不创建计划、不触发审计，AI 不可绕过纪律。"""
+
+    if complete is None:
+        raise HTTPException(
+            status_code=503,
+            detail="未配置 LLM（LLM_BASE_URL / LLM_MODEL），无法生成 AI 草稿",
+        )
+    try:
+        draft = draft_plan_from_text(request.text, complete)
+    except LlmError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    version_data = {
+        key: (
+            money(value)
+            if isinstance(value, Decimal)
+            else value.value
+            if isinstance(value, LabeledEnum)
+            else value
+        )
+        for key, value in draft.version_data.items()
+    }
+    return {
+        "draft": {
+            "instrument_code": draft.instrument_code,
+            "instrument_name": draft.instrument_name,
+            "version_data": version_data,
+        },
+        "warnings": draft.warnings,
+    }
 
 
 @router.get("/plans/{plan_id}")

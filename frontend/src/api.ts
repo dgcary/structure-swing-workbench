@@ -286,4 +286,13 @@ export const api = {
   listTCycles: (instrumentCode: string | null) =>
     request<TCycleDto[]>(instrumentCode ? `/t-cycles?instrument_code=${encodeURIComponent(instrumentCode)}` : "/t-cycles"),
   reviewPlan: (planId: string) => request<PlanReviewDto>(`/plans/${planId}/review`),
+  parsePlanText: (text: string) =>
+    request<{
+      draft: {
+        instrument_code: string | null;
+        instrument_name: string | null;
+        version_data: Record<string, unknown>;
+      };
+      warnings: string[];
+    }>("/plans/parse", { method: "POST", body: JSON.stringify({ text }) }),
 };

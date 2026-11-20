@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     )
     cors_origins: str = "http://localhost:5173"
 
+    # LLM adapter（OpenAI 兼容 chat completions；留空则 AI 草稿端点返回 503）
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_api_key: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -423,6 +423,17 @@ h3 {
   margin: 0 0 10px;
 }
 
+.ai-draft-panel {
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.ai-draft-panel .inline-form input {
+  min-width: 360px;
+}
+
 .sub-heading {
   margin-top: 16px;
 }

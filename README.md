@@ -57,7 +57,7 @@ Web 工作台 / ChatGPT 入口
 
 ## 当前状态
 
-后端领域模型、纪律审计引擎、数据适配接口和研究/候选模块均已完成并通过 409 个测试。**Web 工作台（M5）全部交付**：REST API（计划生命周期、版本审计与覆盖、动作创建、执行审计、成交录入、账户/持仓 CSV 导入、T 循环视图、计划复盘、账户快照与风险概览、候选筛选、行情）与前端工作台页面（概览 / 交易计划 / T 仓 / 候选筛选 / 行情与K线）已上线。剩余：ChatGPT 自然语言 → 标准交易计划（M4 收尾）。部署见 [docs/deployment.md](docs/deployment.md)。
+后端领域模型、纪律审计引擎、数据适配接口、研究/候选模块均已完成并通过 **415 个测试**。**M0–M5 全部交付**：Web 工作台（概览 / 交易计划 / T 仓 / 候选筛选 / 行情与K线）+ 全套 REST API，包括 AI 计划草稿（自然语言 → 结构化字段，主观确认字段恒空，仍需人工审核与审计）。M6 稳定性与实盘使用进行中。部署见 [docs/deployment.md](docs/deployment.md)。
 
 详见 [ROADMAP.md](ROADMAP.md)、[docs/architecture.md](docs/architecture.md) 与 [docs/m8-web-workbench.md](docs/m8-web-workbench.md)。
 

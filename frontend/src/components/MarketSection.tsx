@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KLineData } from "klinecharts";
 import type { MarketResultDto } from "../api";
 import { api, qualityName } from "../api";
@@ -70,8 +70,11 @@ export function MarketSection({ backendReady }: { backendReady: boolean }) {
     }
   }, [symbol, timeframe]);
 
+  // 仅在首次进入页面时自动加载默认行情；之后改代码不触发，按「查询行情」才查询
+  const initialLoadedRef = useRef(false);
   useEffect(() => {
-    if (!backendReady) return;
+    if (!backendReady || initialLoadedRef.current) return;
+    initialLoadedRef.current = true;
     void load();
   }, [backendReady, load]);
 
@@ -110,9 +113,12 @@ export function MarketSection({ backendReady }: { backendReady: boolean }) {
             ))}
           </div>
           <button type="submit" disabled={busy || !backendReady}>
-            查询行情
+            {busy ? "查询中…" : "查询行情"}
           </button>
         </form>
+        {busy && (
+          <p className="muted">正在从行情源读取数据（首次查询需拉取全量历史，可能需要几十秒）…</p>
+        )}
       </div>
 
       {error && (

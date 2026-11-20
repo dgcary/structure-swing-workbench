@@ -239,10 +239,19 @@ async function parseError(response: Response): Promise<ApiError> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, {
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(180000),
+      ...init,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      throw new ApiError("请求超时（180秒），请稍后重试");
+    }
+    throw err;
+  }
   if (!response.ok) {
     throw await parseError(response);
   }

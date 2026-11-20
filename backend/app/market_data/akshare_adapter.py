@@ -232,13 +232,23 @@ class AKShareProvider:
         except Exception as exc:  # noqa: BLE001 - external provider failures are surfaced
             return self._result(None, fetched, None, error=f"{type(exc).__name__}: {exc}")
 
+    def _daily_hist_fn(self) -> Callable[..., Any]:
+        """akshare ≥1.20.46 把日K线接口 stock_zh_a_hist 改名为 stock_zh_a_hist_em；
+        优先用新名，旧版本回退旧名。"""
+
+        for name in ("stock_zh_a_hist_em", "stock_zh_a_hist"):
+            fn = getattr(self.client, name, None)
+            if fn is not None:
+                return fn
+        raise ValueError("akshare 客户端缺少日K线接口（stock_zh_a_hist_em / stock_zh_a_hist）")
+
     def get_bars(self, symbol: str, timeframe: Timeframe) -> DataResult[tuple[Bar, ...]]:
         fetched = self.clock()
         if not isinstance(timeframe, Timeframe):
             return self._result(None, fetched, None, error="unsupported timeframe")
         try:
             if timeframe is Timeframe.DAY:
-                frame = self.client.stock_zh_a_hist(
+                frame = self._daily_hist_fn()(
                     symbol=symbol, period="daily", adjust=""
                 )
             else:

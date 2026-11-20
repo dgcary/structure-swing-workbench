@@ -111,6 +111,51 @@ def test_exception_returns_explicit_error():
     assert "provider offline" in result.error
 
 
+def test_daily_bars_prefer_renamed_em_interface():
+    """akshare ≥1.20.46 改名后，适配器优先调用 stock_zh_a_hist_em。"""
+
+    class RenamedClient:
+        def __init__(self):
+            self.periods = []
+            self.bars = [{
+                "日期": "2026-10-08",
+                "开盘": 10, "最高": 11, "最低": 9, "收盘": 10.5,
+                "成交量": 200, "成交额": 2100,
+            }]
+
+        def stock_zh_a_hist_em(self, **kwargs):
+            self.periods.append(kwargs)
+            return Frame(self.bars)
+
+    client = RenamedClient()
+    result = provider(client).get_bars("600000", Timeframe.DAY)
+    assert result.value is not None
+    assert len(result.value) == 1
+    assert client.periods == [{"symbol": "600000", "period": "daily", "adjust": ""}]
+
+
+def test_daily_bars_fall_back_to_legacy_interface():
+    """旧版本 akshare 没有新名，回退 stock_zh_a_hist。"""
+
+    class LegacyClient:
+        def __init__(self):
+            self.periods = []
+            self.bars = [{
+                "日期": "2026-10-08",
+                "开盘": 10, "最高": 11, "最低": 9, "收盘": 10.5,
+                "成交量": 200, "成交额": 2100,
+            }]
+
+        def stock_zh_a_hist(self, **kwargs):
+            self.periods.append(kwargs)
+            return Frame(self.bars)
+
+    client = LegacyClient()
+    result = provider(client).get_bars("600000", Timeframe.DAY)
+    assert result.value is not None
+    assert client.periods == [{"symbol": "600000", "period": "daily", "adjust": ""}]
+
+
 @pytest.mark.parametrize("timeframe,method,period", [
     (Timeframe.DAY, "stock_zh_a_hist", "daily"),
     (Timeframe.MIN5, "stock_zh_a_hist_min_em", "5"),

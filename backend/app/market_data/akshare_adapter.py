@@ -153,6 +153,7 @@ class AKShareProvider:
         clock: Callable[[], datetime] | None = None,
         quote_max_age: timedelta = timedelta(minutes=15),
         bar_max_age: timedelta = timedelta(minutes=45),
+        spot_cache_ttl: timedelta = timedelta(minutes=5),
     ) -> None:
         if client is None:
             import akshare  # optional external dependency, never imported by core modules
@@ -162,6 +163,24 @@ class AKShareProvider:
         self.clock = clock or (lambda: datetime.now(CHINA))
         self.quote_max_age = quote_max_age
         self.bar_max_age = bar_max_age
+        self.spot_cache_ttl = spot_cache_ttl
+        self._spot_cache: Any | None = None
+        self._spot_cached_at: datetime | None = None
+
+    def _spot_frame(self) -> Any:
+        """全市场行情表带 TTL 缓存：下载慢，短窗口内复用。"""
+
+        now = self.clock()
+        if (
+            self._spot_cache is not None
+            and self._spot_cached_at is not None
+            and now - self._spot_cached_at < self.spot_cache_ttl
+        ):
+            return self._spot_cache
+        frame = self.client.stock_zh_a_spot_em()
+        self._spot_cache = frame
+        self._spot_cached_at = now
+        return frame
 
     def _result(
         self, value: Any, fetched: datetime, observed: datetime | None,
@@ -185,7 +204,10 @@ class AKShareProvider:
     def get_quote(self, symbol: str) -> DataResult[Quote]:
         fetched = self.clock()
         try:
-            rows = self.client.stock_zh_a_spot_em().to_dict("records")
+            frame = self._spot_frame()
+            if self._spot_cached_at is not None:
+                fetched = self._spot_cached_at
+            rows = frame.to_dict("records")
             matches = [
                 row for row in rows
                 if _stock_code(row.get("代码")) == symbol

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PlanDto, PlanReviewDto } from "../api";
 import { api } from "../api";
+import { ExecutionPanel } from "./ExecutionPanel";
 
 const levelTone: Record<string, string> = {
   pass: "risk-pass",
@@ -614,6 +615,15 @@ export function PlansSection({ backendReady }: { backendReady: boolean }) {
               )}
               <p className="muted">复盘仅为数据汇总，不构成违规判断或投资建议。</p>
             </div>
+          )}
+
+          {selected && (
+            <ExecutionPanel
+              plan={selected}
+              onChanged={() => {
+                void openDetail(selected.id);
+              }}
+            />
           )}
 
           <div className="action-bar">

@@ -175,6 +175,7 @@ export type ActionDto = {
   planned_price_high: string | null;
   planned_quantity: string | null;
   planned_position_pct: string | null;
+  t_cycle_key: string | null;
   user_note: string | null;
   plan_version_id: string;
   version_number: number;
@@ -286,6 +287,20 @@ export const api = {
   listTCycles: (instrumentCode: string | null) =>
     request<TCycleDto[]>(instrumentCode ? `/t-cycles?instrument_code=${encodeURIComponent(instrumentCode)}` : "/t-cycles"),
   reviewPlan: (planId: string) => request<PlanReviewDto>(`/plans/${planId}/review`),
+  createAction: (versionId: string, body: unknown) =>
+    request<ActionDto>(`/plan-versions/${versionId}/actions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  auditAction: (actionId: string) =>
+    request<AuditResultDto>(`/actions/${actionId}/audit`, { method: "POST" }),
+  recordFill: (actionId: string, body: unknown) =>
+    request<{ action: ActionDto; audit_result: AuditResultDto }>(`/actions/${actionId}/fills`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  cancelAction: (actionId: string) =>
+    request<ActionDto>(`/actions/${actionId}/cancel`, { method: "PATCH" }),
   parsePlanText: (text: string) =>
     request<{
       draft: {

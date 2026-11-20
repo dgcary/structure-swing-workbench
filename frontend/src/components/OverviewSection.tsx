@@ -16,6 +16,11 @@ const csvSamples: Record<string, string> = {
   holdings: "symbol,quantity,cost,as_of\n600000,10000,10.20,2026-11-18T10:00:00+08:00",
 };
 
+const csvHeaders: Record<string, string> = {
+  account: "equity,available_cash,as_of",
+  holdings: "symbol,quantity,cost,as_of",
+};
+
 function CsvImportPanel({ onImported }: { onImported: () => void }) {
   const [kind, setKind] = useState("account");
   const [data, setData] = useState("");
@@ -26,7 +31,12 @@ function CsvImportPanel({ onImported }: { onImported: () => void }) {
   const submit = async () => {
     setBusy(true);
     try {
-      const result = await api.importCsv(kind, data);
+      // 首行不是表头时自动补上：用户只需填数据值
+      const body = data.trim();
+      const firstColumn = kind === "account" ? "equity" : "symbol";
+      const needsHeader = !body.split("\n")[0].includes(firstColumn);
+      const payload = needsHeader ? `${csvHeaders[kind]}\n${body}` : body;
+      const result = await api.importCsv(kind, payload);
       if (result.duplicate) {
         setMessage("CSV 内容与已导入记录一致，未重复导入");
       } else if (kind === "account") {
